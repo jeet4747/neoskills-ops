@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'NeoOps - Sales Performance Manager',
+        name: 'NeoOps - Sales Command Center',
         short_name: 'NeoOps',
-        description: 'NeoSkills Sales Performance & Payment Approval System',
+        description: 'NeoSkills Sales Command Center - Track performance, close deals',
         theme_color: '#003B7A',
         background_color: '#ffffff',
         display: 'standalone',
