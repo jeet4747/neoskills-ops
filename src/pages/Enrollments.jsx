@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
@@ -8,7 +9,6 @@ import Modal from '../components/ui/Modal';
 import { COURSES, SOURCES, DEAL_TYPES } from '../config/constants';
 
 export default function Enrollments() {
-  const { user } = useAuth();
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);

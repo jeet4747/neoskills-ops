@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
-import { api } from '../services/api';
+import { auth } from '../services/api';
 import { Card, CardBody } from '../components/ui/Card';
 
 export default function Users() {
@@ -10,14 +10,14 @@ export default function Users() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    try { setUsers(await api.auth.pendingUsers()); }
+    try { setUsers(await auth.pendingUsers()); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
   }
 
   async function handleAction(id, action) {
     try {
-      await api.auth.approveUser(id, action);
+      await auth.approveUser(id, action);
       setUsers(users.filter((u) => u.id !== id));
     } catch (e) { alert(e.message); }
   }
