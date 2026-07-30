@@ -1,167 +1,249 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Download } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Download, Search, Filter, DollarSign } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
+import Badge from '../components/ui/Badge';
 
 export default function Approvals() {
+  const { user } = useAuth();
+  const toast = useToast();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [showDetail, setShowDetail] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterBank, setFilterBank] = useState('');
 
-  useEffect(() => { loadPending(); }, []);
+  useEffect(() => { load(); }, []);
 
-  async function loadPending() {
+  async function load() {
     try {
-      const data = await api.approvals.pending();
-      setPayments(data);
-    } catch (e) { console.error(e); }
+      setPayments(await api.approvals.pending());
+    } catch (e) { toast.error('Failed to load pending approvals'); }
     finally { setLoading(false); }
   }
 
-  async function handleApprove(id) {
+  async function handleApprove(payment) {
     setActionLoading(true);
     try {
-      await api.approvals.approve(id);
-      setPayments(payments.filter((p) => p.id !== id));
-      setSelected(null);
-    } catch (e) { alert(e.message); }
+      await api.approvals.approve(payment.id);
+      setPayments((prev) => prev.filter((p) => p.id !== payment.id));
+      setShowDetail(false);
+      toast.success(`Payment of ₹${Number(payment.amount_paid).toLocaleString()} from ${payment.student_name} approved`);
+    } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
   }
 
-  async function handleReject(id) {
+  async function handleReject() {
+    if (!rejectReason.trim()) { toast.error('Please enter a reason for rejection'); return; }
     setActionLoading(true);
     try {
-      await api.approvals.reject(id, rejectReason);
-      setPayments(payments.filter((p) => p.id !== id));
+      await api.approvals.reject(selected.id, rejectReason);
+      setPayments((prev) => prev.filter((p) => p.id !== selected.id));
       setShowReject(false);
-      setSelected(null);
+      setShowDetail(false);
       setRejectReason('');
-    } catch (e) { alert(e.message); }
+      toast.info(`Payment rejected: ${rejectReason}`);
+    } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
   }
+
+  const filtered = payments.filter((p) => {
+    const matchSearch = !search || p.student_name?.toLowerCase().includes(search.toLowerCase())
+      || p.course_name?.toLowerCase().includes(search.toLowerCase())
+      || p.salesperson_name?.toLowerCase().includes(search.toLowerCase());
+    return matchSearch;
+  });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">Payment Approvals</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{payments.length} pending {payments.length === 1 ? 'payment' : 'payments'} awaiting review</p>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Payment Approvals</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{payments.length} pending payment{payments.length !== 1 ? 's' : ''} awaiting your review</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input className="input-field pl-9" placeholder="Search by student, course or salesperson..."
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+        <div className="space-y-3">
+          {[1,2,3].map((i) => <div key={i} className="h-28 skeleton w-full" />)}
         </div>
       ) : (
         <div className="grid gap-4">
-          {payments.map((p) => (
+          {filtered.map((p) => (
             <Card key={p.id}>
               <CardBody>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold">{p.student_name}</h3>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <h3 className="font-semibold text-gray-900">{p.student_name}</h3>
                       <span className="text-sm text-gray-500">{p.course_name}</span>
+                      <Badge status="pending" />
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1.5 text-sm">
                       <div>
-                        <span className="text-gray-500">Amount:</span>
-                        <span className="ml-1 font-medium">₹{Number(p.amount_paid).toLocaleString()}</span>
+                        <span className="text-gray-400 text-xs block">Amount</span>
+                        <span className="font-semibold text-gray-800">₹{Number(p.amount_paid).toLocaleString()}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Pending:</span>
-                        <span className="ml-1 font-medium text-amber-600">₹{Number(p.pending_amount).toLocaleString()}</span>
+                        <span className="text-gray-400 text-xs block">Pending</span>
+                        <span className="font-semibold text-amber-600">₹{Number(p.pending_amount).toLocaleString()}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Mode:</span>
-                        <span className="ml-1 capitalize">{p.payment_mode}</span>
+                        <span className="text-gray-400 text-xs block">Mode</span>
+                        <span className="capitalize">{p.payment_mode}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Bank:</span>
-                        <span className="ml-1">{p.bank_account_name || '-'}</span>
+                        <span className="text-gray-400 text-xs block">Salesperson</span>
+                        <span>{p.salesperson_name}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Salesperson:</span>
-                        <span className="ml-1">{p.salesperson_name}</span>
+                        <span className="text-gray-400 text-xs block">Bank</span>
+                        <span>{p.bank_account_name || '-'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-500">Date:</span>
-                        <span className="ml-1">{new Date(p.created_at).toLocaleDateString()}</span>
+                        <span className="text-gray-400 text-xs block">Date</span>
+                        <span>{new Date(p.created_at).toLocaleDateString()}</span>
                       </div>
                       {p.transaction_id && (
                         <div>
-                          <span className="text-gray-500">Txn ID:</span>
-                          <span className="ml-1 text-xs">{p.transaction_id}</span>
+                          <span className="text-gray-400 text-xs block">Txn ID</span>
+                          <span className="text-xs">{p.transaction_id}</span>
                         </div>
                       )}
                     </div>
+                    {p.receipt_url && (
+                      <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline mt-2">
+                        <Download size={12} /> View Receipt
+                      </a>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <button
-                      onClick={() => setSelected(p)}
-                      className="btn-ghost p-2"
-                      title="View Details"
-                    >
-                      <Eye size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleApprove(p.id)}
-                      className="btn-success p-2"
-                      title="Approve"
-                      disabled={actionLoading}
-                    >
-                      <CheckCircle size={18} />
-                    </button>
-                    <button
-                      onClick={() => { setSelected(p); setShowReject(true); }}
-                      className="btn-danger p-2"
-                      title="Reject"
-                      disabled={actionLoading}
-                    >
-                      <XCircle size={18} />
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <button onClick={() => { setSelected(p); setShowDetail(true); }}
+                      className="btn-ghost px-3 py-1.5 text-sm flex items-center gap-1.5">
+                      <Eye size={14} /> Review
                     </button>
                   </div>
                 </div>
-                {p.receipt_url && (
-                  <a
-                    href={p.receipt_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary-600 hover:underline mt-2"
-                  >
-                    <Download size={14} /> View Receipt
-                  </a>
-                )}
               </CardBody>
             </Card>
           ))}
-          {!payments.length && (
+          {!filtered.length && (
             <Card>
               <CardBody>
-                <p className="text-center text-gray-400 py-8">No pending approvals</p>
+                <div className="text-center py-12">
+                  <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle size={28} className="text-emerald-400" />
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-500 mb-1">All caught up!</h3>
+                  <p className="text-xs text-gray-400">{search ? 'No results match your search' : 'No pending payments waiting for approval'}</p>
+                </div>
               </CardBody>
             </Card>
           )}
         </div>
       )}
 
-      <Modal open={showReject} onClose={() => { setShowReject(false); setRejectReason(''); }} title="Reject Payment">
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600">Reason for rejection:</p>
-          <textarea
-            className="input-field"
-            rows={3}
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Enter reason..."
-          />
-          <div className="flex justify-end gap-3">
+      <Modal open={showDetail} onClose={() => { setShowDetail(false); setSelected(null); }} title="Review Payment" size="md">
+        {selected && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Student</p>
+                <p className="font-semibold text-gray-900">{selected.student_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Course</p>
+                <p className="font-semibold text-gray-900">{selected.course_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Amount</p>
+                <p className="font-lg font-bold text-primary-700">₹{Number(selected.amount_paid).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Total</p>
+                <p className="font-bold text-amber-600">₹{Number(selected.pending_amount).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Payment Mode</p>
+                <p className="capitalize">{selected.payment_mode}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Bank Account</p>
+                <p>{selected.bank_account_name || '-'}</p>
+              </div>
+              {selected.transaction_id && (
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider">Transaction ID</p>
+                  <p className="text-sm">{selected.transaction_id}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Salesperson</p>
+                <p>{selected.salesperson_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Date</p>
+                <p>{new Date(selected.created_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+            {selected.receipt_url && (
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Receipt</p>
+                <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
+                  <Download size={14} /> Open Receipt
+                </a>
+              </div>
+            )}
+            <div className="flex items-center gap-3 pt-4 border-t">
+              <button onClick={() => handleApprove(selected)}
+                className="btn-success flex-1 flex items-center justify-center gap-2"
+                disabled={actionLoading}>
+                {actionLoading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={16} />}
+                Approve Payment
+              </button>
+              <button onClick={() => setShowReject(true)}
+                className="btn-danger flex-1 flex items-center justify-center gap-2"
+                disabled={actionLoading}>
+                <XCircle size={16} /> Reject
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={showReject} onClose={() => { setShowReject(false); setRejectReason(''); }} title="Reject Payment" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Reject payment of <strong>₹{selected ? Number(selected.amount_paid).toLocaleString() : ''}</strong> from <strong>{selected?.student_name}</strong>
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason for rejection *</label>
+            <textarea className={`input-field ${!rejectReason.trim() && rejectReason ? 'border-red-300' : ''}`}
+              rows={3} value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter detailed reason for rejection..." autoFocus />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => { setShowReject(false); setRejectReason(''); }} className="btn-secondary">Cancel</button>
-            <button onClick={() => handleReject(selected?.id)} className="btn-danger" disabled={actionLoading || !rejectReason}>
-              Reject Payment
+            <button onClick={handleReject} className="btn-danger" disabled={actionLoading || !rejectReason.trim()}>
+              {actionLoading ? 'Rejecting...' : 'Confirm Rejection'}
             </button>
           </div>
         </div>

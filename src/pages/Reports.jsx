@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download } from 'lucide-react';
+import { FileText, Download, ArrowUpDown } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 
 export default function Reports() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('salesperson');
   const [salesperson, setSalesperson] = useState([]);
   const [bankWise, setBankWise] = useState([]);
@@ -18,7 +20,7 @@ export default function Reports() {
       api.reports.pendingPayments(),
     ])
       .then(([s, b, p]) => { setSalesperson(s); setBankWise(b); setPending(p); })
-      .catch(console.error)
+      .catch(() => toast.error('Failed to load reports'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -32,7 +34,7 @@ export default function Reports() {
     { key: 'salesperson', label: 'Salesperson' },
     { key: 'enrollments', label: 'Enrollments' },
     { key: 'collected', label: 'Collected', render: (r) => `₹${Number(r.collected).toLocaleString()}` },
-    { key: 'pending_collection', label: 'Pending', render: (r) => `₹${Number(r.pending_collection).toLocaleString()}` },
+    { key: 'pending_collection', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">₹{Number(r.pending_collection).toLocaleString()}</span> },
     { key: 'pending_approvals', label: 'Pending Approvals' },
   ];
 
@@ -46,89 +48,79 @@ export default function Reports() {
 
   const pendingCols = [
     { key: 'student_name', label: 'Student' },
-    { key: 'phone', label: 'Phone' },
+    { key: 'phone', label: 'Phone', render: (r) => r.phone || '-' },
     { key: 'course_name', label: 'Course' },
     { key: 'salesperson', label: 'Salesperson' },
     { key: 'pending_amount', label: 'Pending Amount', render: (r) => (
-      <span className="text-amber-600 font-medium">₹{Number(r.pending_amount).toLocaleString()}</span>
+      <span className="text-amber-600 font-semibold">₹{Number(r.pending_amount).toLocaleString()}</span>
     )},
   ];
 
   function exportCSV(data, filename) {
-    if (!data.length) return;
+    if (!data.length) { toast.info('No data to export'); return; }
     const headers = Object.keys(data[0]);
     const csv = [headers.join(','), ...data.map((r) => headers.map((h) => `"${r[h] || ''}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = `${filename}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    toast.success(`${filename} exported`);
   }
 
+  const currentData = activeTab === 'salesperson' ? salesperson : activeTab === 'bank' ? bankWise : pending;
+  const currentCols = activeTab === 'salesperson' ? salespersonCols : activeTab === 'bank' ? bankCols : pendingCols;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Reports</h1>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Export insights and track performance</p>
+        </div>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === tab.key ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
-            }`}
-          >
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              activeTab === tab.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            }`}>
             {tab.label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+        <div className="space-y-3">
+          <div className="h-12 skeleton w-full" />
+          {[1,2,3,4,5].map(i => <div key={i} className="h-10 skeleton w-full" />)}
         </div>
       ) : (
-        <>
-          {activeTab === 'salesperson' && (
-            <Card>
-              <CardHeader className="flex items-center justify-between">
-                <h3 className="font-semibold">Salesperson Performance Report</h3>
-                <button onClick={() => exportCSV(salesperson, 'salesperson-performance')} className="btn-ghost flex items-center gap-1 text-sm">
-                  <Download size={14} /> CSV
-                </button>
-              </CardHeader>
-              <CardBody className="p-0"><Table columns={salespersonCols} data={salesperson} /></CardBody>
-            </Card>
-          )}
-
-          {activeTab === 'bank' && (
-            <Card>
-              <CardHeader className="flex items-center justify-between">
-                <h3 className="font-semibold">Bank-wise Collection Report</h3>
-                <button onClick={() => exportCSV(bankWise, 'bank-wise-collection')} className="btn-ghost flex items-center gap-1 text-sm">
-                  <Download size={14} /> CSV
-                </button>
-              </CardHeader>
-              <CardBody className="p-0"><Table columns={bankCols} data={bankWise} /></CardBody>
-            </Card>
-          )}
-
-          {activeTab === 'pending' && (
-            <Card>
-              <CardHeader className="flex items-center justify-between">
-                <h3 className="font-semibold">Pending Payments Report</h3>
-                <button onClick={() => exportCSV(pending, 'pending-payments')} className="btn-ghost flex items-center gap-1 text-sm">
-                  <Download size={14} /> CSV
-                </button>
-              </CardHeader>
-              <CardBody className="p-0"><Table columns={pendingCols} data={pending} /></CardBody>
-            </Card>
-          )}
-        </>
+        <Card>
+          <CardHeader className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">
+              {tabs.find(t => t.key === activeTab)?.label}
+            </h3>
+            <button onClick={() => exportCSV(currentData, `${activeTab}-report`)}
+              className="btn-ghost flex items-center gap-1.5 text-sm">
+              <Download size={14} /> Export CSV
+            </button>
+          </CardHeader>
+          <CardBody className="p-0">
+            {currentData.length > 0 ? (
+              <Table columns={currentCols} data={currentData} />
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <FileText size={28} className="text-gray-300" />
+                </div>
+                <h3 className="text-sm font-medium text-gray-500 mb-1">No data yet</h3>
+                <p className="text-xs text-gray-400">Reports will populate as enrollments and payments are recorded</p>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
     </div>
   );

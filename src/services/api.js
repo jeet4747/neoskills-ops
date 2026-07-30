@@ -64,15 +64,17 @@ export const api = {
       return request(`/payments/${id}/receipt`, { method: 'POST', body: form });
     },
   },
+  bankAccounts: {
+    list: () => request('/bank-accounts'),
+    create: (data) => request('/bank-accounts', { method: 'POST', body: JSON.stringify(data) }),
+    remove: (id) => request(`/bank-accounts/${id}`, { method: 'DELETE' }),
+  },
   approvals: {
     pending: () => request('/approvals/pending'),
     approve: (id) => request(`/approvals/${id}/approve`, { method: 'POST' }),
     reject: (id, reason) =>
       request(`/approvals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  },
-  bankAccounts: {
-    list: () => request('/bank-accounts'),
-    create: (data) => request('/bank-accounts', { method: 'POST', body: JSON.stringify(data) }),
+    count: () => request('/approvals/count'),
   },
   reports: {
     salesperson: () => request('/reports/salesperson'),
@@ -81,5 +83,6 @@ export const api = {
   },
   users: {
     list: () => request('/users'),
+    getProfile: (id) => request(`/users/${id}/profile`),
   },
 };

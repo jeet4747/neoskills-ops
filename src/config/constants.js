@@ -1,43 +1,28 @@
 export const COURSES = [
-  'PMP', 'AWS Solutions Architect', 'AWS Developer', 'AWS SysOps',
-  'Azure Administrator', 'Azure Developer', 'Azure Solutions Architect',
-  'Scrum Master', 'Scrum Product Owner', 'SAFe Agilist',
-  'CompTIA Security+', 'CompTIA Network+', 'CompTIA A+',
-  'ITIL 4 Foundation', 'CISA', 'CISM', 'CRISC', 'CISSP',
-  'PRINCE2 Foundation', 'PRINCE2 Practitioner',
-  'Six Sigma Green Belt', 'Six Sigma Black Belt',
-  'Google Cloud Architect', 'Google Cloud Engineer',
-  'Data Science', 'Machine Learning', 'Python for Data Science',
-  'Power BI', 'Tableau', 'Salesforce Admin', 'Salesforce Developer',
-  'Oracle DBA', 'Linux Administration',
-  'Docker & Kubernetes', 'DevOps Engineering',
-  'Ethical Hacking (CEH)', 'CCNA', 'AWS Cloud Practitioner',
-  'Microsoft Azure Fundamentals', 'Google Digital Leader',
-  'CAPM', 'PMP Agile', 'PgMP', 'PfMP',
+  'PMP', 'PGP-BA', 'Lean Six Sigma', 'CSM', 'ACP',
+  'Google Cloud Engineer', 'Google Cloud Architect', 'AWS Cloud',
+  'Azure Cloud', 'Machine Learning', 'Data Science',
+  'DevOps', 'Kubernetes', 'Salesforce', 'Digital Marketing',
+  'Cybersecurity', 'Agile Scrum Master', 'ITIL', 'PRINCE2',
 ];
 
 export const SOURCES = [
-  'Website', 'WhatsApp', 'Call', 'Referral',
-  'Walk-in', 'Google Ads', 'Social Media',
-  'Email Campaign', 'Other',
+  'Website', 'Reference', 'Walk-in', 'LinkedIn', 'Instagram',
+  'Facebook', 'Google Ads', 'WhatsApp', 'Email Campaign',
+  'Call', 'Other',
 ];
 
 export const DEAL_TYPES = [
+  { value: 'bundle', label: 'Training + Exam' },
   { value: 'training', label: 'Training Only' },
   { value: 'exam', label: 'Exam Only' },
-  { value: 'bundle', label: 'Training + Exam' },
 ];
 
 export const PAYMENT_MODES = [
-  { value: 'upi', label: 'UPI' },
-  { value: 'card', label: 'Card' },
-  { value: 'neft', label: 'NEFT' },
   { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'card', label: 'Card (POS/Swipe)' },
+  { value: 'neft', label: 'NEFT/RTGS' },
   { value: 'cheque', label: 'Cheque' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
 ];
-
-export const ROLE_LABELS = {
-  sales: 'Sales Rep',
-  manager: 'Manager',
-  admin: 'Admin',
-};

@@ -1,22 +1,36 @@
-import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
   FileBarChart, Building2, LogOut, X, UserPlus, Trophy,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin'] },
-  { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin'] },
-  { to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin'] },
-  { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin'] },
-  { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin'] },
-  { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
-  { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin'] },
-];
+import { api } from '../../services/api';
 
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'manager' || user?.role === 'admin') {
+      api.approvals.count().then((d) => setPendingCount(d.count || 0)).catch(() => {});
+    }
+  }, [location.pathname, user?.role]);
+
+  const navItems = [
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin'] },
+    { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin'] },
+    {
+      to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin'],
+      badge: pendingCount > 0 ? pendingCount : null,
+    },
+    { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin'] },
+    { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin'] },
+    { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
+    { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin'] },
+  ];
+
   const items = navItems.filter((item) => item.roles.includes(user?.role));
 
   return (
@@ -54,15 +68,22 @@ export default function Sidebar({ open, onClose }) {
               end={item.to === '/'}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                `flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-white/15 text-white shadow-sm'
                     : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`
               }
             >
-              <item.icon size={18} />
-              {item.label}
+              <div className="flex items-center gap-3">
+                <item.icon size={18} />
+                {item.label}
+              </div>
+              {item.badge !== null && item.badge !== undefined && (
+                <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center leading-tight">
+                  {item.badge > 99 ? '99+' : item.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

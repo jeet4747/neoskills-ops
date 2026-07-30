@@ -1,11 +1,11 @@
-export default function Table({ columns, data, onRowClick }) {
+export default function Table({ columns, data, onRowClick, className = '' }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className={`w-full ${className}`}>
         <thead>
-          <tr className="border-b border-gray-200">
+          <tr className="border-b border-gray-50">
             {columns.map((col) => (
-              <th key={col.key} className={`px-4 py-3 text-left font-medium text-gray-500 ${col.className || ''}`}>
+              <th key={col.key} className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {col.label}
               </th>
             ))}
@@ -15,23 +15,16 @@ export default function Table({ columns, data, onRowClick }) {
           {data.map((row, i) => (
             <tr
               key={row.id || i}
-              className={`border-b border-gray-100 hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
               onClick={() => onRowClick?.(row)}
+              className={`border-b border-gray-50/80 text-sm text-gray-700 transition-colors ${onRowClick ? 'cursor-pointer hover:bg-gray-50/50' : ''}`}
             >
               {columns.map((col) => (
-                <td key={col.key} className={`px-4 py-3 ${col.className || ''}`}>
+                <td key={col.key} className="px-5 py-3.5 whitespace-nowrap">
                   {col.render ? col.render(row) : row[col.key]}
                 </td>
               ))}
             </tr>
           ))}
-          {!data.length && (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-gray-400">
-                No data found
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
     </div>

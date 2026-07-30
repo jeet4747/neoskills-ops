@@ -9,6 +9,8 @@ import Payments from './pages/Payments';
 import BankAccounts from './pages/BankAccounts';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
+import SalespersonDetail from './pages/SalespersonDetail';
+import EnrollmentDetail from './pages/EnrollmentDetail';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -49,6 +51,8 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="enrollments" element={<Enrollments />} />
+        <Route path="enrollments/:id" element={<EnrollmentDetail />} />
+        <Route path="salesperson/:id" element={<SalespersonDetail />} />
 
         <Route
           path="approvals"

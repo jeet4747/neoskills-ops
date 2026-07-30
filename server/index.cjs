@@ -133,6 +133,29 @@ app.get('/api/users', auth(['admin', 'manager']), async (req, res) => {
   }
 });
 
+app.get('/api/users/:id/profile', auth(), async (req, res) => {
+  try {
+    const userResult = await query('SELECT id, name, email, role FROM users WHERE id = $1', [req.params.id]);
+    if (!userResult.rows.length) return res.status(404).json({ error: 'User not found' });
+
+    const stats = await query(`
+      SELECT
+        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as collected,
+        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved')), 0) as pending,
+        COUNT(DISTINCT e.id) as enrollments,
+        COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_approvals
+      FROM users u
+      LEFT JOIN enrollments e ON e.sales_user_id = u.id
+      LEFT JOIN payments p ON p.sales_user_id = u.id
+      WHERE u.id = $1
+    `, [req.params.id]);
+
+    res.json({ ...userResult.rows[0], ...stats.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/students', auth(), async (req, res) => {
   try {
     const { search } = req.query;
@@ -257,6 +280,16 @@ app.post('/api/bank-accounts', auth(['admin']), async (req, res) => {
   }
 });
 
+app.delete('/api/bank-accounts/:id', auth(['admin']), async (req, res) => {
+  try {
+    const result = await query('UPDATE bank_accounts SET is_active = false WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Bank account not found' });
+    res.json({ message: 'Deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/payments', auth(), async (req, res) => {
   try {
     const { enrollment_id, student_id, amount_paid, payment_mode, bank_account_id, transaction_id } = req.body;
@@ -374,6 +407,17 @@ app.get('/api/approvals/pending', auth(['admin', 'manager']), async (req, res) =
        ORDER BY p.created_at ASC`
     );
     res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/approvals/count', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT COUNT(*) as count FROM payments WHERE status = 'pending_approval'"
+    );
+    res.json({ count: parseInt(result.rows[0].count) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
