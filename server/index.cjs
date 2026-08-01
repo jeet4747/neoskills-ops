@@ -124,9 +124,19 @@ app.post('/api/auth/approve/:id', auth(['admin', 'manager']), async (req, res) =
 
 app.get('/api/users', auth(['admin', 'manager']), async (req, res) => {
   try {
-    const result = await query(
-      "SELECT id, name, email, role, status, phone, city, created_at FROM users ORDER BY created_at DESC"
-    );
+    const result = await query(`
+      SELECT
+        u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.created_at,
+        COUNT(DISTINCT e.id) FILTER (WHERE e.sales_user_id = u.id) as enrollments,
+        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved' AND p.sales_user_id = u.id), 0) as collected,
+        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved') AND p.sales_user_id = u.id), 0) as pending,
+        COUNT(*) FILTER (WHERE p.status = 'pending_approval' AND p.sales_user_id = u.id) as pending_approvals
+      FROM users u
+      LEFT JOIN enrollments e ON e.sales_user_id = u.id
+      LEFT JOIN payments p ON p.sales_user_id = u.id
+      GROUP BY u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.created_at
+      ORDER BY u.role, u.name
+    `);
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });

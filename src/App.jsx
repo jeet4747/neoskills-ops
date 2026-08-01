@@ -11,6 +11,7 @@ import Reports from './pages/Reports';
 import Users from './pages/Users';
 import SalespersonDetail from './pages/SalespersonDetail';
 import EnrollmentDetail from './pages/EnrollmentDetail';
+import Team from './pages/Team';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -53,6 +54,14 @@ export default function App() {
         <Route path="enrollments" element={<Enrollments />} />
         <Route path="enrollments/:id" element={<EnrollmentDetail />} />
         <Route path="salesperson/:id" element={<SalespersonDetail />} />
+        <Route
+          path="team"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <Team />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="approvals"

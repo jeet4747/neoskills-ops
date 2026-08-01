@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -27,6 +27,7 @@ export default function Sidebar({ open, onClose }) {
     },
     { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin'] },
+    { to: '/team', icon: Users, label: 'Team', roles: ['admin'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
     { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin'] },
   ];
