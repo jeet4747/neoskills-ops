@@ -18,6 +18,13 @@ export const DEAL_TYPES = [
   { value: 'exam', label: 'Exam Only' },
 ];
 
+export const CATEGORIES = [
+  'Training',
+  'Training and Certification',
+  'Exam',
+  'Exam Consulting',
+];
+
 export const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
   { value: 'upi', label: 'UPI' },

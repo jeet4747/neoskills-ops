@@ -198,13 +198,13 @@ app.post('/api/students', auth(), async (req, res) => {
 
 app.post('/api/enrollments', auth(), async (req, res) => {
   try {
-    const { student_id, course_name, deal_type, training_fee, exam_fee, total_amount, source, batch_name } = req.body;
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, source, batch_name, support_included } = req.body;
     if (!student_id || !course_name || !total_amount)
       return res.status(400).json({ error: 'student_id, course_name, total_amount required' });
     const result = await query(
-      `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, training_fee, exam_fee, total_amount, source, batch_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [student_id, req.user.id, course_name, deal_type || 'bundle', training_fee || 0, exam_fee || 0, total_amount, source, batch_name]
+      `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [student_id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -640,9 +640,11 @@ async function init() {
         sales_user_id INTEGER REFERENCES users(id),
         course_name TEXT NOT NULL,
         deal_type TEXT CHECK (deal_type IN ('training', 'exam', 'bundle')),
+        category TEXT,
         training_fee DECIMAL(10,2) DEFAULT 0,
         exam_fee DECIMAL(10,2) DEFAULT 0,
         total_amount DECIMAL(10,2) NOT NULL,
+        support_included BOOLEAN DEFAULT false,
         source TEXT,
         batch_name TEXT,
         status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
@@ -685,6 +687,30 @@ async function init() {
       );
     `);
     console.log('Database tables created');
+
+    try {
+      await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS category TEXT`);
+      await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS support_included BOOLEAN DEFAULT false`);
+      console.log('Enrollment columns migrated');
+    } catch (e) {
+      console.log('Migration note:', e.message);
+    }
+
+    const defaultAccounts = [
+      { account_name: 'Neoskills GST', account_number: 'GST-ACCT', bank_name: 'Neoskills' },
+      { account_name: 'NSL HDFC', account_number: 'NSL-HDFC', bank_name: 'HDFC Bank' },
+      { account_name: 'CareerVU HDFC', account_number: 'CV-HDFC', bank_name: 'HDFC Bank' },
+    ];
+    for (const acc of defaultAccounts) {
+      const exists = await query('SELECT id FROM bank_accounts WHERE LOWER(account_name) = LOWER($1)', [acc.account_name]);
+      if (!exists.rows.length) {
+        await query(
+          'INSERT INTO bank_accounts (account_name, account_number, bank_name) VALUES ($1, $2, $3)',
+          [acc.account_name, acc.account_number, acc.bank_name]
+        );
+      }
+    }
+    console.log('Default bank accounts ensured');
 
     const adminExists = await query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
     if (!adminExists.rows.length) {

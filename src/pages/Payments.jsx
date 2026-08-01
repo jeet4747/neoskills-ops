@@ -272,6 +272,7 @@ export default function Payments() {
               <select className="input-field" value={form.bank_account_id}
                 onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}>
                 <option value="">Select account...</option>
+                <option value="cash">Cash</option>
                 {bankAccounts.map((b) => (
                   <option key={b.id} value={b.id}>{b.account_name} — {b.bank_name}</option>
                 ))}
