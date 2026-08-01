@@ -216,7 +216,15 @@ app.get('/api/enrollments', auth(), async (req, res) => {
   try {
     const role = req.user.role;
     let sql = `
-      SELECT e.*, s.name as student_name, s.email as student_email, s.phone as student_phone, u.name as salesperson_name
+      SELECT e.*, s.name as student_name, s.email as student_email, s.phone as student_phone, u.name as salesperson_name,
+        COALESCE((
+          SELECT SUM(p.amount_paid) FROM payments p
+          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+        ), 0) as paid_amount,
+        GREATEST(e.total_amount - COALESCE((
+          SELECT SUM(p.amount_paid) FROM payments p
+          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+        ), 0), 0) as pending_amount
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id

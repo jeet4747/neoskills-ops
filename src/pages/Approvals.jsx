@@ -61,6 +61,10 @@ export default function Approvals() {
     return matchSearch;
   });
 
+  function isImageUrl(url) {
+    return /\.(jpe?g|png|gif|webp)(\?.*)?$/i.test(url || '');
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -127,10 +131,18 @@ export default function Approvals() {
                       )}
                     </div>
                     {p.receipt_url && (
-                      <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline mt-2">
-                        <Download size={12} /> View Receipt
-                      </a>
+                      <div className="flex items-center gap-2 mt-2">
+                        {isImageUrl(p.receipt_url) && (
+                          <a href={p.receipt_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                            <img src={p.receipt_url} alt="Screenshot"
+                              className="w-10 h-10 rounded-lg object-cover border border-gray-100 cursor-zoom-in" />
+                          </a>
+                        )}
+                        <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline">
+                          <Download size={12} /> View Screenshot
+                        </a>
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
@@ -204,11 +216,18 @@ export default function Approvals() {
             </div>
             {selected.receipt_url && (
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Receipt</p>
-                <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
-                  <Download size={14} /> Open Receipt
-                </a>
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Payment Screenshot</p>
+                {isImageUrl(selected.receipt_url) ? (
+                  <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer" className="block">
+                    <img src={selected.receipt_url} alt="Payment screenshot"
+                      className="w-full rounded-xl border border-gray-100 shadow-sm cursor-zoom-in max-h-72 object-contain bg-gray-50" />
+                  </a>
+                ) : (
+                  <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
+                    <Download size={14} /> Open Receipt
+                  </a>
+                )}
               </div>
             )}
             <div className="flex items-center gap-3 pt-4 border-t">
