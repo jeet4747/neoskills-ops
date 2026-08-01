@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, GraduationCap, Upload, FileText, Check } from 'lucide-react';
+import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -39,6 +39,16 @@ export default function Enrollments() {
     source: 'Website', batch_name: '',
   });
   const [receiptFile, setReceiptFile] = useState(null);
+
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  const [paying, setPaying] = useState(null);
+  const [payForm, setPayForm] = useState({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+  const [payReceiptFile, setPayReceiptFile] = useState(null);
+  const [paySubmitting, setPaySubmitting] = useState(false);
+  const [payErrors, setPayErrors] = useState({});
 
   const isManager = user?.role === 'manager' || user?.role === 'admin';
 
@@ -139,6 +149,85 @@ export default function Enrollments() {
     setErrors({});
   }
 
+  function openEdit(enrollment) {
+    setEditing(enrollment);
+    setEditForm({
+      student_id: enrollment.student_id,
+      student_name: enrollment.student_name || '',
+      student_email: enrollment.student_email || '',
+      student_phone: enrollment.student_phone || '',
+      category: enrollment.category || 'Training',
+      course_name: enrollment.course_name,
+      training_fee: enrollment.training_fee || '',
+      exam_fee: enrollment.exam_fee || '',
+      support_included: !!enrollment.support_included,
+      source: enrollment.source || 'Website',
+      batch_name: enrollment.batch_name || '',
+      deal_type: enrollment.deal_type || 'bundle',
+    });
+  }
+
+  async function handleEditSubmit(e) {
+    e.preventDefault();
+    if (!editForm.student_name.trim()) { toast.error('Candidate name is required'); return; }
+    setEditSubmitting(true);
+    try {
+      await api.enrollments.update(editing.id, {
+        ...editForm,
+        training_fee: parseFloat(editForm.training_fee) || 0,
+        exam_fee: parseFloat(editForm.exam_fee) || 0,
+        total_amount: (parseFloat(editForm.training_fee) || 0) + (parseFloat(editForm.exam_fee) || 0),
+      });
+      toast.success('Enrollment updated successfully');
+      setEditing(null);
+      setEditForm(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setEditSubmitting(false); }
+  }
+
+  const editTotal = editForm ? (parseFloat(editForm.training_fee) || 0) + (parseFloat(editForm.exam_fee) || 0) : 0;
+
+  function openPay(enrollment) {
+    setPaying(enrollment);
+    setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+    setPayReceiptFile(null);
+    setPayErrors({});
+  }
+
+  async function handlePaySubmit(e) {
+    e.preventDefault();
+    const errs = {};
+    const amount = parseFloat(payForm.amount_paid) || 0;
+    if (amount <= 0) errs.amount = 'Enter a valid amount';
+    else if (amount > Number(paying.pending_amount)) errs.amount = `Cannot exceed pending amount of ₹${Number(paying.pending_amount).toLocaleString()}`;
+    if (!payReceiptFile) errs.receipt = 'Payment screenshot/receipt is required';
+    setPayErrors(errs);
+    if (Object.keys(errs).length) return;
+
+    setPaySubmitting(true);
+    try {
+      const isCash = payForm.bank_account_id === 'cash';
+      const payment = await api.payments.create({
+        enrollment_id: paying.id,
+        student_id: paying.student_id,
+        amount_paid: amount,
+        payment_mode: isCash ? 'cash' : payForm.payment_mode,
+        bank_account_id: isCash ? null : (parseInt(payForm.bank_account_id) || null),
+        transaction_id: payForm.transaction_id,
+      });
+      if (payReceiptFile && payment.id) {
+        await api.payments.uploadReceipt(payment.id, payReceiptFile);
+      }
+      toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
+      setPaying(null);
+      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+      setPayReceiptFile(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setPaySubmitting(false); }
+  }
+
   const columns = [
     { key: 'student_name', label: 'Candidate', render: (r) => (
       <div>
@@ -162,6 +251,22 @@ export default function Enrollments() {
     { key: 'support_included', label: 'Support', render: (r) => r.support_included ? 'Yes' : 'No' },
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
+    { key: 'actions', label: 'Actions', render: (r) => (
+      <div className="flex items-center gap-1.5">
+        <button onClick={(ev) => { ev.stopPropagation(); openEdit(r); }}
+          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+          title="Edit enrollment">
+          <Pencil size={14} />
+        </button>
+        {Number(r.pending_amount) > 0 && (
+          <button onClick={(ev) => { ev.stopPropagation(); openPay(r); }}
+            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            title="Record payment for pending">
+            <Banknote size={14} />
+          </button>
+        )}
+      </div>
+    )},
   ];
 
   function exportCSV() {
@@ -430,6 +535,193 @@ export default function Enrollments() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      {/* Edit Enrollment Modal */}
+      <Modal open={!!editing} onClose={() => { setEditing(null); setEditForm(null); }}
+        title="Edit Enrollment" size="xl">
+        {editForm && (
+          <form onSubmit={handleEditSubmit} className="space-y-5">
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Candidate Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Name *</label>
+                  <input className="input-field" value={editForm.student_name}
+                    onChange={(e) => setEditForm({ ...editForm, student_name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email ID</label>
+                  <input type="email" className="input-field" value={editForm.student_email}
+                    onChange={(e) => setEditForm({ ...editForm, student_email: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Number</label>
+                  <input className="input-field" value={editForm.student_phone}
+                    onChange={(e) => setEditForm({ ...editForm, student_phone: e.target.value })} />
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Enrollment Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+                  <select className="input-field" value={editForm.category}
+                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Module</label>
+                  <select className="input-field" value={editForm.course_name}
+                    onChange={(e) => setEditForm({ ...editForm, course_name: e.target.value })}>
+                    {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Training Fees (₹)</label>
+                  <input type="number" className="input-field" value={editForm.training_fee}
+                    onChange={(e) => setEditForm({ ...editForm, training_fee: e.target.value })} min="0" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Exam Fees (₹)</label>
+                  <input type="number" className="input-field" value={editForm.exam_fee}
+                    onChange={(e) => setEditForm({ ...editForm, exam_fee: e.target.value })} min="0" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Total (auto)</label>
+                  <input type="number" className="input-field bg-gray-50 font-semibold text-primary-700" value={editTotal} readOnly />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Support</label>
+                  <button type="button" onClick={() => setEditForm({ ...editForm, support_included: !editForm.support_included })}
+                    className={`w-full h-10 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors ${editForm.support_included ? 'bg-primary-50 border-primary-200 text-primary-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${editForm.support_included ? 'bg-primary-600 border-primary-600' : 'border-gray-300'}`}>
+                      {editForm.support_included && <Check size={12} className="text-white" />}
+                    </span>
+                    {editForm.support_included ? 'Included' : 'Not Included'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div className="flex items-center justify-between pt-4 border-t">
+              <p className="text-xs text-gray-400">Changes to candidate details and fees</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => { setEditing(null); setEditForm(null); }} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary px-6" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Record Payment Modal */}
+      <Modal open={!!paying} onClose={() => { setPaying(null); setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' }); setPayReceiptFile(null); }}
+        title="Record Payment" size="md">
+        {paying && (
+          <form onSubmit={handlePaySubmit} className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="font-semibold text-gray-900">{paying.student_name}</p>
+              <p className="text-sm text-gray-500">{paying.course_name}</p>
+              <div className="flex gap-6 mt-2 text-sm">
+                <div>
+                  <span className="text-gray-400 text-xs block">Total</span>
+                  <span className="font-semibold">₹{Number(paying.total_amount).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-xs block">Received</span>
+                  <span className="font-semibold text-emerald-600">₹{Number(paying.paid_amount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-xs block">Pending</span>
+                  <span className="font-semibold text-amber-600">₹{Number(paying.pending_amount).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (₹) *</label>
+                <input type="number" className={`input-field ${payErrors.amount ? 'border-red-300' : ''}`}
+                  value={payForm.amount_paid}
+                  onChange={(e) => { setPayForm({ ...payForm, amount_paid: e.target.value }); setPayErrors({}); }}
+                  placeholder={`Max ₹${Number(paying.pending_amount).toLocaleString()}`} min="1" />
+                {payErrors.amount && <p className="text-xs text-red-500 mt-1">{payErrors.amount}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode</label>
+                <select className="input-field" value={payForm.payment_mode}
+                  onChange={(e) => setPayForm({ ...payForm, payment_mode: e.target.value })} disabled={payForm.bank_account_id === 'cash'}>
+                  {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Account / Payment Taking In</label>
+                <select className="input-field" value={payForm.bank_account_id}
+                  onChange={(e) => setPayForm({ ...payForm, bank_account_id: e.target.value })}>
+                  <option value="">Select account...</option>
+                  <option value="cash">Cash</option>
+                  {bankAccounts.map((b) => (
+                    <option key={b.id} value={b.id}>{b.account_name} — {b.bank_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Transaction ID</label>
+                <input className="input-field" value={payForm.transaction_id}
+                  onChange={(e) => setPayForm({ ...payForm, transaction_id: e.target.value })}
+                  placeholder="e.g. UTR/ref" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt *</label>
+              <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${payReceiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${payErrors.receipt ? 'border-red-300' : ''}`}>
+                {payReceiptFile ? (
+                  <div>
+                    {payReceiptFile.type.startsWith('image/') ? (
+                      <img src={URL.createObjectURL(payReceiptFile)} alt="Receipt preview" className="max-h-36 mx-auto rounded-lg shadow-sm mb-2" />
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 text-sm mb-2">
+                        <FileText size={16} className="text-primary-600" />
+                        <span className="text-gray-700">{payReceiptFile.name}</span>
+                      </div>
+                    )}
+                    <button type="button" onClick={() => setPayReceiptFile(null)} className="text-xs text-red-500 hover:underline">Remove file</button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center gap-1.5">
+                    <Upload size={24} className="text-gray-400" />
+                    <span className="text-sm font-medium text-gray-600">Click to upload payment screenshot</span>
+                    <input type="file" className="hidden" accept="image/*,application/pdf"
+                      onChange={(e) => { setPayReceiptFile(e.target.files[0]); setPayErrors({}); }} />
+                  </label>
+                )}
+              </div>
+              {payErrors.receipt && <p className="text-xs text-red-500 mt-1">{payErrors.receipt}</p>}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t">
+              <p className="text-xs text-gray-400">Payment will be sent for <strong>ops approval</strong></p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setPaying(null)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary px-6" disabled={paySubmitting}>
+                  {paySubmitting ? 'Saving...' : 'Record Payment'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

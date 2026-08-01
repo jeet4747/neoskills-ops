@@ -274,6 +274,56 @@ app.get('/api/enrollments/:id', auth(), async (req, res) => {
   }
 });
 
+app.put('/api/enrollments/:id', auth(), async (req, res) => {
+  try {
+    const existing = await query('SELECT * FROM enrollments WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+
+    const enroll = existing.rows[0];
+    const isManager = req.user.role === 'manager' || req.user.role === 'admin';
+    if (!isManager && enroll.sales_user_id !== req.user.id)
+      return res.status(403).json({ error: 'You can only edit your own enrollments' });
+
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name } = req.body;
+
+    const newTotal = total_amount !== undefined
+      ? parseFloat(total_amount)
+      : (parseFloat(training_fee) || 0) + (parseFloat(exam_fee) || 0);
+
+    const updateEnroll = await query(
+      `UPDATE enrollments SET
+         course_name = $1, deal_type = $2, category = $3,
+         training_fee = $4, exam_fee = $5, total_amount = $6,
+         support_included = $7, source = $8, batch_name = $9
+       WHERE id = $10 RETURNING *`,
+      [
+        course_name || enroll.course_name,
+        deal_type || enroll.deal_type,
+        category !== undefined ? category : enroll.category,
+        training_fee !== undefined ? parseFloat(training_fee) : enroll.training_fee,
+        exam_fee !== undefined ? parseFloat(exam_fee) : enroll.exam_fee,
+        newTotal,
+        support_included !== undefined ? !!support_included : enroll.support_included,
+        source !== undefined ? source : enroll.source,
+        batch_name !== undefined ? batch_name : enroll.batch_name,
+        req.params.id,
+      ]
+    );
+
+    let studentResult = null;
+    if (student_id) {
+      studentResult = await query(
+        `UPDATE students SET name = COALESCE($1, name), email = COALESCE($2, email), phone = COALESCE($3, phone) WHERE id = $4 RETURNING *`,
+        [req.body.student_name || null, req.body.student_email || null, req.body.student_phone || null, student_id]
+      );
+    }
+
+    res.json({ ...updateEnroll.rows[0], student: studentResult?.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/bank-accounts', auth(), async (req, res) => {
   try {
     const result = await query('SELECT * FROM bank_accounts WHERE is_active = true ORDER BY bank_name');
