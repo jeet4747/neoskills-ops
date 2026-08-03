@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const { query, withTransaction } = require('./db.cjs');
+const { generateReceipt } = require('./receipt.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -363,6 +364,78 @@ app.get('/api/enrollments/:id', auth(), async (req, res) => {
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const MODE_LABELS = {
+  upi: 'UPI', card: 'Card', neft: 'NEFT/RTGS', cash: 'Cash',
+  cheque: 'Cheque', bank_transfer: 'Bank Transfer',
+};
+
+app.get('/api/enrollments/:id/receipt', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const enrollResult = await query(
+      `SELECT e.*, s.name as student_name, s.email as student_email, s.phone as student_phone, s.city as student_city, u.name as salesperson_name
+       FROM enrollments e
+       JOIN students s ON e.student_id = s.id
+       JOIN users u ON e.sales_user_id = u.id
+       WHERE e.id = $1`,
+      [req.params.id]
+    );
+    if (!enrollResult.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+    const e = enrollResult.rows[0];
+
+    const paysResult = await query(
+      `SELECT p.*, ba.account_name as bank_account_name
+       FROM payments p
+       LEFT JOIN bank_accounts ba ON p.bank_account_id = ba.id
+       WHERE p.enrollment_id = $1
+       ORDER BY p.created_at ASC`,
+      [req.params.id]
+    );
+
+    const considered = paysResult.rows.filter((p) => p.status === 'approved' || p.status === 'pending_approval');
+    const totalPaid = considered.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
+    const totalPending = Math.max(0, parseFloat(e.total_amount) - totalPaid);
+    const lastPayment = considered[considered.length - 1] || null;
+
+    const receiptData = {
+      receipt_number: `NEO-${String(e.id).padStart(6, '0')}`,
+      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      enrollment_id: e.id,
+      batch_name: e.batch_name,
+      course_name: e.course_name,
+      category: e.category || e.deal_type,
+      student_name: e.student_name,
+      student_email: e.student_email,
+      student_phone: e.student_phone,
+      student_city: e.student_city,
+      salesperson_name: e.salesperson_name,
+      training_fee: e.training_fee,
+      exam_fee: e.exam_fee,
+      support_included: e.support_included,
+      total_amount: e.total_amount,
+      total_paid: totalPaid,
+      total_pending: totalPending,
+      amount_paid: lastPayment ? lastPayment.amount_paid : 0,
+      payment_mode_label: lastPayment ? (MODE_LABELS[lastPayment.payment_mode] || lastPayment.payment_mode) : '—',
+      payment_status: totalPending > 0 ? 'Partially Paid' : 'Fully Paid',
+      payments: paysResult.rows.map((p) => ({
+        date: new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        mode_label: MODE_LABELS[p.payment_mode] || p.payment_mode,
+        transaction_id: p.transaction_id,
+        bank_account_name: p.bank_account_name,
+        amount_paid: p.amount_paid,
+        status_label: p.status === 'approved' ? 'Approved' : p.status === 'rejected' ? 'Rejected' : 'Pending Approval',
+      })),
+    };
+
+    const pdf = await generateReceipt(receiptData);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="NeoSkills-Receipt-${e.id}.pdf"`);
+    res.send(pdf);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

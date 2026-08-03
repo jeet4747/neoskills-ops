@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.28.0",
     "multer": "^2.2.0",
+    "pdfkit": "^0.19.1",
     "pg": "^8.22.0",
     "postcss": "^8.5.25",
     "react": "^19.2.7",

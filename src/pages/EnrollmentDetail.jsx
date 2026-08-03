@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, DollarSign, Calendar, User, BookOpen, Download } from 'lucide-react';
+import { ArrowLeft, DollarSign, Calendar, User, BookOpen, Download, FileDown } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
@@ -11,11 +12,43 @@ export default function EnrollmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [enrollment, setEnrollment] = useState(null);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const isOps = user && (user.role === 'admin' || user.role === 'manager');
 
   useEffect(() => { load(); }, [id]);
+
+  async function handleDownloadReceipt() {
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/enrollments/${id}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to generate receipt');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `NeoSkills-Receipt-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Receipt downloaded');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function load() {
     try {
@@ -88,7 +121,19 @@ export default function EnrollmentDetail() {
                 <p className="text-sm text-gray-500">{enrollment.course_name}</p>
               </div>
             </div>
-            <Badge status={Number(totalPending) > 0 ? 'active' : 'completed'} />
+            <div className="flex items-center gap-3">
+              {isOps && (
+                <button
+                  onClick={handleDownloadReceipt}
+                  disabled={downloading}
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <FileDown size={16} />
+                  {downloading ? 'Generating…' : 'Download Receipt'}
+                </button>
+              )}
+              <Badge status={Number(totalPending) > 0 ? 'active' : 'completed'} />
+            </div>
           </div>
         </CardBody>
       </Card>

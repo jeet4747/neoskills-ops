@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote } from 'lucide-react';
+import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -19,6 +19,7 @@ const CATEGORY_DEAL_MAP = {
 export default function Enrollments() {
   const { user } = useAuth();
   const toast = useToast();
+  const isOps = user && (user.role === 'admin' || user.role === 'manager');
   const [enrollments, setEnrollments] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -255,9 +256,41 @@ export default function Enrollments() {
             <Banknote size={14} />
           </button>
         )}
+        {isOps && (
+          <button onClick={(ev) => { ev.stopPropagation(); handleDownloadReceipt(r); }}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Download receipt (PDF)">
+            <FileDown size={14} />
+          </button>
+        )}
       </div>
     )},
   ];
+
+  async function handleDownloadReceipt(r) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/enrollments/${r.id}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to generate receipt');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `NeoSkills-Receipt-${r.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Receipt downloaded');
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
 
   function exportCSV() {
     if (!enrollments.length) { toast.info('No data to export'); return; }
