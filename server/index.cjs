@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
-const { query } = require('./db.cjs');
+const { query, withTransaction } = require('./db.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -193,6 +193,21 @@ app.post('/api/students', auth(), async (req, res) => {
   try {
     const { name, email, phone, city } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+
+    if (phone) {
+      const normPhone = String(phone).trim();
+      const existing = await query('SELECT * FROM students WHERE phone = $1', [normPhone]);
+      if (existing.rows.length) {
+        return res.json(existing.rows[0]);
+      }
+    }
+    if (email) {
+      const existing = await query('SELECT * FROM students WHERE LOWER(email) = LOWER($1)', [String(email).trim()]);
+      if (existing.rows.length) {
+        return res.json(existing.rows[0]);
+      }
+    }
+
     const result = await query(
       'INSERT INTO students (name, email, phone, city) VALUES ($1, $2, $3, $4) RETURNING *',
       [name, email, phone, city]
@@ -216,6 +231,78 @@ app.post('/api/enrollments', auth(), async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/enrollments/combined', auth(), async (req, res) => {
+  try {
+    const { student_name, student_email, student_phone, course_name, category, deal_type,
+            training_fee, exam_fee, total_amount, support_included, source, batch_name,
+            amount_paid, payment_mode, bank_account_id, transaction_id } = req.body;
+
+    if (!student_name || !course_name)
+      return res.status(400).json({ error: 'student_name and course_name required' });
+    if (!amount_paid || parseFloat(amount_paid) <= 0)
+      return res.status(400).json({ error: 'Enter payment received amount' });
+    if (parseFloat(amount_paid) > parseFloat(total_amount))
+      return res.status(400).json({ error: 'Received amount cannot exceed total fee' });
+
+    const result = await withTransaction(async (client) => {
+      let student = null;
+      if (student_phone) {
+        const found = await client.query('SELECT * FROM students WHERE phone = $1', [String(student_phone).trim()]);
+        if (found.rows.length) student = found.rows[0];
+      }
+      if (!student && student_email) {
+        const found = await client.query('SELECT * FROM students WHERE LOWER(email) = LOWER($1)', [String(student_email).trim()]);
+        if (found.rows.length) student = found.rows[0];
+      }
+      if (!student) {
+        const created = await client.query(
+          'INSERT INTO students (name, email, phone) VALUES ($1, $2, $3) RETURNING *',
+          [student_name, student_email || null, student_phone || null]
+        );
+        student = created.rows[0];
+      }
+
+      const existing = await client.query(
+        `SELECT id FROM enrollments WHERE student_id = $1 AND LOWER(course_name) = LOWER($2) AND status = 'active'`,
+        [student.id, course_name]
+      );
+      if (existing.rows.length) {
+        const err = new Error(`This student already has an active enrollment in ${course_name}`);
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const enroll = await client.query(
+        `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [student.id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name]
+      );
+      const enrollment = enroll.rows[0];
+
+      const paid = parseFloat(amount_paid);
+      const prior = await client.query(
+        `SELECT COALESCE(SUM(amount_paid), 0) as paid_so_far FROM payments
+         WHERE enrollment_id = $1 AND status IN ('pending_approval', 'approved')`,
+        [enrollment.id]
+      );
+      const paidSoFar = parseFloat(prior.rows[0].paid_so_far);
+      const pending = Math.max(0, parseFloat(total_amount) - (paidSoFar + paid));
+
+      const pay = await client.query(
+        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_approval') RETURNING *`,
+        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null]
+      );
+
+      return { student, enrollment, payment: pay.rows[0] };
+    });
+
+    res.status(201).json(result);
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
 
@@ -775,6 +862,8 @@ async function init() {
     try {
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS category TEXT`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS support_included BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_payment_mode_check`);
+      await query(`ALTER TABLE payments ADD CONSTRAINT payments_payment_mode_check CHECK (payment_mode IN ('upi', 'card', 'neft', 'cash', 'cheque', 'bank_transfer'))`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);

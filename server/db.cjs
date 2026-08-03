@@ -19,4 +19,21 @@ async function query(text, params) {
   return p.query(text, params);
 }
 
-module.exports = { getPool, query };
+async function withTransaction(fn) {
+  const p = getPool();
+  if (!p) throw new Error('No database configured');
+  const client = await p.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { getPool, query, withTransaction };

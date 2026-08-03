@@ -95,37 +95,27 @@ export default function Enrollments() {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const student = await api.students.create({
-        name: form.candidate_name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        city: '',
-      });
-
-      const enrollment = await api.enrollments.create({
-        student_id: student.id,
+      const result = await api.enrollments.createCombined({
+        student_name: form.candidate_name.trim(),
+        student_email: form.email.trim(),
+        student_phone: form.phone.trim(),
         course_name: form.course_name,
-        deal_type: CATEGORY_DEAL_MAP[form.category] || 'bundle',
         category: form.category,
+        deal_type: CATEGORY_DEAL_MAP[form.category] || 'bundle',
         training_fee: trainingFee,
         exam_fee: examFee,
         total_amount: total,
         support_included: form.support_included,
         source: form.source,
         batch_name: form.batch_name,
-      });
-
-      const payment = await api.payments.create({
-        enrollment_id: enrollment.id,
-        student_id: student.id,
         amount_paid: received,
         payment_mode: isCash ? 'cash' : form.payment_mode,
         bank_account_id: isCash ? null : (parseInt(form.payment_account) || null),
         transaction_id: form.transaction_id,
       });
 
-      if (receiptFile && payment.id) {
-        await api.payments.uploadReceipt(payment.id, receiptFile);
+      if (receiptFile && result.payment?.id) {
+        await api.payments.uploadReceipt(result.payment.id, receiptFile);
       }
 
       toast.success(`Enrollment + payment of ₹${received.toLocaleString()} recorded. Awaiting manager approval.`);

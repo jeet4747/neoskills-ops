@@ -51,6 +51,7 @@ export const api = {
     },
     get: (id) => request(`/enrollments/${id}`),
     create: (data) => request('/enrollments', { method: 'POST', body: JSON.stringify(data) }),
+    createCombined: (data) => request('/enrollments/combined', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/enrollments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
   payments: {
