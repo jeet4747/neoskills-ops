@@ -127,14 +127,17 @@ app.get('/api/users', auth(['admin', 'manager']), async (req, res) => {
     const result = await query(`
       SELECT
         u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.created_at,
-        COUNT(DISTINCT e.id) FILTER (WHERE e.sales_user_id = u.id) as enrollments,
-        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved' AND p.sales_user_id = u.id), 0) as collected,
-        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved') AND p.sales_user_id = u.id), 0) as pending,
-        COUNT(*) FILTER (WHERE p.status = 'pending_approval' AND p.sales_user_id = u.id) as pending_approvals
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      LEFT JOIN enrollments e ON e.sales_user_id = u.id
-      LEFT JOIN payments p ON p.sales_user_id = u.id
-      GROUP BY u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.created_at
       ORDER BY u.role, u.name
     `);
     res.json(result.rows);
@@ -150,13 +153,17 @@ app.get('/api/users/:id/profile', auth(), async (req, res) => {
 
     const stats = await query(`
       SELECT
-        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as collected,
-        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved')), 0) as pending,
-        COUNT(DISTINCT e.id) as enrollments,
-        COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_approvals
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      LEFT JOIN enrollments e ON e.sales_user_id = u.id
-      LEFT JOIN payments p ON p.sales_user_id = u.id
       WHERE u.id = $1
     `, [req.params.id]);
 
@@ -369,7 +376,17 @@ app.post('/api/payments', auth(), async (req, res) => {
 
     const total = parseFloat(enroll.rows[0].total_amount);
     const paid = parseFloat(amount_paid);
-    const pending = Math.max(0, total - paid);
+
+    const prior = await query(
+      `SELECT COALESCE(SUM(amount_paid), 0) as paid_so_far FROM payments
+       WHERE enrollment_id = $1 AND status IN ('pending_approval', 'approved')`,
+      [enrollment_id]
+    );
+    const paidSoFar = parseFloat(prior.rows[0].paid_so_far);
+    if (paidSoFar + paid > total) {
+      return res.status(400).json({ error: `Amount exceeds pending balance. Already paid ₹${paidSoFar}, pending ₹${Math.max(0, total - paidSoFar)}` });
+    }
+    const pending = Math.max(0, total - (paidSoFar + paid));
 
     const result = await query(
       `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status)
@@ -506,22 +523,27 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
   try {
     const role = req.user.role;
     let userFilter = '';
+    let enrollFilter = '';
     let params = [];
     if (role === 'sales') {
       userFilter = 'AND p.sales_user_id = $1';
+      enrollFilter = 'AND e.sales_user_id = $1';
       params.push(req.user.id);
     }
 
     const kpi = await query(`
       SELECT
-        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as total_revenue,
-        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved')), 0) as total_pending,
-        COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'active') as active_enrollments,
-        COUNT(DISTINCT e.id) as total_enrollments,
-        COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_approvals
-      FROM payments p
-      JOIN enrollments e ON p.enrollment_id = e.id
-      WHERE 1=1 ${userFilter}
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.status = 'approved' ${userFilter}) as total_revenue,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e ${enrollFilter}) as total_pending,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.status = 'active' ${enrollFilter}) as active_enrollments,
+        (SELECT COUNT(*) FROM enrollments e ${enrollFilter}) as total_enrollments,
+        (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter}) as pending_approvals
     `, params);
 
     res.json(kpi.rows[0]);
@@ -535,15 +557,18 @@ app.get('/api/dashboard/team', auth(['admin', 'manager']), async (req, res) => {
     const result = await query(`
       SELECT
         u.id, u.name, u.email,
-        COUNT(DISTINCT e.id) as deals_closed,
-        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as revenue,
-        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved')), 0) as pending,
-        COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_approvals
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as deals_closed,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as revenue,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      LEFT JOIN enrollments e ON e.sales_user_id = u.id
-      LEFT JOIN payments p ON p.sales_user_id = u.id
       WHERE u.role = 'sales' AND u.status = 'active'
-      GROUP BY u.id, u.name, u.email
       ORDER BY revenue DESC
     `);
     res.json(result.rows);
@@ -599,15 +624,18 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager']), async (req, res)
     const result = await query(`
       SELECT
         u.name as salesperson,
-        COUNT(DISTINCT e.id) as enrollments,
-        COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as collected,
-        COALESCE(SUM(p.pending_amount) FILTER (WHERE p.status IN ('pending_approval', 'approved')), 0) as pending_collection,
-        COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_approvals
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e WHERE e.sales_user_id = u.id) as pending_collection,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      LEFT JOIN enrollments e ON e.sales_user_id = u.id
-      LEFT JOIN payments p ON p.sales_user_id = u.id
       WHERE u.role = 'sales' AND u.status = 'active'
-      GROUP BY u.name
       ORDER BY collected DESC
     `);
     res.json(result.rows);
@@ -637,13 +665,19 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager']), async (req,
   try {
     const result = await query(`
       SELECT s.name as student_name, s.phone, e.course_name, u.name as salesperson,
-             p.pending_amount, p.created_at as last_payment_date
-      FROM payments p
-      JOIN students s ON p.student_id = s.id
-      JOIN enrollments e ON p.enrollment_id = e.id
-      JOIN users u ON p.sales_user_id = u.id
-      WHERE p.pending_amount > 0 AND p.status IN ('pending_approval', 'approved')
-      ORDER BY p.pending_amount DESC
+             GREATEST(e.total_amount - COALESCE((
+               SELECT SUM(p2.amount_paid) FROM payments p2
+               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             ), 0), 0) as pending_amount,
+             (SELECT MAX(p3.created_at) FROM payments p3 WHERE p3.enrollment_id = e.id) as last_payment_date
+      FROM enrollments e
+      JOIN students s ON e.student_id = s.id
+      JOIN users u ON e.sales_user_id = u.id
+      WHERE GREATEST(e.total_amount - COALESCE((
+              SELECT SUM(p2.amount_paid) FROM payments p2
+              WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+            ), 0), 0) > 0
+      ORDER BY pending_amount DESC
     `);
     res.json(result.rows);
   } catch (e) {
