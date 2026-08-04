@@ -17,7 +17,13 @@ async function request(path, options = {}) {
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    data = { error: `Server error (${res.status}). Please try again.` };
+  }
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
