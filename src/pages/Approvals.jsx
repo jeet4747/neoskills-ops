@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Download, Search, Filter, DollarSign } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Download, FileDown, Search, Filter, DollarSign } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -17,6 +17,8 @@ export default function Approvals() {
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [filterBank, setFilterBank] = useState('');
 
@@ -52,6 +54,31 @@ export default function Approvals() {
       toast.info(`Payment marked as not received: ${rejectReason}`);
     } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
+  }
+
+  async function handleDownloadReceipt(payment) {
+    setReceiptLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/enrollments/${payment.enrollment_id}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to generate receipt');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `NeoSkills-Receipt-${payment.enrollment_id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Receipt downloaded');
+    } catch (e) { toast.error(e.message); }
+    finally { setReceiptLoading(false); }
   }
 
   const filtered = payments.filter((p) => {
@@ -134,15 +161,15 @@ export default function Approvals() {
                     {p.receipt_url && (
                       <div className="flex items-center gap-2 mt-2">
                         {isImageUrl(p.receipt_url) && (
-                          <a href={p.receipt_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                          <button onClick={() => setLightbox(p)} className="shrink-0">
                             <img src={p.receipt_url} alt="Screenshot"
                               className="w-10 h-10 rounded-lg object-cover border border-gray-100 cursor-zoom-in" />
-                          </a>
+                          </button>
                         )}
-                        <a href={p.receipt_url} target="_blank" rel="noopener noreferrer"
+                        <button onClick={() => setLightbox(p)}
                           className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline">
                           <Download size={12} /> View Screenshot
-                        </a>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -219,19 +246,24 @@ export default function Approvals() {
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Payment Screenshot</p>
                 {isImageUrl(selected.receipt_url) ? (
-                  <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer" className="block">
+                  <button onClick={() => setLightbox(selected)} className="block w-full">
                     <img src={selected.receipt_url} alt="Payment screenshot"
                       className="w-full rounded-xl border border-gray-100 shadow-sm cursor-zoom-in max-h-72 object-contain bg-gray-50" />
-                  </a>
+                  </button>
                 ) : (
-                  <a href={selected.receipt_url} target="_blank" rel="noopener noreferrer"
+                  <button onClick={() => setLightbox(selected)}
                     className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
                     <Download size={14} /> Open Receipt
-                  </a>
+                  </button>
                 )}
               </div>
             )}
             <div className="flex items-center gap-3 pt-4 border-t">
+              <button onClick={() => handleDownloadReceipt(selected)}
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+                disabled={receiptLoading}>
+                <FileDown size={16} /> {receiptLoading ? 'Generating…' : 'Download Receipt (PDF)'}
+              </button>
               <button onClick={() => handleApprove(selected)}
                 className="btn-success flex-1 flex items-center justify-center gap-2"
                 disabled={actionLoading}>
@@ -242,6 +274,25 @@ export default function Approvals() {
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
                 disabled={actionLoading}>
                 <XCircle size={16} /> Not Received
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!lightbox} onClose={() => setLightbox(null)}
+        title={lightbox ? `${lightbox.student_name} — Payment Screenshot` : ''} size="xl">
+        {lightbox && (
+          <div className="space-y-4">
+            <img src={lightbox.receipt_url} alt="Payment screenshot"
+              className="w-full rounded-xl object-contain max-h-[70vh] bg-gray-50" />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => { setLightbox(null); setShowDetail(true); }}
+                className="btn-secondary">Close</button>
+              <button onClick={() => handleDownloadReceipt(lightbox)}
+                className="btn-primary inline-flex items-center gap-2"
+                disabled={receiptLoading}>
+                <FileDown size={16} /> {receiptLoading ? 'Generating…' : 'Download Receipt (PDF)'}
               </button>
             </div>
           </div>

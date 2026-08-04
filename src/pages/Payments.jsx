@@ -27,6 +27,7 @@ export default function Payments() {
   });
   const [receiptFile, setReceiptFile] = useState(null);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
+  const [viewPayment, setViewPayment] = useState(null);
   const [errors, setErrors] = useState({});
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
 
@@ -65,9 +66,9 @@ export default function Payments() {
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'receipt_url', label: 'Receipt', render: (r) =>
       r.receipt_url ? (
-        <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
+        <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
           <Download size={12} /> View
-        </a>
+        </button>
       ) : '-' },
   ];
 
@@ -337,6 +338,14 @@ export default function Payments() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!viewPayment} onClose={() => setViewPayment(null)}
+        title={viewPayment ? `Payment Receipt — ₹${Number(viewPayment.amount_paid).toLocaleString()}` : ''} size="xl">
+        {viewPayment && (
+          <img src={viewPayment.receipt_url} alt="Payment receipt"
+            className="w-full rounded-xl object-contain max-h-[75vh] bg-gray-50" />
+        )}
       </Modal>
     </div>
   );

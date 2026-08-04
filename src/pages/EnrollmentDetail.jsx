@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
+import Modal from '../components/ui/Modal';
 
 export default function EnrollmentDetail() {
   const { id } = useParams();
@@ -17,6 +18,7 @@ export default function EnrollmentDetail() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [viewPayment, setViewPayment] = useState(null);
 
   const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
 
@@ -80,9 +82,9 @@ export default function EnrollmentDetail() {
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
     { key: 'receipt_url', label: 'Receipt', render: (r) =>
       r.receipt_url ? (
-        <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
+        <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
           <Download size={12} /> View
-        </a>
+        </button>
       ) : '-' },
   ];
 
@@ -176,6 +178,14 @@ export default function EnrollmentDetail() {
           )}
         </CardBody>
       </Card>
+
+      <Modal open={!!viewPayment} onClose={() => setViewPayment(null)}
+        title={viewPayment ? `Payment Receipt — ₹${Number(viewPayment.amount_paid).toLocaleString()}` : ''} size="xl">
+        {viewPayment && (
+          <img src={viewPayment.receipt_url} alt="Payment receipt"
+            className="w-full rounded-xl object-contain max-h-[75vh] bg-gray-50" />
+        )}
+      </Modal>
     </div>
   );
 }
