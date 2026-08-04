@@ -16,10 +16,11 @@ export default function Dashboard() {
   const [team, setTeam] = useState([]);
   const [trends, setTrends] = useState([]);
   const [sources, setSources] = useState([]);
+  const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthOptions, setMonthOptions] = useState([]);
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
+  const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
 
   useEffect(() => {
     setSelectedMonth(new Date().toISOString().slice(0, 7));
@@ -37,16 +38,18 @@ export default function Dashboard() {
   async function load() {
     setLoading(true);
     try {
-      const [s, t, tr, src] = await Promise.all([
+      const [s, t, tr, src, rec] = await Promise.all([
         api.dashboard.summary(),
         isManager ? api.dashboard.team() : Promise.resolve([]),
         api.dashboard.trends(),
         isManager ? api.dashboard.sourceAnalytics() : Promise.resolve([]),
+        isManager ? Promise.resolve([]) : api.enrollments.list({}),
       ]);
       setSummary(s);
       setTeam(t);
       setTrends(tr.reverse());
       setSources(src);
+      setRecent(rec);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }
@@ -160,6 +163,37 @@ export default function Dashboard() {
                 ))}
                 {!team.length && <p className="text-center text-gray-400 py-8 text-sm">No team data for this period</p>}
               </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {!isManager && (
+          <Card>
+            <CardHeader>
+              <h3 className="font-semibold text-gray-900">My Recent Enrollments</h3>
+            </CardHeader>
+            <CardBody>
+              {recent.length ? (
+                <div className="space-y-2">
+                  {recent.slice(0, 5).map((en) => (
+                    <div key={en.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                      <div className="w-9 h-9 bg-primary-100 rounded-xl flex items-center justify-center text-primary-700 font-bold text-sm shrink-0">
+                        {en.student_name?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{en.student_name}</p>
+                        <p className="text-xs text-gray-400 truncate">{en.course_name}{en.batch_name ? ` · ${en.batch_name}` : ''}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold text-emerald-600">₹{Number(en.paid_amount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-amber-500">₹{Number(en.pending_amount || 0).toLocaleString()} pending</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-400 py-8 text-sm">No enrollments yet. Add your first enrollment from the Enrollments page.</p>
+              )}
             </CardBody>
           </Card>
         )}

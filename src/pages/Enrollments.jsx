@@ -19,7 +19,7 @@ const CATEGORY_DEAL_MAP = {
 export default function Enrollments() {
   const { user } = useAuth();
   const toast = useToast();
-  const isOps = user && (user.role === 'admin' || user.role === 'manager');
+  const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
   const [enrollments, setEnrollments] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ export default function Enrollments() {
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payErrors, setPayErrors] = useState({});
 
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
+  const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
 
   useEffect(() => { load(); }, []);
 
@@ -71,13 +71,22 @@ export default function Enrollments() {
     return file && file.type.startsWith('image/');
   }
 
+  function isCashAccount(id) {
+    return bankAccounts.some((b) => b.id === parseInt(id) && b.account_name?.toLowerCase() === 'cash');
+  }
+
+  function accountLabel(b) {
+    return b.bank_name === b.account_name ? b.account_name : `${b.account_name} — ${b.bank_name}`;
+  }
+
   const trainingFee = parseFloat(form.training_fee) || 0;
   const examFee = parseFloat(form.exam_fee) || 0;
   const total = trainingFee + examFee;
   const received = parseFloat(form.payment_received) || 0;
   const pending = Math.max(total - received, 0);
 
-  const isCash = form.payment_account === 'cash';
+  const isCash = isCashAccount(form.payment_account);
+  const payIsCash = isCashAccount(payForm.bank_account_id);
 
   function validate() {
     const errs = {};
@@ -111,7 +120,7 @@ export default function Enrollments() {
         batch_name: form.batch_name,
         amount_paid: received,
         payment_mode: isCash ? 'cash' : form.payment_mode,
-        bank_account_id: isCash ? null : (parseInt(form.payment_account) || null),
+        bank_account_id: parseInt(form.payment_account) || null,
         transaction_id: form.transaction_id,
       });
 
@@ -198,13 +207,13 @@ export default function Enrollments() {
 
     setPaySubmitting(true);
     try {
-      const isCash = payForm.bank_account_id === 'cash';
+      const isCash = isCashAccount(payForm.bank_account_id);
       const payment = await api.payments.create({
         enrollment_id: paying.id,
         student_id: paying.student_id,
         amount_paid: amount,
         payment_mode: isCash ? 'cash' : payForm.payment_mode,
-        bank_account_id: isCash ? null : (parseInt(payForm.bank_account_id) || null),
+        bank_account_id: parseInt(payForm.bank_account_id) || null,
         transaction_id: payForm.transaction_id,
       });
       if (payReceiptFile && payment.id) {
@@ -456,9 +465,8 @@ export default function Enrollments() {
                   value={form.payment_account}
                   onChange={(e) => { setForm({ ...form, payment_account: e.target.value }); setErrors({}); }}>
                   <option value="">Select account...</option>
-                  <option value="cash">Cash</option>
                   {bankAccounts.map((b) => (
-                    <option key={b.id} value={b.id}>{b.account_name} — {b.bank_name}</option>
+                    <option key={b.id} value={b.id}>{accountLabel(b)}</option>
                   ))}
                 </select>
                 {errors.payment_account && <p className="text-xs text-red-500 mt-1">{errors.payment_account}</p>}
@@ -681,7 +689,7 @@ export default function Enrollments() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode</label>
                 <select className="input-field" value={payForm.payment_mode}
-                  onChange={(e) => setPayForm({ ...payForm, payment_mode: e.target.value })} disabled={payForm.bank_account_id === 'cash'}>
+                  onChange={(e) => setPayForm({ ...payForm, payment_mode: e.target.value })} disabled={payIsCash}>
                   {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
@@ -693,9 +701,8 @@ export default function Enrollments() {
                 <select className="input-field" value={payForm.bank_account_id}
                   onChange={(e) => setPayForm({ ...payForm, bank_account_id: e.target.value })}>
                   <option value="">Select account...</option>
-                  <option value="cash">Cash</option>
                   {bankAccounts.map((b) => (
-                    <option key={b.id} value={b.id}>{b.account_name} — {b.bank_name}</option>
+                    <option key={b.id} value={b.id}>{accountLabel(b)}</option>
                   ))}
                 </select>
               </div>

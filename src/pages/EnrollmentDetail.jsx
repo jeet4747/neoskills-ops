@@ -18,7 +18,7 @@ export default function EnrollmentDetail() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  const isOps = user && (user.role === 'admin' || user.role === 'manager');
+  const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
 
   useEffect(() => { load(); }, [id]);
 

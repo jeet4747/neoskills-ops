@@ -28,10 +28,18 @@ export default function Payments() {
   const [receiptFile, setReceiptFile] = useState(null);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
   const [errors, setErrors] = useState({});
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
+  const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
 
   function isImage(file) {
     return file && file.type.startsWith('image/');
+  }
+
+  function isCashAccount(id) {
+    return bankAccounts.some((b) => b.id === parseInt(id) && b.account_name?.toLowerCase() === 'cash');
+  }
+
+  function accountLabel(b) {
+    return b.bank_name === b.account_name ? b.account_name : `${b.account_name} — ${b.bank_name}`;
   }
 
   const filteredEnrollments = enrollments.filter((e) => {
@@ -94,11 +102,12 @@ export default function Payments() {
     setSubmitting(true);
     try {
       const enrollment = enrollments.find((en) => en.id === parseInt(form.enrollment_id));
+      const isCash = isCashAccount(form.bank_account_id);
       const payment = await api.payments.create({
         enrollment_id: parseInt(form.enrollment_id),
         student_id: enrollment.student_id,
         amount_paid: parseFloat(form.amount_paid),
-        payment_mode: form.payment_mode,
+        payment_mode: isCash ? 'cash' : form.payment_mode,
         bank_account_id: parseInt(form.bank_account_id) || null,
         transaction_id: form.transaction_id,
       });
@@ -259,8 +268,9 @@ export default function Payments() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode *</label>
-              <select className="input-field" value={form.payment_mode}
-                onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}>
+              <select className="input-field" value={isCashAccount(form.bank_account_id) ? 'cash' : form.payment_mode}
+                onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}
+                disabled={isCashAccount(form.bank_account_id)}>
                 {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
@@ -272,9 +282,8 @@ export default function Payments() {
               <select className="input-field" value={form.bank_account_id}
                 onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}>
                 <option value="">Select account...</option>
-                <option value="cash">Cash</option>
                 {bankAccounts.map((b) => (
-                  <option key={b.id} value={b.id}>{b.account_name} — {b.bank_name}</option>
+                  <option key={b.id} value={b.id}>{accountLabel(b)}</option>
                 ))}
               </select>
             </div>

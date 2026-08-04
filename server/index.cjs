@@ -16,7 +16,15 @@ app.use(cors({ origin: true }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => {
+      const ext = (path.extname(file.originalname) || '').toLowerCase() || '.png';
+      cb(null, `receipt-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+});
 app.use('/uploads', express.static('uploads'));
 
 function auth(roles = []) {
@@ -87,11 +95,11 @@ app.post('/api/auth/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -101,7 +109,7 @@ app.get('/api/auth/me', auth(), (req, res) => {
   res.json(req.user);
 });
 
-app.get('/api/auth/pending-users', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/auth/pending-users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
       "SELECT id, name, email, role, status, created_at FROM users WHERE status = 'pending' ORDER BY created_at DESC"
@@ -112,7 +120,7 @@ app.get('/api/auth/pending-users', auth(['admin', 'manager']), async (req, res) 
   }
 });
 
-app.post('/api/auth/approve/:id', auth(['admin', 'manager']), async (req, res) => {
+app.post('/api/auth/approve/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const { action } = req.body;
     const status = action === 'reject' ? 'rejected' : 'active';
@@ -123,11 +131,11 @@ app.post('/api/auth/approve/:id', auth(['admin', 'manager']), async (req, res) =
   }
 });
 
-app.get('/api/users', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT
-        u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.created_at,
+        u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.can_sell, u.created_at,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
         (SELECT COALESCE(SUM(
@@ -374,7 +382,7 @@ const MODE_LABELS = {
   cheque: 'Cheque', bank_transfer: 'Bank Transfer',
 };
 
-app.get('/api/enrollments/:id/receipt', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/enrollments/:id/receipt', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const enrollResult = await query(
       `SELECT e.*, s.name as student_name, s.email as student_email, s.phone as student_phone, s.city as student_city, u.name as salesperson_name
@@ -447,7 +455,7 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
     if (!existing.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
 
     const enroll = existing.rows[0];
-    const isManager = req.user.role === 'manager' || req.user.role === 'admin';
+    const isManager = req.user.role === 'manager' || req.user.role === 'admin' || req.user.role === 'ops';
     if (!isManager && enroll.sales_user_id !== req.user.id)
       return res.status(403).json({ error: 'You can only edit your own enrollments' });
 
@@ -599,7 +607,7 @@ app.get('/api/payments', auth(), async (req, res) => {
   }
 });
 
-app.post('/api/approvals/:id/approve', auth(['admin', 'manager']), async (req, res) => {
+app.post('/api/approvals/:id/approve', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
       `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE id = $2 AND status = 'pending_approval' RETURNING *`,
@@ -624,7 +632,7 @@ app.post('/api/approvals/:id/approve', auth(['admin', 'manager']), async (req, r
   }
 });
 
-app.post('/api/approvals/:id/reject', auth(['admin', 'manager']), async (req, res) => {
+app.post('/api/approvals/:id/reject', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const { reason } = req.body;
     const result = await query(
@@ -638,7 +646,7 @@ app.post('/api/approvals/:id/reject', auth(['admin', 'manager']), async (req, re
   }
 });
 
-app.get('/api/approvals/pending', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/approvals/pending', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
       `SELECT p.*, s.name as student_name, s.email as student_email, s.phone as student_phone,
@@ -657,7 +665,7 @@ app.get('/api/approvals/pending', auth(['admin', 'manager']), async (req, res) =
   }
 });
 
-app.get('/api/approvals/count', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/approvals/count', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
       "SELECT COUNT(*) as count FROM payments WHERE status = 'pending_approval'"
@@ -700,9 +708,9 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
              WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
            ), 0), 0)
          ), 0)
-         FROM enrollments e ${enrollFilter}) as total_pending,
+         FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_pending,
         (SELECT COUNT(*) FROM enrollments e WHERE e.status = 'active' ${enrollFilter}) as active_enrollments,
-        (SELECT COUNT(*) FROM enrollments e ${enrollFilter}) as total_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_enrollments,
         (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter}) as pending_approvals
     `, params);
 
@@ -712,11 +720,11 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
   }
 });
 
-app.get('/api/dashboard/team', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT
-        u.id, u.name, u.email,
+        u.id, u.name, u.email, u.role, u.can_sell,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as deals_closed,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as revenue,
         (SELECT COALESCE(SUM(
@@ -728,7 +736,7 @@ app.get('/api/dashboard/team', auth(['admin', 'manager']), async (req, res) => {
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      WHERE u.role = 'sales' AND u.status = 'active'
+      WHERE (u.role = 'sales' OR u.can_sell = true) AND u.status = 'active'
       ORDER BY revenue DESC
     `);
     res.json(result.rows);
@@ -764,7 +772,7 @@ app.get('/api/dashboard/trends', auth(), async (req, res) => {
   }
 });
 
-app.get('/api/dashboard/source-analytics', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/dashboard/source-analytics', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT e.source, COUNT(*) as count, COUNT(DISTINCT e.id) as enrollments
@@ -779,7 +787,7 @@ app.get('/api/dashboard/source-analytics', auth(['admin', 'manager']), async (re
   }
 });
 
-app.get('/api/reports/salesperson', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT
@@ -795,7 +803,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager']), async (req, res)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending_collection,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      WHERE u.role = 'sales' AND u.status = 'active'
+      WHERE (u.role = 'sales' OR u.can_sell = true) AND u.status = 'active'
       ORDER BY collected DESC
     `);
     res.json(result.rows);
@@ -804,7 +812,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager']), async (req, res)
   }
 });
 
-app.get('/api/reports/bank-wise', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/reports/bank-wise', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT ba.account_name, ba.bank_name, ba.account_number,
@@ -821,7 +829,7 @@ app.get('/api/reports/bank-wise', auth(['admin', 'manager']), async (req, res) =
   }
 });
 
-app.get('/api/reports/pending-payments', auth(['admin', 'manager']), async (req, res) => {
+app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
       SELECT s.name as student_name, s.phone, e.course_name, u.name as salesperson,
@@ -864,10 +872,11 @@ async function init() {
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        role TEXT DEFAULT 'sales' CHECK (role IN ('sales', 'manager', 'admin')),
+        role TEXT DEFAULT 'sales' CHECK (role IN ('sales', 'manager', 'admin', 'ops')),
         status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'rejected')),
         phone TEXT,
         city TEXT,
+        can_sell BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS students (
@@ -935,8 +944,11 @@ async function init() {
     try {
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS category TEXT`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS support_included BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_sell BOOLEAN DEFAULT false`);
       await query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_payment_mode_check`);
       await query(`ALTER TABLE payments ADD CONSTRAINT payments_payment_mode_check CHECK (payment_mode IN ('upi', 'card', 'neft', 'cash', 'cheque', 'bank_transfer'))`);
+      await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+      await query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('sales', 'manager', 'admin', 'ops'))`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);
@@ -946,6 +958,7 @@ async function init() {
       { account_name: 'Neoskills GST', account_number: 'GST-ACCT', bank_name: 'Neoskills' },
       { account_name: 'NSL HDFC', account_number: 'NSL-HDFC', bank_name: 'HDFC Bank' },
       { account_name: 'CareerVU HDFC', account_number: 'CV-HDFC', bank_name: 'HDFC Bank' },
+      { account_name: 'Cash', account_number: 'CASH', bank_name: 'Cash' },
     ];
     for (const acc of defaultAccounts) {
       const exists = await query('SELECT id FROM bank_accounts WHERE LOWER(account_name) = LOWER($1)', [acc.account_name]);

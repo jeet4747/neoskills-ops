@@ -8,6 +8,7 @@ const variants = {
   admin: 'bg-purple-50 text-purple-700 border-purple-200',
   manager: 'bg-blue-50 text-blue-700 border-blue-200',
   sales: 'bg-teal-50 text-teal-700 border-teal-200',
+  ops: 'bg-indigo-50 text-indigo-700 border-indigo-200',
 };
 
 export default function Badge({ status, children, className = '' }) {

@@ -39,9 +39,10 @@ export default function Team() {
 
   const stats = {
     total: users.length,
-    sales: users.filter((u) => u.role === 'sales').length,
+    sales: users.filter((u) => u.role === 'sales' || u.can_sell).length,
     managers: users.filter((u) => u.role === 'manager').length,
     admins: users.filter((u) => u.role === 'admin').length,
+    ops: users.filter((u) => u.role === 'ops').length,
     active: users.filter((u) => u.status === 'active').length,
   };
 
@@ -109,6 +110,7 @@ export default function Team() {
           <option value="">All Roles</option>
           <option value="sales">Sales Reps</option>
           <option value="manager">Managers</option>
+          <option value="ops">Operations</option>
           <option value="admin">Admins</option>
         </select>
       </div>
@@ -140,8 +142,8 @@ export default function Team() {
                   {filtered.map((u) => (
                     <tr
                       key={u.id}
-                      onClick={() => u.role === 'sales' && navigate(`/salesperson/${u.id}`)}
-                      className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${u.role === 'sales' ? 'cursor-pointer' : ''}`}
+                      onClick={() => (u.role === 'sales' || u.can_sell) && navigate(`/salesperson/${u.id}`)}
+                      className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${(u.role === 'sales' || u.can_sell) ? 'cursor-pointer' : ''}`}
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">

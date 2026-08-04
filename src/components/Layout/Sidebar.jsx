@@ -13,23 +13,23 @@ export default function Sidebar({ open, onClose }) {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    if (user?.role === 'manager' || user?.role === 'admin') {
+    if (user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops') {
       api.approvals.count().then((d) => setPendingCount(d.count || 0)).catch(() => {});
     }
   }, [location.pathname, user?.role]);
 
   const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin'] },
-    { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin'] },
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops'] },
+    { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops'] },
     {
-      to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin'],
+      to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin', 'ops'],
       badge: pendingCount > 0 ? pendingCount : null,
     },
-    { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin'] },
+    { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin'] },
-    { to: '/team', icon: Users, label: 'Team', roles: ['admin'] },
+    { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
-    { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin'] },
+    { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin', 'ops'] },
   ];
 
   const items = navItems.filter((item) => item.roles.includes(user?.role));
@@ -96,7 +96,7 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Sales Rep' : user?.role === 'manager' ? 'Manager' : 'Admin'}</p>
+              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Sales Rep' : user?.role === 'manager' ? 'Manager' : user?.role === 'ops' ? 'Operations' : 'Admin'}</p>
             </div>
           </div>
           <button
