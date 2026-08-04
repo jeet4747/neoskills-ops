@@ -17,15 +17,16 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => {
-      const ext = (path.extname(file.originalname) || '').toLowerCase() || '.png';
-      cb(null, `receipt-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /^image\/(jpe?g|png|gif|webp)$/i;
+    if (!file.mimetype || !allowed.test(file.mimetype)) {
+      return cb(new Error('Only JPG, PNG, GIF or WEBP screenshots are allowed'));
+    }
+    cb(null, true);
+  },
 });
-app.use('/uploads', express.static('uploads'));
 
 function auth(roles = []) {
   return (req, res, next) => {
@@ -669,10 +670,11 @@ app.get('/api/approvals/count', auth(['admin', 'manager', 'ops']), async (req, r
 app.post('/api/payments/:id/receipt', auth(), upload.single('receipt'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const url = `/uploads/${req.file.filename}`;
-    await query('UPDATE payments SET receipt_url = $1 WHERE id = $2', [url, req.params.id]);
-    res.json({ receipt_url: url });
+    const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    await query('UPDATE payments SET receipt_url = $1 WHERE id = $2', [dataUrl, req.params.id]);
+    res.json({ receipt_url: dataUrl });
   } catch (e) {
+    if (e.message && e.message.includes('Only JPG')) return res.status(400).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });

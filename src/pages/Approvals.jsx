@@ -62,7 +62,8 @@ export default function Approvals() {
   });
 
   function isImageUrl(url) {
-    return /\.(jpe?g|png|gif|webp)(\?.*)?$/i.test(url || '');
+    return /^data:image\/(jpe?g|png|gif|webp);base64,/i.test(url || '')
+      || /\.(jpe?g|png|gif|webp)(\?.*)?$/i.test(url || '');
   }
 
   return (
