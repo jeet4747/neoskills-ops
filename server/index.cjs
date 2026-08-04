@@ -274,16 +274,6 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
         student = created.rows[0];
       }
 
-      const existing = await client.query(
-        `SELECT id FROM enrollments WHERE student_id = $1 AND LOWER(course_name) = LOWER($2) AND status = 'active'`,
-        [student.id, course_name]
-      );
-      if (existing.rows.length) {
-        const err = new Error(`This student already has an active enrollment in ${course_name}`);
-        err.statusCode = 409;
-        throw err;
-      }
-
       const enroll = await client.query(
         `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
