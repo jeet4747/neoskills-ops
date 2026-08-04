@@ -8,6 +8,7 @@ import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { PAYMENT_MODES } from '../config/constants';
+import { compressImage } from '../utils/imageCompress';
 
 export default function Payments() {
   const { user } = useAuth();
@@ -114,7 +115,8 @@ export default function Payments() {
       });
 
       if (receiptFile && payment.id) {
-        await api.payments.uploadReceipt(payment.id, receiptFile);
+        const receipt = await compressImage(receiptFile);
+        await api.payments.uploadReceipt(payment.id, receipt);
       }
 
       toast.success(`Payment of ₹${Number(form.amount_paid).toLocaleString()} recorded and sent for approval`);

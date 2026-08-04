@@ -8,6 +8,7 @@ import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { SOURCES, PAYMENT_MODES, CATEGORIES } from '../config/constants';
+import { compressImage } from '../utils/imageCompress';
 
 const CATEGORY_DEAL_MAP = {
   'Training': 'training',
@@ -125,7 +126,8 @@ export default function Enrollments() {
       });
 
       if (receiptFile && result.payment?.id) {
-        await api.payments.uploadReceipt(result.payment.id, receiptFile);
+        const receipt = await compressImage(receiptFile);
+        await api.payments.uploadReceipt(result.payment.id, receipt);
       }
 
       toast.success(`Enrollment + payment of ₹${received.toLocaleString()} recorded. Awaiting manager approval.`);
@@ -217,7 +219,8 @@ export default function Enrollments() {
         transaction_id: payForm.transaction_id,
       });
       if (payReceiptFile && payment.id) {
-        await api.payments.uploadReceipt(payment.id, payReceiptFile);
+        const receipt = await compressImage(payReceiptFile);
+        await api.payments.uploadReceipt(payment.id, receipt);
       }
       toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
       setPaying(null);
