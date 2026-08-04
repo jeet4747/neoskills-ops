@@ -7,7 +7,7 @@ import { Card, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { COURSES, SOURCES, PAYMENT_MODES, CATEGORIES } from '../config/constants';
+import { SOURCES, PAYMENT_MODES, CATEGORIES } from '../config/constants';
 
 const CATEGORY_DEAL_MAP = {
   'Training': 'training',
@@ -413,10 +413,9 @@ export default function Enrollments() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Module *</label>
-                <select className="input-field" value={form.course_name}
-                  onChange={(e) => setForm({ ...form, course_name: e.target.value })}>
-                  {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <input type="text" className={`input-field ${errors.course_name ? 'border-red-300' : ''}`}
+                  value={form.course_name} placeholder="Type the module / course name"
+                  onChange={(e) => setForm({ ...form, course_name: e.target.value })} />
               </div>
             </div>
 
@@ -606,10 +605,8 @@ export default function Enrollments() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Module</label>
-                  <select className="input-field" value={editForm.course_name}
-                    onChange={(e) => setEditForm({ ...editForm, course_name: e.target.value })}>
-                    {COURSES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <input type="text" className="input-field" value={editForm.course_name}
+                    onChange={(e) => setEditForm({ ...editForm, course_name: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">

@@ -35,13 +35,13 @@ export default function Approvals() {
       await api.approvals.approve(payment.id);
       setPayments((prev) => prev.filter((p) => p.id !== payment.id));
       setShowDetail(false);
-      toast.success(`Payment of ₹${Number(payment.amount_paid).toLocaleString()} from ${payment.student_name} approved`);
+      toast.success(`Payment of ₹${Number(payment.amount_paid).toLocaleString()} from ${payment.student_name} marked as received`);
     } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
   }
 
   async function handleReject() {
-    if (!rejectReason.trim()) { toast.error('Please enter a reason for rejection'); return; }
+    if (!rejectReason.trim()) { toast.error('Please enter a reason'); return; }
     setActionLoading(true);
     try {
       await api.approvals.reject(selected.id, rejectReason);
@@ -49,7 +49,7 @@ export default function Approvals() {
       setShowReject(false);
       setShowDetail(false);
       setRejectReason('');
-      toast.info(`Payment rejected: ${rejectReason}`);
+      toast.info(`Payment marked as not received: ${rejectReason}`);
     } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
   }
@@ -235,34 +235,34 @@ export default function Approvals() {
                 className="btn-success flex-1 flex items-center justify-center gap-2"
                 disabled={actionLoading}>
                 {actionLoading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={16} />}
-                Approve Payment
+                Received
               </button>
               <button onClick={() => setShowReject(true)}
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
                 disabled={actionLoading}>
-                <XCircle size={16} /> Reject
+                <XCircle size={16} /> Not Received
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      <Modal open={showReject} onClose={() => { setShowReject(false); setRejectReason(''); }} title="Reject Payment" size="sm">
+      <Modal open={showReject} onClose={() => { setShowReject(false); setRejectReason(''); }} title="Not Received" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Reject payment of <strong>₹{selected ? Number(selected.amount_paid).toLocaleString() : ''}</strong> from <strong>{selected?.student_name}</strong>
+            Mark payment of <strong>₹{selected ? Number(selected.amount_paid).toLocaleString() : ''}</strong> from <strong>{selected?.student_name}</strong> as not received?
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason for rejection *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason *</label>
             <textarea className={`input-field ${!rejectReason.trim() && rejectReason ? 'border-red-300' : ''}`}
               rows={3} value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Enter detailed reason for rejection..." autoFocus />
+              placeholder="Enter reason for marking as not received..." autoFocus />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => { setShowReject(false); setRejectReason(''); }} className="btn-secondary">Cancel</button>
             <button onClick={handleReject} className="btn-danger" disabled={actionLoading || !rejectReason.trim()}>
-              {actionLoading ? 'Rejecting...' : 'Confirm Rejection'}
+              {actionLoading ? 'Saving...' : 'Confirm'}
             </button>
           </div>
         </div>

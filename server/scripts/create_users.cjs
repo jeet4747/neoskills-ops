@@ -21,8 +21,7 @@ const users = [
 ];
 
 function genPassword(name) {
-  const num = crypto.randomBytes(2).toString('hex').toUpperCase();
-  return `${name}@Neo${num}`;
+  return `${name}@123`;
 }
 
 (async () => {
