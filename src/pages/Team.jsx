@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Users as UsersIcon, Shield, DollarSign, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 
@@ -10,15 +11,20 @@ const ROLE_META = {
   admin: { label: 'Admin', icon: Shield },
   manager: { label: 'Manager' },
   sales: { label: 'Sales Rep' },
+  ops: { label: 'Operations' },
 };
 
 export default function Team() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [savingId, setSavingId] = useState(null);
+
+  const isAdmin = me?.role === 'admin';
 
   useEffect(() => { load(); }, []);
 
@@ -27,6 +33,19 @@ export default function Team() {
       setUsers(await api.users.list());
     } catch (e) { toast.error('Failed to load team'); }
     finally { setLoading(false); }
+  }
+
+  async function handleUpdate(u, patch) {
+    setSavingId(u.id);
+    try {
+      await api.users.update(u.id, patch);
+      toast.success(`${u.name} updated`);
+      await load();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSavingId(null);
+    }
   }
 
   const filtered = users.filter((u) => {
@@ -142,8 +161,8 @@ export default function Team() {
                   {filtered.map((u) => (
                     <tr
                       key={u.id}
-                      onClick={() => (u.role === 'sales' || u.can_sell) && navigate(`/salesperson/${u.id}`)}
-                      className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${(u.role === 'sales' || u.can_sell) ? 'cursor-pointer' : ''}`}
+                      onClick={() => !savingId && (u.role === 'sales' || u.can_sell) && navigate(`/salesperson/${u.id}`)}
+                      className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${(u.role === 'sales' || u.can_sell) && !savingId ? 'cursor-pointer' : ''}`}
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -156,8 +175,39 @@ export default function Team() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5"><Badge status={u.role} /></td>
-                      <td className="px-5 py-3.5"><Badge status={u.status === 'active' ? 'active' : 'inactive'} /></td>
+                      <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        {isAdmin && String(u.id) !== String(me?.id) ? (
+                          <select
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:border-primary-400"
+                            value={u.role}
+                            disabled={savingId === u.id}
+                            onChange={(e) => handleUpdate(u, { role: e.target.value })}
+                          >
+                            <option value="sales">Sales Rep</option>
+                            <option value="manager">Manager</option>
+                            <option value="ops">Operations</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        ) : (
+                          <Badge status={u.role} />
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        {isAdmin && String(u.id) !== String(me?.id) ? (
+                          <select
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:border-primary-400"
+                            value={u.status}
+                            disabled={savingId === u.id}
+                            onChange={(e) => handleUpdate(u, { status: e.target.value })}
+                          >
+                            <option value="active">Active</option>
+                            <option value="pending">Pending</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        ) : (
+                          <Badge status={u.status === 'active' ? 'active' : 'inactive'} />
+                        )}
+                      </td>
                       <td className="px-5 py-3.5 text-gray-600">{u.enrollments || 0}</td>
                       <td className="px-5 py-3.5 font-medium text-gray-900">₹{Number(u.collected || 0).toLocaleString()}</td>
                       <td className="px-5 py-3.5 text-amber-600 font-medium">₹{Number(u.pending || 0).toLocaleString()}</td>

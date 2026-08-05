@@ -92,6 +92,7 @@ export const api = {
   users: {
     list: () => request('/users'),
     getProfile: (id) => request(`/users/${id}/profile`),
+    update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
   brands: {
     list: () => request('/brands'),

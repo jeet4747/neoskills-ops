@@ -158,6 +158,30 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   }
 });
 
+app.put('/api/users/:id', auth(['admin']), async (req, res) => {
+  try {
+    const { role, status, can_sell } = req.body;
+    if (role && !['sales', 'manager', 'admin', 'ops'].includes(role))
+      return res.status(400).json({ error: 'Invalid role' });
+    if (status && !['active', 'pending', 'rejected'].includes(status))
+      return res.status(400).json({ error: 'Invalid status' });
+    if (role && String(req.params.id) === String(req.user.id))
+      return res.status(400).json({ error: 'You cannot change your own role' });
+    const fields = [];
+    const params = [];
+    if (role) { fields.push(`role = $${params.length + 1}`); params.push(role); }
+    if (status) { fields.push(`status = $${params.length + 1}`); params.push(status); }
+    if (can_sell !== undefined) { fields.push(`can_sell = $${params.length + 1}`); params.push(!!can_sell); }
+    if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
+    params.push(req.params.id);
+    const result = await query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, role, status, can_sell`, params);
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/users/:id/profile', auth(), async (req, res) => {
   try {
     const userResult = await query('SELECT id, name, email, role FROM users WHERE id = $1', [req.params.id]);
