@@ -93,4 +93,36 @@ export const api = {
     list: () => request('/users'),
     getProfile: (id) => request(`/users/${id}/profile`),
   },
+  receipts: {
+    list: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/receipts${q ? `?${q}` : ''}`);
+    },
+    get: (id) => request(`/receipts/${id}`),
+    create: (data) => request('/receipts', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/receipts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id) => request(`/receipts/${id}`, { method: 'DELETE' }),
+    downloadPdf: async (id, filename) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BASE}/receipts/${id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text ? JSON.parse(text).error || 'Download failed' : 'Download failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `receipt-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+  },
+  receiptTemplates: {
+    list: () => request('/receipt-templates'),
+    create: (data) => request('/receipt-templates', { method: 'POST', body: JSON.stringify(data) }),
+    remove: (id) => request(`/receipt-templates/${id}`, { method: 'DELETE' }),
+  },
 };

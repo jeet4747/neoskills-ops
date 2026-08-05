@@ -12,6 +12,8 @@ const BRAND = {
   website: 'www.neoskills.co.in',
 };
 const LOGO_PATH = path.join(__dirname, '../public/logo/nsl-logo-cropped.png');
+const FONT_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans.ttf');
+const FONT_BOLD_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans-Bold.ttf');
 
 const CURRENCY = '₹';
 
@@ -48,6 +50,8 @@ function pad(txt, len) {
 
 function generateReceipt(data) {
   const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+  doc.registerFont('DejaVu', FONT_PATH);
+  doc.registerFont('DejaVu-Bold', FONT_BOLD_PATH);
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
 
@@ -65,17 +69,17 @@ function generateReceipt(data) {
 
   // ---------- Top header ----------
   doc.rect(0, 0, doc.page.width, 92).fill(lightGray);
-  doc.fillColor(dark).font('Helvetica-Bold').fontSize(10).text('BILL OF SUPPLY', margin, y + 12);
+  doc.fillColor(dark).font('DejaVu-Bold').fontSize(10).text('BILL OF SUPPLY', margin, y + 12);
   doc.rect(margin + 90, y + 12, 150, 20).fill('#ffffff').strokeColor(borderGray).lineWidth(1).stroke();
-  doc.fillColor(midGray).font('Helvetica').fontSize(7).text('ORIGINAL FOR RECIPIENT', margin + 92, y + 16, { width: 146, align: 'center' });
+  doc.fillColor(midGray).font('DejaVu').fontSize(7).text('ORIGINAL FOR RECIPIENT', margin + 92, y + 16, { width: 146, align: 'center' });
 
   if (fs.existsSync(LOGO_PATH)) {
     doc.image(LOGO_PATH, margin, y + 38, { fit: [115, 42], align: 'left' });
   }
 
   const brandX = margin + 120;
-  doc.fillColor(dark).font('Helvetica-Bold').fontSize(16).text(BRAND.name, brandX, y + 16);
-  doc.font('Helvetica').fontSize(8).fillColor(midGray);
+  doc.fillColor(dark).font('DejaVu-Bold').fontSize(16).text(BRAND.name, brandX, y + 16);
+  doc.font('DejaVu').fontSize(8).fillColor(midGray);
   doc.text(BRAND.address, brandX, y + 36, { width: W - 120, lineGap: 2 });
   doc.text(`Mobile: ${BRAND.phone}    PAN Number: ${BRAND.pan}`, { continued: false, lineGap: 2 });
   doc.text(`Email: ${BRAND.contact}`, { lineGap: 2 });
@@ -92,19 +96,19 @@ function generateReceipt(data) {
   if (data.student_email) billToLines.push(`Email: ${data.student_email}`);
   if (data.student_city) billToLines.push(`City: ${data.student_city}`);
 
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Invoice No.:', margin, y);
-  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(data.receipt_number || '—', margin, y + 12);
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Invoice No.:', margin, y);
+  doc.font('DejaVu').fontSize(9).fillColor(midGray).text(data.receipt_number || '—', margin, y + 12);
 
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Invoice Date:', margin + 210, y);
-  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(invoiceDate, margin + 210, y + 12);
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Invoice Date:', margin + 210, y);
+  doc.font('DejaVu').fontSize(9).fillColor(midGray).text(invoiceDate, margin + 210, y + 12);
 
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Due Date:', margin + 390, y);
-  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(dueDate, margin + 390, y + 12);
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Due Date:', margin + 390, y);
+  doc.font('DejaVu').fontSize(9).fillColor(midGray).text(dueDate, margin + 390, y + 12);
 
   y += 42;
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('BILL TO', margin, y);
-  doc.font('Helvetica').fontSize(9).fillColor(dark).text(billToLines[0], margin, y + 14);
-  doc.font('Helvetica').fontSize(8).fillColor(midGray);
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('BILL TO', margin, y);
+  doc.font('DejaVu').fontSize(9).fillColor(dark).text(billToLines[0], margin, y + 14);
+  doc.font('DejaVu').fontSize(8).fillColor(midGray);
   billToLines.slice(1).forEach((line, index) => {
     doc.text(line, margin, y + 28 + index * 11);
   });
@@ -113,7 +117,7 @@ function generateReceipt(data) {
 
   // ---------- Services table header ----------
   doc.rect(margin, y, W, 26).fill(dark);
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.fillColor('#ffffff').font('DejaVu-Bold').fontSize(8);
   doc.text('SERVICES', margin + 10, y + 8);
   doc.text('QTY.', margin + 250, y + 8, { width: 60, align: 'right' });
   doc.text('RATE', margin + 330, y + 8, { width: 100, align: 'right' });
@@ -125,7 +129,7 @@ function generateReceipt(data) {
   const serviceDescription = data.course_name || 'Course Fee';
   const lineAmount = Number(data.total_amount) || 0;
 
-  doc.font('Helvetica').fontSize(9).fillColor(dark);
+  doc.font('DejaVu').fontSize(9).fillColor(dark);
   doc.text(serviceDescription, margin + 10, y + 8);
   doc.text('1', margin + 250, y + 8, { width: 60, align: 'right' });
   doc.text(CURRENCY + formatINR(lineAmount), margin + 330, y + 8, { width: 100, align: 'right' });
@@ -137,33 +141,33 @@ function generateReceipt(data) {
   const summaryX = margin + W - 220;
   const valueX = margin + W - 20;
   y += 10;
-  doc.font('Helvetica').fontSize(9).fillColor(midGray).text('SUBTOTAL', summaryX, y, { width: 130, align: 'left' });
-  doc.font('Helvetica').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
+  doc.font('DejaVu').fontSize(9).fillColor(midGray).text('SUBTOTAL', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
 
   y += 16;
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('TOTAL AMOUNT', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('TOTAL AMOUNT', summaryX, y, { width: 130, align: 'left' });
   doc.text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
 
   y += 16;
-  doc.font('Helvetica').fontSize(9).fillColor(positive).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu').fontSize(9).fillColor(positive).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
   doc.text(CURRENCY + formatINR(data.total_paid || 0), valueX, y, { width: 120, align: 'right' });
 
   y += 16;
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(warning).text('Balance', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(warning).text('Balance', summaryX, y, { width: 130, align: 'left' });
   doc.text(CURRENCY + formatINR(data.total_pending || 0), valueX, y, { width: 120, align: 'right' });
 
   y += 34;
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(dark).text('TERMS AND CONDITIONS', margin, y);
-  doc.font('Helvetica').fontSize(7).fillColor(midGray);
+  doc.font('DejaVu-Bold').fontSize(8).fillColor(dark).text('TERMS AND CONDITIONS', margin, y);
+  doc.font('DejaVu').fontSize(7).fillColor(midGray);
   doc.text('1. Goods once sold will not be taken back or exchanged.', margin, y + 12, { width: W - 240, lineGap: 2 });
   doc.text('2. All disputes are subject to Pune jurisdiction only.', margin, y + 26, { width: W - 240, lineGap: 2 });
 
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(dark).text('Total Amount (in words)', summaryX, y);
-  doc.font('Helvetica').fontSize(8).fillColor(midGray).text(toWords(lineAmount), summaryX, y + 12, { width: 220, align: 'right' });
+  doc.font('DejaVu-Bold').fontSize(8).fillColor(dark).text('Total Amount (in words)', summaryX, y);
+  doc.font('DejaVu').fontSize(8).fillColor(midGray).text(toWords(lineAmount), summaryX, y + 12, { width: 220, align: 'right' });
 
   const signY = doc.page.height - 120;
   doc.moveTo(summaryX, signY + 18).lineTo(summaryX + 180, signY + 18).strokeColor(borderGray).lineWidth(1).stroke();
-  doc.font('Helvetica').fontSize(8).fillColor(midGray).text('AUTHORISED SIGNATORY', summaryX, signY + 22, { width: 180, align: 'center' });
+  doc.font('DejaVu').fontSize(8).fillColor(midGray).text('AUTHORISED SIGNATORY', summaryX, signY + 22, { width: 180, align: 'center' });
 
   doc.end();
   return new Promise((resolve, reject) => {

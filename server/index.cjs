@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const { query, withTransaction } = require('./db.cjs');
 const { generateReceipt } = require('./receipt.cjs');
+const { generateInvoice } = require('./invoice.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -679,6 +680,174 @@ app.post('/api/payments/:id/receipt', auth(), upload.single('receipt'), async (r
   }
 });
 
+// ---------- Customizable receipts (mybillbook-style) ----------
+app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const conditions = [];
+    const params = [];
+    if (search) {
+      conditions.push(`(r.receipt_number ILIKE $${params.length + 1} OR r.student_name ILIKE $${params.length + 1} OR r.course_name ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+    let where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const countRes = await query(`SELECT COUNT(*) as count FROM receipts r ${where}`, params);
+    const result = await query(
+      `SELECT r.*, u.name as created_by_name, e.total_amount as enrollment_total
+       FROM receipts r
+       LEFT JOIN users u ON r.created_by = u.id
+       LEFT JOIN enrollments e ON r.enrollment_id = e.id
+       ${where}
+       ORDER BY r.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, parseInt(limit), offset]
+    );
+    res.json({ receipts: result.rows, total: parseInt(countRes.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM receipts WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+async function nextReceiptNumber(prefix) {
+  const pre = prefix || 'NEO';
+  const year = new Date().getFullYear();
+  const res = await query(
+    `SELECT COALESCE(MAX(sequence), 0) + 1 as next_seq FROM receipts WHERE prefix = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
+    [pre, year]
+  );
+  const seq = parseInt(res.rows[0].next_seq);
+  const number = `${pre}-${year}-${String(seq).padStart(4, '0')}`;
+  return { number, seq };
+}
+
+app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const { number, seq } = await nextReceiptNumber(b.prefix);
+    const items = JSON.stringify(b.items || []);
+    const result = await query(
+      `INSERT INTO receipts (
+         receipt_number, prefix, sequence, enrollment_id,
+         student_name, student_phone, student_email, student_city, course_name,
+         items, tax_rate, discount, subtotal, tax_amount, total_amount,
+         received_amount, balance_amount, payment_mode, transaction_id,
+         bank_account_name, bank_account_number, bank_name, bank_ifsc, notes,
+         created_by
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15,
+         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+       ) RETURNING *`,
+      [number, b.prefix || 'NEO', seq, b.enrollment_id || null,
+       b.student_name, b.student_phone, b.student_email, b.student_city, b.course_name,
+       items, b.tax_rate || 0, b.discount || 0, b.subtotal || 0, b.tax_amount || 0, b.total_amount || 0,
+       b.received_amount || 0, b.balance_amount || 0, b.payment_mode, b.transaction_id,
+       b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes,
+       req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const items = JSON.stringify(b.items || []);
+    const result = await query(
+      `UPDATE receipts SET
+         enrollment_id = $1, student_name = $2, student_phone = $3, student_email = $4,
+         student_city = $5, course_name = $6, items = $7::jsonb, tax_rate = $8,
+         discount = $9, subtotal = $10, tax_amount = $11, total_amount = $12,
+         received_amount = $13, balance_amount = $14, payment_mode = $15, transaction_id = $16,
+         bank_account_name = $17, bank_account_number = $18, bank_name = $19, bank_ifsc = $20, notes = $21
+       WHERE id = $22 RETURNING *`,
+      [b.enrollment_id || null, b.student_name, b.student_phone, b.student_email,
+       b.student_city, b.course_name, items, b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
+       b.tax_amount || 0, b.total_amount || 0, b.received_amount || 0, b.balance_amount || 0,
+       b.payment_mode, b.transaction_id, b.bank_account_name, b.bank_account_number,
+       b.bank_name, b.bank_ifsc, b.notes, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/receipts/:id', auth(['admin']), async (req, res) => {
+  try {
+    const result = await query('DELETE FROM receipts WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/receipts/:id/pdf', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM receipts WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    const r = result.rows[0];
+    const pdf = await generateInvoice({
+      ...r,
+      items: r.items,
+      date: new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Receipt-${r.receipt_number}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Receipt templates
+app.get('/api/receipt-templates', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM receipt_templates ORDER BY name');
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/receipt-templates', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const result = await query(
+      `INSERT INTO receipt_templates (name, prefix, payment_mode, bank_account_name, bank_account_number, bank_name, bank_ifsc, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [b.name, b.prefix || 'NEO', b.payment_mode, b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/receipt-templates/:id', auth(['admin']), async (req, res) => {
+  try {
+    await query('DELETE FROM receipt_templates WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 app.get('/api/dashboard/summary', auth(), async (req, res) => {
   try {
     const role = req.user.role;
@@ -928,6 +1097,48 @@ async function init() {
         month INTEGER NOT NULL,
         year INTEGER NOT NULL,
         target_amount DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS receipts (
+        id SERIAL PRIMARY KEY,
+        receipt_number TEXT UNIQUE NOT NULL,
+        prefix TEXT DEFAULT 'NEO',
+        sequence INTEGER NOT NULL DEFAULT 0,
+        enrollment_id INTEGER REFERENCES enrollments(id),
+        student_name TEXT,
+        student_phone TEXT,
+        student_email TEXT,
+        student_city TEXT,
+        course_name TEXT,
+        items JSONB DEFAULT '[]'::jsonb,
+        tax_rate DECIMAL(5,2) DEFAULT 0,
+        discount DECIMAL(10,2) DEFAULT 0,
+        subtotal DECIMAL(10,2) DEFAULT 0,
+        tax_amount DECIMAL(10,2) DEFAULT 0,
+        total_amount DECIMAL(10,2) DEFAULT 0,
+        received_amount DECIMAL(10,2) DEFAULT 0,
+        balance_amount DECIMAL(10,2) DEFAULT 0,
+        payment_mode TEXT,
+        transaction_id TEXT,
+        bank_account_name TEXT,
+        bank_account_number TEXT,
+        bank_name TEXT,
+        bank_ifsc TEXT,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS receipt_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        prefix TEXT DEFAULT 'NEO',
+        payment_mode TEXT,
+        bank_account_name TEXT,
+        bank_account_number TEXT,
+        bank_name TEXT,
+        bank_ifsc TEXT,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);

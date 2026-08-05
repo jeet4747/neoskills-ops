@@ -12,6 +12,7 @@ import Users from './pages/Users';
 import SalespersonDetail from './pages/SalespersonDetail';
 import EnrollmentDetail from './pages/EnrollmentDetail';
 import Team from './pages/Team';
+import Receipts from './pages/Receipts';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -72,6 +73,14 @@ export default function App() {
           }
         />
         <Route path="payments" element={<Payments />} />
+        <Route
+          path="receipts"
+          element={
+            <ProtectedRoute roles={['admin', 'manager', 'ops']}>
+              <Receipts />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="bank-accounts"
           element={
