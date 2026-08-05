@@ -7,15 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/icon-180.png'],
       manifest: {
-        name: 'NeoOps - Sales Command Center',
+        name: 'NeoOps - Neoskills Sales Command Center',
         short_name: 'NeoOps',
-        description: 'NeoSkills Sales Command Center - Track performance, close deals',
+        description: 'NeoSkills Sales Command Center - Track performance, close deals, manage receipts',
         theme_color: '#003B7A',
         background_color: '#ffffff',
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'any',
+        start_url: '/',
+        scope: '/',
         icons: [
           {
             src: '/icons/icon-192.png',
@@ -28,12 +30,22 @@ export default defineConfig({
             type: 'image/png',
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/icons/icon-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
           },
+          {
+            src: '/icons/icon-180.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'apple touch icon',
+          },
         ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
     }),
   ],
