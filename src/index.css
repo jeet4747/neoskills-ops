@@ -8,6 +8,13 @@
   body {
     @apply font-sans bg-gray-100 text-gray-900 antialiased;
   }
+  /* Mobile safety net: keep the page from scrolling sideways so long numbers /
+     wide cards never push content off-screen. Inner tables still scroll via
+     their own overflow-x-auto containers. */
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 }
 
 @layer components {

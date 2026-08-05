@@ -405,38 +405,42 @@ export default function Receipts() {
               </CardHeader>
               <CardBody className="space-y-2">
                 {form.items.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      className="input-field flex-1"
-                      placeholder="Item / module description"
-                      value={item.description}
-                      onChange={(e) => updateItem(index, { description: e.target.value })}
-                    />
-                    <input
-                      className="input-field w-16 text-right"
-                      placeholder="Qty"
-                      value={item.qty}
-                      onChange={(e) => updateItem(index, { qty: e.target.value })}
-                    />
-                    <input
-                      className="input-field w-28 text-right"
-                      placeholder="Rate ₹"
-                      value={item.rate}
-                      onChange={(e) => updateItem(index, { rate: e.target.value })}
-                    />
-                    <span className="w-24 text-right text-sm font-medium text-gray-700">
-                      ₹{cNum((Number(item.qty) || 1) * (Number(item.rate) || 0))}
-                    </span>
-                    <button onClick={() => removeItem(index)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600">
-                      <X size={15} />
-                    </button>
+                  <div key={index} className="grid grid-cols-1 gap-2 border border-gray-100 rounded-xl p-2 bg-gray-50/40">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="input-field flex-1"
+                        placeholder="Item / module description"
+                        value={item.description}
+                        onChange={(e) => updateItem(index, { description: e.target.value })}
+                      />
+                      <button onClick={() => removeItem(index)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-600 shrink-0">
+                        <X size={15} />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        className="input-field w-16 text-right"
+                        placeholder="Qty"
+                        value={item.qty}
+                        onChange={(e) => updateItem(index, { qty: e.target.value })}
+                      />
+                      <input
+                        className="input-field flex-1 min-w-[120px] text-right"
+                        placeholder="Rate ₹"
+                        value={item.rate}
+                        onChange={(e) => updateItem(index, { rate: e.target.value })}
+                      />
+                      <span className="w-24 text-right text-sm font-medium text-gray-700">
+                        ₹{cNum((Number(item.qty) || 1) * (Number(item.rate) || 0))}
+                      </span>
+                    </div>
                   </div>
                 ))}
                 <button onClick={addItem} className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1.5">
                   <Plus size={15} /> Add line item
                 </button>
 
-                <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-gray-100">
                   <div>
                     <label className="text-xs text-gray-500 font-medium mb-1 block">Tax rate (%)</label>
                     <input className="input-field" type="number" value={form.tax_rate} onChange={(e) => setForm({ ...form, tax_rate: e.target.value })} />
@@ -451,7 +455,7 @@ export default function Receipts() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 bg-gray-50 rounded-xl p-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 rounded-xl p-3 text-sm">
                   <div><p className="text-xs text-gray-400">Subtotal</p><p className="font-semibold">₹{cNum(c.subtotal)}</p></div>
                   <div><p className="text-xs text-gray-400">Tax</p><p className="font-semibold">₹{cNum(c.taxAmount)}</p></div>
                   <div><p className="text-xs text-gray-400">Balance</p><p className="font-semibold text-amber-600">₹{cNum(c.balance)}</p></div>

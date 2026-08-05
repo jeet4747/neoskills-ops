@@ -70,37 +70,37 @@ export default function SalespersonDetail() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <Card><CardBody>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-100 rounded-xl"><DollarSign size={20} className="text-blue-600" /></div>
-            <div>
+            <div className="p-2.5 bg-blue-100 rounded-xl shrink-0"><DollarSign size={20} className="text-blue-600" /></div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Collected</p>
-              <p className="text-xl font-bold text-gray-900">₹{Number(profile?.collected || 0).toLocaleString()}</p>
+              <p className="text-base sm:text-xl font-bold text-gray-900 break-words">₹{Number(profile?.collected || 0).toLocaleString()}</p>
             </div>
           </div>
         </CardBody></Card>
         <Card><CardBody>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-100 rounded-xl"><Clock size={20} className="text-amber-600" /></div>
-            <div>
+            <div className="p-2.5 bg-amber-100 rounded-xl shrink-0"><Clock size={20} className="text-amber-600" /></div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Pending</p>
-              <p className="text-xl font-bold text-amber-600">₹{Number(profile?.pending || 0).toLocaleString()}</p>
+              <p className="text-base sm:text-xl font-bold text-amber-600 break-words">₹{Number(profile?.pending || 0).toLocaleString()}</p>
             </div>
           </div>
         </CardBody></Card>
         <Card><CardBody>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-100 rounded-xl"><Users size={20} className="text-emerald-600" /></div>
-            <div>
+            <div className="p-2.5 bg-emerald-100 rounded-xl shrink-0"><Users size={20} className="text-emerald-600" /></div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Enrollments</p>
-              <p className="text-xl font-bold text-gray-900">{profile?.enrollments || enrollments.length}</p>
+              <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{profile?.enrollments || enrollments.length}</p>
             </div>
           </div>
         </CardBody></Card>
         <Card><CardBody>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-100 rounded-xl"><Medal size={20} className="text-purple-600" /></div>
-            <div>
+            <div className="p-2.5 bg-purple-100 rounded-xl shrink-0"><Medal size={20} className="text-purple-600" /></div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Approvals</p>
-              <p className="text-xl font-bold text-gray-900">{profile?.pending_approvals || 0}</p>
+              <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{profile?.pending_approvals || 0}</p>
             </div>
           </div>
         </CardBody></Card>

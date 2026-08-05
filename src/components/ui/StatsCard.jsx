@@ -20,14 +20,14 @@ export default function StatsCard({ icon: Icon, label, value, sub, color = 'prim
   return (
     <Card>
       <CardBody>
-        <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-2xl ${icons[color]}`}>
-            {Icon && <Icon size={24} />}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className={`p-2 sm:p-3 rounded-2xl shrink-0 ${icons[color]}`}>
+            {Icon && <Icon size={20} />}
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-0.5">{value}</p>
-            {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wider truncate">{label}</p>
+            <p className="text-base sm:text-2xl font-bold text-gray-900 mt-0.5 break-words">{value}</p>
+            {sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
           </div>
         </div>
       </CardBody>
@@ -45,14 +45,14 @@ export function GradientStatsCard({ icon: Icon, label, value, color = 'primary' 
   };
 
   return (
-    <div className={`rounded-2xl bg-gradient-to-br ${gradients[color]} p-5 text-white shadow-lg`}>
+    <div className={`rounded-2xl bg-gradient-to-br ${gradients[color]} p-4 sm:p-5 text-white shadow-lg`}>
       <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
-          {Icon && <Icon size={22} />}
+        <div className="p-2 sm:p-2.5 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
+          {Icon && <Icon size={18} />}
         </div>
-        <div>
-          <p className="text-xs font-medium text-white/70 uppercase tracking-wider">{label}</p>
-          <p className="text-2xl font-bold mt-0.5">{value}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] sm:text-xs font-medium text-white/70 uppercase tracking-wider truncate">{label}</p>
+          <p className="text-base sm:text-2xl font-bold mt-0.5 break-words">{value}</p>
         </div>
       </div>
     </div>

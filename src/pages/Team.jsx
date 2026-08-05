@@ -124,10 +124,10 @@ export default function Team() {
         <Card>
           <CardBody>
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-blue-100 rounded-xl"><UsersIcon size={20} className="text-blue-600" /></div>
-              <div>
+              <div className="p-2.5 bg-blue-100 rounded-xl shrink-0"><UsersIcon size={20} className="text-blue-600" /></div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Total Members</p>
-                <p className="text-xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{stats.total}</p>
               </div>
             </div>
           </CardBody>
@@ -135,10 +135,10 @@ export default function Team() {
         <Card>
           <CardBody>
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-teal-100 rounded-xl"><UsersIcon size={20} className="text-teal-600" /></div>
-              <div>
+              <div className="p-2.5 bg-teal-100 rounded-xl shrink-0"><UsersIcon size={20} className="text-teal-600" /></div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Sales Reps</p>
-                <p className="text-xl font-bold text-gray-900">{stats.sales}</p>
+                <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{stats.sales}</p>
               </div>
             </div>
           </CardBody>
@@ -146,10 +146,10 @@ export default function Team() {
         <Card>
           <CardBody>
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-purple-100 rounded-xl"><Shield size={20} className="text-purple-600" /></div>
-              <div>
+              <div className="p-2.5 bg-purple-100 rounded-xl shrink-0"><Shield size={20} className="text-purple-600" /></div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Managers & Admins</p>
-                <p className="text-xl font-bold text-gray-900">{stats.managers + stats.admins}</p>
+                <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{stats.managers + stats.admins}</p>
               </div>
             </div>
           </CardBody>
@@ -157,10 +157,10 @@ export default function Team() {
         <Card>
           <CardBody>
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-100 rounded-xl"><Clock size={20} className="text-emerald-600" /></div>
-              <div>
+              <div className="p-2.5 bg-emerald-100 rounded-xl shrink-0"><Clock size={20} className="text-emerald-600" /></div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Active</p>
-                <p className="text-xl font-bold text-emerald-600">{stats.active}</p>
+                <p className="text-base sm:text-xl font-bold text-emerald-600 break-words">{stats.active}</p>
               </div>
             </div>
           </CardBody>
@@ -191,37 +191,37 @@ export default function Team() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             <Card><CardBody>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-100 rounded-xl"><DollarSign size={20} className="text-emerald-600" /></div>
-                <div>
+                <div className="p-2.5 bg-emerald-100 rounded-xl shrink-0"><DollarSign size={20} className="text-emerald-600" /></div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wider">Total Collected</p>
-                  <p className="text-xl font-bold text-gray-900">₹{(t.collected || 0).toLocaleString()}</p>
+                  <p className="text-base sm:text-xl font-bold text-gray-900 break-words">₹{(t.collected || 0).toLocaleString()}</p>
                 </div>
               </div>
             </CardBody></Card>
             <Card><CardBody>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-100 rounded-xl"><Clock size={20} className="text-amber-600" /></div>
-                <div>
+                <div className="p-2.5 bg-amber-100 rounded-xl shrink-0"><Clock size={20} className="text-amber-600" /></div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wider">Total Pending</p>
-                  <p className="text-xl font-bold text-amber-600">₹{(t.pending || 0).toLocaleString()}</p>
+                  <p className="text-base sm:text-xl font-bold text-amber-600 break-words">₹{(t.pending || 0).toLocaleString()}</p>
                 </div>
               </div>
             </CardBody></Card>
             <Card><CardBody>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-100 rounded-xl"><UsersIcon size={20} className="text-blue-600" /></div>
-                <div>
+                <div className="p-2.5 bg-blue-100 rounded-xl shrink-0"><UsersIcon size={20} className="text-blue-600" /></div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wider">This Month</p>
-                  <p className="text-xl font-bold text-gray-900">₹{(t.month_collected || 0).toLocaleString()}</p>
+                  <p className="text-base sm:text-xl font-bold text-gray-900 break-words">₹{(t.month_collected || 0).toLocaleString()}</p>
                 </div>
               </div>
             </CardBody></Card>
             <Card><CardBody>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-red-100 rounded-xl"><AlertCircle size={20} className="text-red-600" /></div>
-                <div>
+                <div className="p-2.5 bg-red-100 rounded-xl shrink-0"><AlertCircle size={20} className="text-red-600" /></div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Approvals</p>
-                  <p className="text-xl font-bold text-gray-900">{t.pending_approvals || 0}</p>
+                  <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{t.pending_approvals || 0}</p>
                 </div>
               </div>
             </CardBody></Card>

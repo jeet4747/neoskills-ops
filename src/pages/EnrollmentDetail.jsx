@@ -143,26 +143,26 @@ export default function EnrollmentDetail() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <Card>
           <CardBody>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Total Fee</p>
-            <p className="text-xl font-bold text-gray-900 mt-0.5">₹{Number(enrollment.total_amount).toLocaleString()}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Total Fee</p>
+            <p className="text-base sm:text-xl font-bold text-gray-900 mt-0.5 break-words">₹{Number(enrollment.total_amount).toLocaleString()}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Paid</p>
-            <p className="text-xl font-bold text-emerald-600 mt-0.5">₹{totalPaid.toLocaleString()}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Paid</p>
+            <p className="text-base sm:text-xl font-bold text-emerald-600 mt-0.5 break-words">₹{totalPaid.toLocaleString()}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Pending</p>
-            <p className="text-xl font-bold text-amber-600 mt-0.5">₹{totalPending.toLocaleString()}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Pending</p>
+            <p className="text-base sm:text-xl font-bold text-amber-600 mt-0.5 break-words">₹{totalPending.toLocaleString()}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
-            <p className="text-xs text-gray-400 uppercase tracking-wider">Deal Type</p>
-            <p className="text-xl font-bold text-gray-900 mt-0.5 capitalize">{enrollment.deal_type}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Deal Type</p>
+            <p className="text-base sm:text-xl font-bold text-gray-900 mt-0.5 capitalize break-words">{enrollment.deal_type}</p>
           </CardBody>
         </Card>
       </div>
