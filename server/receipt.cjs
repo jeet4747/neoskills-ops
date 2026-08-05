@@ -1,15 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const { getBrand } = require('./brands.cjs');
 
 const BRAND = {
-  name: 'Neoskills Learning Solutions',
+  ...getBrand('neoskills'),
   tagline: 'NeoOps — Sales Command Center',
-  address: '4th floor, Office no-402, Yugal Parnavi, Sai Chowk Rd, near Irani cafe, Laxman Nagar, Baner, Pune, Maharashtra 411045',
-  contact: 'account@neoskills.co.in',
-  phone: '9975214585',
-  pan: 'AAYFN4318E',
-  website: 'www.neoskills.co.in',
 };
 const LOGO_PATH = path.join(__dirname, '../public/logo/nsl-logo-cropped.png');
 const FONT_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans.ttf');
@@ -66,6 +62,7 @@ function generateReceipt(data) {
   const warning = '#b45309';
 
   let y = margin;
+  const brand = { ...getBrand(data.company), ...(data.brand || {}) };
 
   // ---------- Top header ----------
   doc.rect(0, 0, doc.page.width, 92).fill(lightGray);
@@ -78,12 +75,12 @@ function generateReceipt(data) {
   }
 
   const brandX = margin + 120;
-  doc.fillColor(dark).font('DejaVu-Bold').fontSize(16).text(BRAND.name, brandX, y + 16);
+  doc.fillColor(dark).font('DejaVu-Bold').fontSize(16).text(brand.name, brandX, y + 16);
   doc.font('DejaVu').fontSize(8).fillColor(midGray);
-  doc.text(BRAND.address, brandX, y + 36, { width: W - 120, lineGap: 2 });
-  doc.text(`Mobile: ${BRAND.phone}    PAN Number: ${BRAND.pan}`, { continued: false, lineGap: 2 });
-  doc.text(`Email: ${BRAND.contact}`, { lineGap: 2 });
-  doc.text(BRAND.website, { lineGap: 2 });
+  doc.text(brand.address, brandX, y + 36, { width: W - 120, lineGap: 2 });
+  doc.text(`Mobile: ${brand.phone}    PAN Number: ${brand.pan}`, { continued: false, lineGap: 2 });
+  doc.text(`Email: ${brand.contact}`, { lineGap: 2 });
+  doc.text(brand.website, { lineGap: 2 });
 
   y += 110;
   doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(borderGray).lineWidth(1).stroke();

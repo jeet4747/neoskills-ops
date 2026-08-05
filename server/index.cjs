@@ -8,6 +8,7 @@ const path = require('path');
 const { query, withTransaction } = require('./db.cjs');
 const { generateReceipt } = require('./receipt.cjs');
 const { generateInvoice } = require('./invoice.cjs');
+const { BRANDS } = require('./brands.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -681,6 +682,10 @@ app.post('/api/payments/:id/receipt', auth(), upload.single('receipt'), async (r
 });
 
 // ---------- Customizable receipts (mybillbook-style) ----------
+app.get('/api/brands', auth(['admin', 'manager', 'ops']), (req, res) => {
+  res.json(Object.values(BRANDS).map(({ key, name }) => ({ key, name })));
+});
+
 app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const { page = 1, limit = 20, search = '' } = req.query;
@@ -740,17 +745,17 @@ app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) =>
       `INSERT INTO receipts (
          receipt_number, prefix, sequence, enrollment_id,
          student_name, student_phone, student_email, student_city, course_name,
-         items, tax_rate, discount, subtotal, tax_amount, total_amount,
+         items, company, tax_rate, discount, subtotal, tax_amount, total_amount,
          received_amount, balance_amount, payment_mode, transaction_id,
          bank_account_name, bank_account_number, bank_name, bank_ifsc, notes,
          created_by
        ) VALUES (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15,
-         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
        ) RETURNING *`,
       [number, b.prefix || 'NEO', seq, b.enrollment_id || null,
        b.student_name, b.student_phone, b.student_email, b.student_city, b.course_name,
-       items, b.tax_rate || 0, b.discount || 0, b.subtotal || 0, b.tax_amount || 0, b.total_amount || 0,
+       items, b.company || 'neoskills', b.tax_rate || 0, b.discount || 0, b.subtotal || 0, b.tax_amount || 0, b.total_amount || 0,
        b.received_amount || 0, b.balance_amount || 0, b.payment_mode, b.transaction_id,
        b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes,
        req.user.id]
@@ -768,13 +773,13 @@ app.put('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res)
     const result = await query(
       `UPDATE receipts SET
          enrollment_id = $1, student_name = $2, student_phone = $3, student_email = $4,
-         student_city = $5, course_name = $6, items = $7::jsonb, tax_rate = $8,
-         discount = $9, subtotal = $10, tax_amount = $11, total_amount = $12,
-         received_amount = $13, balance_amount = $14, payment_mode = $15, transaction_id = $16,
-         bank_account_name = $17, bank_account_number = $18, bank_name = $19, bank_ifsc = $20, notes = $21
-       WHERE id = $22 RETURNING *`,
+         student_city = $5, course_name = $6, items = $7::jsonb, company = $8,
+         tax_rate = $9, discount = $10, subtotal = $11, tax_amount = $12, total_amount = $13,
+         received_amount = $14, balance_amount = $15, payment_mode = $16, transaction_id = $17,
+         bank_account_name = $18, bank_account_number = $19, bank_name = $20, bank_ifsc = $21, notes = $22
+       WHERE id = $23 RETURNING *`,
       [b.enrollment_id || null, b.student_name, b.student_phone, b.student_email,
-       b.student_city, b.course_name, items, b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
+       b.student_city, b.course_name, items, b.company || 'neoskills', b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
        b.tax_amount || 0, b.total_amount || 0, b.received_amount || 0, b.balance_amount || 0,
        b.payment_mode, b.transaction_id, b.bank_account_name, b.bank_account_number,
        b.bank_name, b.bank_ifsc, b.notes, req.params.id]
@@ -828,9 +833,9 @@ app.post('/api/receipt-templates', auth(['admin', 'manager', 'ops']), async (req
   try {
     const b = req.body;
     const result = await query(
-      `INSERT INTO receipt_templates (name, prefix, payment_mode, bank_account_name, bank_account_number, bank_name, bank_ifsc, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [b.name, b.prefix || 'NEO', b.payment_mode, b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes, req.user.id]
+      `INSERT INTO receipt_templates (name, prefix, payment_mode, bank_account_name, bank_account_number, bank_name, bank_ifsc, notes, company, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [b.name, b.prefix || 'NEO', b.payment_mode, b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes, b.company || 'neoskills', req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -1111,6 +1116,7 @@ async function init() {
         student_city TEXT,
         course_name TEXT,
         items JSONB DEFAULT '[]'::jsonb,
+        company TEXT DEFAULT 'neoskills',
         tax_rate DECIMAL(5,2) DEFAULT 0,
         discount DECIMAL(10,2) DEFAULT 0,
         subtotal DECIMAL(10,2) DEFAULT 0,
@@ -1145,6 +1151,8 @@ async function init() {
     console.log('Database tables created');
 
     try {
+      await query(`ALTER TABLE receipts ADD COLUMN IF NOT EXISTS company TEXT DEFAULT 'neoskills'`);
+      await query(`ALTER TABLE receipt_templates ADD COLUMN IF NOT EXISTS company TEXT DEFAULT 'neoskills'`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS category TEXT`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS support_included BOOLEAN DEFAULT false`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_sell BOOLEAN DEFAULT false`);

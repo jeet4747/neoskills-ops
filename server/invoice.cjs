@@ -5,15 +5,11 @@ const PDFDocument = require('pdfkit');
 const LOGO_PATH = path.join(__dirname, '../public/logo/nsl-logo-cropped.png');
 const FONT_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans.ttf');
 const FONT_BOLD_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans-Bold.ttf');
+const { getBrand } = require('./brands.cjs');
 
 const DEFAULT_BRAND = {
-  name: 'Neoskills Learning Solutions',
+  ...getBrand('neoskills'),
   tagline: 'NeoOps — Sales Command Center',
-  address: '4th floor, Office no-402, Yugal Parnavi, Sai Chowk Rd, near Irani cafe, Laxman Nagar, Baner, Pune, Maharashtra 411045',
-  contact: 'account@neoskills.co.in',
-  phone: '9975214585',
-  pan: 'AAYFN4318E',
-  website: 'www.neoskills.co.in',
 };
 
 const CURRENCY = '₹';
@@ -61,7 +57,7 @@ function generateInvoice(data) {
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
 
-  const brand = { ...DEFAULT_BRAND, ...(data.brand || {}) };
+  const brand = { ...getBrand(data.company), ...(data.brand || {}) };
   const W = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const margin = doc.page.margins.left;
   const dark = '#111827';

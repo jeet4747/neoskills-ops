@@ -93,6 +93,9 @@ export const api = {
     list: () => request('/users'),
     getProfile: (id) => request(`/users/${id}/profile`),
   },
+  brands: {
+    list: () => request('/brands'),
+  },
   receipts: {
     list: (params) => {
       const q = new URLSearchParams(params).toString();

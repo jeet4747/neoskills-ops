@@ -31,6 +31,7 @@ function emptyForm() {
     student_city: '',
     course_name: '',
     items: [{ ...EMPTY_ITEM }],
+    company: 'neoskills',
     tax_rate: 0,
     discount: 0,
     received_amount: '',
@@ -56,6 +57,7 @@ export default function Receipts() {
   const [enrollments, setEnrollments] = useState([]);
   const [enrollSearch, setEnrollSearch] = useState('');
   const [templates, setTemplates] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
@@ -85,6 +87,7 @@ export default function Receipts() {
 
   useEffect(() => {
     api.receiptTemplates.list().then(setTemplates).catch(() => {});
+    api.brands.list().then(setBrands).catch(() => {});
   }, []);
 
   function selectEnrollment(en) {
@@ -112,6 +115,7 @@ export default function Receipts() {
     setForm((f) => ({
       ...f,
       prefix: t.prefix || f.prefix,
+      company: t.company || f.company,
       payment_mode: t.payment_mode || f.payment_mode,
       bank_account_name: t.bank_account_name || f.bank_account_name,
       bank_account_number: t.bank_account_number || f.bank_account_number,
@@ -252,9 +256,11 @@ export default function Receipts() {
 
   const c = computed(form);
   const cNum = (n) => (n === '' || n == null ? '' : Number(n).toLocaleString());
+  const brandName = (key) => (brands.find((b) => b.key === key) || { name: key }).name;
 
   const columns = [
     { key: 'receipt_number', label: 'Receipt No.', render: (r) => <span className="font-semibold text-gray-900">{r.receipt_number}</span> },
+    { key: 'company', label: 'Company', render: (r) => <span className="text-xs text-gray-500">{brandName(r.company)}</span> },
     { key: 'student_name', label: 'Customer', render: (r) => <div><p className="font-medium">{r.student_name}</p><p className="text-xs text-gray-400">{r.course_name}</p></div> },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) },
     { key: 'total_amount', label: 'Total', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
@@ -356,6 +362,20 @@ export default function Receipts() {
                 </button>
               </CardHeader>
               <CardBody className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium mb-1 block">Company on receipt</label>
+                  <select className="input-field" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })}>
+                    {brands.length ? brands.map((b) => (
+                      <option key={b.key} value={b.key}>{b.name}</option>
+                    )) : (
+                      <>
+                        <option value="neoskills">Neoskills Learning Solutions</option>
+                        <option value="careervue">CareerVUE</option>
+                        <option value="frolics">Frolics Solutions</option>
+                      </>
+                    )}
+                  </select>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-gray-500 font-medium mb-1 block">Customer name *</label>
@@ -519,13 +539,19 @@ export default function Receipts() {
                   <div className="p-6 space-y-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-lg font-bold text-gray-900">{form.student_name || 'Customer Name'}</p>
-                        <p className="text-xs text-gray-500">{form.student_phone}{form.student_city ? ` · ${form.student_city}` : ''}</p>
-                        {form.course_name && <p className="text-sm text-gray-600 mt-1 font-medium">{form.course_name}</p>}
+                        <p className="text-sm font-bold text-gray-900">{brandName(form.company)}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">4th Floor, Office No-402, Yugal Parnavi, Baner, Pune 411045</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-gray-900">TAX INVOICE</p>
                         <p className="text-xs text-gray-400 mt-1">{form.receipt_number || 'NEO-YYYY-NNNN'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-gray-900">{form.student_name || 'Customer Name'}</p>
+                        <p className="text-xs text-gray-500">{form.student_phone}{form.student_city ? ` · ${form.student_city}` : ''}</p>
+                        {form.course_name && <p className="text-sm text-gray-600 mt-1 font-medium">{form.course_name}</p>}
                       </div>
                     </div>
                     <table className="w-full text-sm">
