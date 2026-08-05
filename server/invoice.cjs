@@ -18,6 +18,15 @@ const DEFAULT_BRAND = {
 
 const CURRENCY = '₹';
 
+const PAYMENT_MODE_LABELS = {
+  cash: 'Cash',
+  upi: 'UPI',
+  bank: 'Bank Transfer',
+  card: 'Card',
+  cheque: 'Cheque',
+  other: 'Other',
+};
+
 function toWords(num) {
   num = Math.round(Number(num) || 0);
   if (num === 0) return 'Zero Rupees Only';
@@ -104,11 +113,14 @@ function generateInvoice(data) {
   doc.text(`Date: ${data.date || data.invoice_date || '—'}`, margin, y + 38);
 
   const metaX = margin + W - 220;
-  const metaValX = margin + W - 20;
-  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Payment Mode:', metaX, y + 24);
-  doc.font('DejaVu').fontSize(9).fillColor(midGray).text(data.payment_mode_label || data.payment_mode || '—', metaValX, y + 24, { width: 180, align: 'right' });
-  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Transaction ID:', metaX, y + 38);
-  doc.font('DejaVu').fontSize(9).fillColor(midGray).text(data.transaction_id || '—', metaValX, y + 38, { width: 180, align: 'right' });
+  const metaValX = margin + W - 180;
+  const metaRows = [];
+  if (data.payment_mode) metaRows.push(['Payment Mode:', PAYMENT_MODE_LABELS[data.payment_mode] || String(data.payment_mode).toUpperCase()]);
+  if (data.transaction_id) metaRows.push(['Transaction ID:', data.transaction_id]);
+  metaRows.forEach(([label, val], i) => {
+    doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text(label, metaX, y + 24 + i * 14);
+    doc.font('DejaVu').fontSize(9).fillColor(midGray).text(val, metaValX, y + 24 + i * 14, { width: 180, align: 'right' });
+  });
 
   y += 66;
   doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(borderGray).lineWidth(1).stroke();
@@ -126,9 +138,10 @@ function generateInvoice(data) {
   if (data.course_name) {
     doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Course:', margin, y + 32 + custLines.length * 11 + 6);
     doc.font('DejaVu').fontSize(9).fillColor(midGray).text(data.course_name, margin, y + 32 + custLines.length * 11 + 20);
+    y = y + 32 + custLines.length * 11 + 20 + 26;
+  } else {
+    y = y + 32 + custLines.length * 11 + 10;
   }
-
-  y += 78;
 
   // ---------- Items table ----------
   const tableTop = y;
@@ -164,7 +177,7 @@ function generateInvoice(data) {
 
   // ---------- Summary ----------
   const summaryX = margin + W - 220;
-  const valueX = margin + W - 20;
+  const valueX = margin + W - 120;
   const summaryLines = [];
   summaryLines.push(['SUBTOTAL', CURRENCY + formatINR(subtotal)]);
   if (discount > 0) summaryLines.push(['DISCOUNT', '- ' + CURRENCY + formatINR(discount)]);

@@ -139,7 +139,7 @@ function generateReceipt(data) {
   doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(borderGray).lineWidth(1).stroke();
 
   const summaryX = margin + W - 220;
-  const valueX = margin + W - 20;
+  const valueX = margin + W - 120;
   y += 10;
   doc.font('DejaVu').fontSize(9).fillColor(midGray).text('SUBTOTAL', summaryX, y, { width: 130, align: 'left' });
   doc.font('DejaVu').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
