@@ -35,7 +35,7 @@ export default function StatsCard({ icon: Icon, label, value, sub, color = 'prim
   );
 }
 
-export function GradientStatsCard({ icon: Icon, label, value, color = 'primary' }) {
+export function GradientStatsCard({ icon: Icon, label, value, color = 'primary', onClick }) {
   const gradients = {
     primary: 'from-blue-600 to-indigo-600',
     emerald: 'from-emerald-500 to-teal-600',
@@ -45,7 +45,10 @@ export function GradientStatsCard({ icon: Icon, label, value, color = 'primary' 
   };
 
   return (
-    <div className={`rounded-2xl bg-gradient-to-br ${gradients[color]} p-4 sm:p-5 text-white shadow-lg`}>
+    <div
+      onClick={onClick}
+      className={`rounded-2xl bg-gradient-to-br ${gradients[color]} p-4 sm:p-5 text-white shadow-lg ${onClick ? 'cursor-pointer hover:opacity-95 active:scale-[0.98] transition-all' : ''}`}
+    >
       <div className="flex items-center gap-3">
         <div className="p-2 sm:p-2.5 bg-white/20 rounded-xl backdrop-blur-sm shrink-0">
           {Icon && <Icon size={18} />}

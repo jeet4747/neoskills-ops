@@ -582,8 +582,8 @@ export default function Receipts() {
                         {Number(form.discount) > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span className="font-medium text-red-600">-₹{cNum(form.discount)}</span></div>}
                         {Number(form.tax_rate) > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax</span><span className="font-medium">₹{cNum(c.taxAmount)}</span></div>}
                         <div className="flex justify-between border-t border-gray-200 pt-1.5 font-bold"><span>Total</span><span>₹{cNum(c.totalAmount)}</span></div>
-                        <div className="flex justify-between text-emerald-600 font-semibold"><span>Received</span><span>₹{cNum(form.received_amount)}</span></div>
-                        {c.balance > 0 && <div className="flex justify-between text-amber-600 font-semibold"><span>Balance</span><span>₹{cNum(c.balance)}</span></div>}
+                        <div className="flex justify-between text-gray-900 font-semibold"><span>Received</span><span>₹{cNum(form.received_amount)}</span></div>
+                        {c.balance > 0 && <div className="flex justify-between text-gray-900 font-semibold"><span>Balance</span><span>₹{cNum(c.balance)}</span></div>}
                       </div>
                     </div>
                     {form.bank_name && (

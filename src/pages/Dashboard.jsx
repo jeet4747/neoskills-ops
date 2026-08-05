@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter } from 'lucide-react';
+import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import StatsCard, { GradientStatsCard } from '../components/ui/StatsCard';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
+import Modal from '../components/ui/Modal';
 
 const COLORS = ['#003B7A', '#FFC300', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#84CC16'];
 
@@ -18,6 +19,9 @@ export default function Dashboard() {
   const [sources, setSources] = useState([]);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pendingList, setPendingList] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [showPending, setShowPending] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthOptions, setMonthOptions] = useState([]);
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
@@ -57,6 +61,20 @@ export default function Dashboard() {
   const rankEmojis = ['🥇', '🥈', '🥉'];
   const now = new Date(selectedMonth + '-01');
   const currentMonthLabel = MONTH_LABELS[now.getMonth()] + ' ' + now.getFullYear();
+
+  async function openPendingCollections() {
+    setShowPending(true);
+    setPendingLoading(true);
+    try {
+      const list = await api.dashboard.pendingCollections();
+      setPendingList(list);
+    } catch (e) {
+      console.error(e);
+      setPendingList([]);
+    } finally {
+      setPendingLoading(false);
+    }
+  }
 
   const SkeletonCard = () => <div className="h-28 skeleton w-full" />;
 
@@ -106,7 +124,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <GradientStatsCard icon={DollarSign} label="Total Revenue" value={`₹${(summary?.total_revenue || 0).toLocaleString()}`} color="primary" />
-        <GradientStatsCard icon={Clock} label="Pending Collection" value={`₹${(summary?.total_pending || 0).toLocaleString()}`} color="amber" />
+        <GradientStatsCard icon={Clock} label="Pending Collection" value={`₹${(summary?.total_pending || 0).toLocaleString()}`} color="amber" onClick={openPendingCollections} />
         <GradientStatsCard icon={Users} label="Active Enrollments" value={summary?.active_enrollments || 0} color="emerald" />
         {isManager ? (
           <GradientStatsCard icon={AlertCircle} label="Pending Approvals" value={summary?.pending_approvals || 0} color="red" />
@@ -254,6 +272,73 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      <Modal open={showPending} onClose={() => setShowPending(false)} title="Pending Collections" size="xl">
+        {pendingLoading ? (
+          <div className="space-y-3">
+            {[1,2,3].map((i) => <div key={i} className="h-14 skeleton w-full" />)}
+          </div>
+        ) : pendingList.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <CheckCircle size={28} className="text-emerald-400" />
+            </div>
+            <h3 className="text-sm font-medium text-gray-500 mb-1">No pending collections</h3>
+            <p className="text-xs text-gray-400">All enrollments are fully paid up.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">
+              {pendingList.length} enrollment{pendingList.length !== 1 ? 's' : ''} with pending balance of{' '}
+              <strong className="text-amber-600">₹{pendingList.reduce((s, r) => s + Number(r.pending_amount || 0), 0).toLocaleString()}</strong>
+            </p>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Candidate</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Contact</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Course</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Salesperson</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Total</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Paid</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Pending</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingList.map((r) => (
+                    <tr key={r.enrollment_id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 bg-primary-100 rounded-lg flex items-center justify-center text-primary-700 font-bold text-xs shrink-0">
+                            {(r.student_name || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{r.student_name}</p>
+                            {r.student_city && <p className="text-xs text-gray-400 truncate">{r.student_city}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="text-gray-700">{r.student_phone || '-'}</p>
+                        {r.student_email && <p className="text-xs text-gray-400 truncate max-w-[160px]">{r.student_email}</p>}
+                      </td>
+                      <td className="px-3 py-3 text-gray-700">
+                        <p className="truncate max-w-[180px]">{r.course_name}</p>
+                        {r.batch_name && <p className="text-xs text-gray-400 truncate">Batch: {r.batch_name}</p>}
+                      </td>
+                      <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.salesperson_name || '-'}</td>
+                      <td className="px-3 py-3 text-right whitespace-nowrap">₹{Number(r.total_amount).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-right text-emerald-600 font-medium whitespace-nowrap">₹{Number(r.paid_amount).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-right text-amber-600 font-bold whitespace-nowrap">₹{Number(r.pending_amount).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

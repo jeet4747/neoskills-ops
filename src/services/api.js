@@ -45,6 +45,7 @@ export const api = {
     team: () => request('/dashboard/team'),
     trends: () => request('/dashboard/trends'),
     sourceAnalytics: () => request('/dashboard/source-analytics'),
+    pendingCollections: () => request('/dashboard/pending-collections'),
   },
   students: {
     list: (search) => request(`/students${search ? `?search=${encodeURIComponent(search)}` : ''}`),

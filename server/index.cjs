@@ -1075,6 +1075,45 @@ app.get('/api/dashboard/source-analytics', auth(['admin', 'manager', 'ops']), as
   }
 });
 
+app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
+  try {
+    const role = req.user.role;
+    let salesFilter = '';
+    let params = [];
+    if (role === 'sales') {
+      salesFilter = `AND e.sales_user_id = $${params.length + 1}`;
+      params.push(req.user.id);
+    } else if (role === 'ops') {
+      salesFilter = `AND e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')`;
+    }
+    const result = await query(`
+      SELECT e.id as enrollment_id, s.name as student_name, s.phone as student_phone,
+             s.email as student_email, s.city as student_city, e.course_name, e.batch_name,
+             u.name as salesperson_name, e.total_amount,
+             COALESCE((
+               SELECT SUM(p2.amount_paid) FROM payments p2
+               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             ), 0) as paid_amount,
+             GREATEST(e.total_amount - COALESCE((
+               SELECT SUM(p2.amount_paid) FROM payments p2
+               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             ), 0), 0) as pending_amount
+      FROM enrollments e
+      JOIN students s ON e.student_id = s.id
+      JOIN users u ON e.sales_user_id = u.id
+      WHERE 1=1 ${salesFilter}
+        AND GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0) > 0
+      ORDER BY pending_amount DESC, e.created_at DESC
+    `, params);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`

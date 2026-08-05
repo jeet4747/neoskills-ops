@@ -14,6 +14,7 @@ server/.env
 uploads
 *.log
 dist-ssr
+dev-dist
 *.local
 
 # Editor directories and files
