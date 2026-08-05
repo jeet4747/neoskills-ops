@@ -395,10 +395,11 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
       const paidSoFar = parseFloat(prior.rows[0].paid_so_far);
       const pending = Math.max(0, parseFloat(total_amount) - (paidSoFar + paid));
 
+      const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
       const pay = await client.query(
-        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_approval') RETURNING *`,
-        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null]
+        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
       );
 
       return { student, enrollment, payment: pay.rows[0] };
@@ -433,6 +434,8 @@ app.get('/api/enrollments', auth(), async (req, res) => {
     if (role === 'sales') {
       conditions.push(`e.sales_user_id = $${params.length + 1}`);
       params.push(req.user.id);
+    } else if (role === 'ops') {
+      conditions.push(`e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')`);
     }
 
     if (req.query.status) {
@@ -651,10 +654,11 @@ app.post('/api/payments', auth(), async (req, res) => {
     }
     const pending = Math.max(0, total - (paidSoFar + paid));
 
+    const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
     const result = await query(
-      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_approval') RETURNING *`,
-      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id]
+      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -680,6 +684,8 @@ app.get('/api/payments', auth(), async (req, res) => {
     if (role === 'sales') {
       conditions.push(`p.sales_user_id = $${params.length + 1}`);
       params.push(req.user.id);
+    } else if (role === 'ops') {
+      conditions.push(`p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')`);
     }
 
     if (req.query.status) {
@@ -743,6 +749,8 @@ app.post('/api/approvals/:id/reject', auth(['admin', 'manager', 'ops']), async (
 
 app.get('/api/approvals/pending', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const role = req.user.role;
+    const adminHidden = role === 'ops' ? " AND p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')" : '';
     const result = await query(
       `SELECT p.*, s.name as student_name, s.email as student_email, s.phone as student_phone,
               e.course_name, u.name as salesperson_name, ba.account_name as bank_account_name
@@ -751,7 +759,7 @@ app.get('/api/approvals/pending', auth(['admin', 'manager', 'ops']), async (req,
        JOIN enrollments e ON p.enrollment_id = e.id
        JOIN users u ON p.sales_user_id = u.id
        LEFT JOIN bank_accounts ba ON p.bank_account_id = ba.id
-       WHERE p.status = 'pending_approval'
+       WHERE p.status = 'pending_approval'${adminHidden}
        ORDER BY p.created_at ASC`
     );
     res.json(result.rows);
@@ -762,8 +770,10 @@ app.get('/api/approvals/pending', auth(['admin', 'manager', 'ops']), async (req,
 
 app.get('/api/approvals/count', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const role = req.user.role;
+    const adminHidden = role === 'ops' ? " AND sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')" : '';
     const result = await query(
-      "SELECT COUNT(*) as count FROM payments WHERE status = 'pending_approval'"
+      `SELECT COUNT(*) as count FROM payments WHERE status = 'pending_approval'${adminHidden}`
     );
     res.json({ count: parseInt(result.rows[0].count) });
   } catch (e) {
@@ -798,6 +808,9 @@ app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => 
       conditions.push(`(r.receipt_number ILIKE $${params.length + 1} OR r.student_name ILIKE $${params.length + 1} OR r.course_name ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
     }
+    if (req.user.role === 'ops') {
+      conditions.push(`r.created_by NOT IN (SELECT id FROM users WHERE role = 'admin')`);
+    }
     let where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const countRes = await query(`SELECT COUNT(*) as count FROM receipts r ${where}`, params);
     const result = await query(
@@ -818,6 +831,10 @@ app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => 
 
 app.get('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    if (req.user.role === 'ops') {
+      const check = await query(`SELECT 1 FROM receipts WHERE id = $1 AND created_by NOT IN (SELECT id FROM users WHERE role = 'admin')`, [req.params.id]);
+      if (!check.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    }
     const result = await query('SELECT * FROM receipts WHERE id = $1', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
     res.json(result.rows[0]);
@@ -965,6 +982,9 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
       userFilter = 'AND p.sales_user_id = $1';
       enrollFilter = 'AND e.sales_user_id = $1';
       params.push(req.user.id);
+    } else if (role === 'ops') {
+      userFilter = "AND p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
+      enrollFilter = "AND e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
     }
 
     const kpi = await query(`
