@@ -66,8 +66,6 @@ export default function Receipts() {
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  const isAdmin = false;
-
   const load = useCallback(async (p = 1, s = '') => {
     try {
       setLoading(true);

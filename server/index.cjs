@@ -93,8 +93,16 @@ app.post('/api/auth/login', async (req, res) => {
     const result = await query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     const user = result.rows[0];
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-    if (user.status !== 'active')
-      return res.status(403).json({ error: 'Account not yet approved. Contact manager.' });
+    if (user.status !== 'active') {
+      const msg = user.status === 'on_leave'
+        ? 'Your account is currently on leave.'
+        : user.status === 'inactive'
+          ? 'Your account has been deactivated by admin.'
+          : user.status === 'rejected'
+            ? 'Your account request was rejected. Contact admin.'
+            : 'Account not yet approved. Contact admin.';
+      return res.status(403).json({ error: msg });
+    }
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign(
@@ -158,12 +166,31 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   }
 });
 
+app.post('/api/users', auth(['admin']), async (req, res) => {
+  try {
+    const { name, email, password, role = 'sales', status = 'active', phone, city } = req.body;
+    if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+    if (!['sales', 'manager', 'admin', 'ops'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    if (!['active', 'pending', 'rejected', 'on_leave', 'inactive'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+    if (existing.rows.length) return res.status(409).json({ error: 'Email already registered' });
+    const hash = await bcrypt.hash(password || 'neoskills@123', 10);
+    const result = await query(
+      'INSERT INTO users (name, email, password, role, status, phone, city) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, status',
+      [name, email, hash, role, status, phone || null, city || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.put('/api/users/:id', auth(['admin']), async (req, res) => {
   try {
     const { role, status, can_sell } = req.body;
     if (role && !['sales', 'manager', 'admin', 'ops'].includes(role))
       return res.status(400).json({ error: 'Invalid role' });
-    if (status && !['active', 'pending', 'rejected'].includes(status))
+    if (status && !['active', 'pending', 'rejected', 'on_leave', 'inactive'].includes(status))
       return res.status(400).json({ error: 'Invalid status' });
     if (role && String(req.params.id) === String(req.user.id))
       return res.status(400).json({ error: 'You cannot change your own role' });
@@ -177,6 +204,57 @@ app.put('/api/users/:id', auth(['admin']), async (req, res) => {
     const result = await query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, role, status, can_sell`, params);
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        u.id, u.name, u.email, u.role, u.status, u.can_sell, u.created_at,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.status = 'active') as active_enrollments,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
+        (SELECT COALESCE(SUM(
+           GREATEST(e.total_amount - COALESCE((
+             SELECT SUM(p2.amount_paid) FROM payments p2
+             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+           ), 0), 0)
+         ), 0)
+         FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved'
+          AND DATE_TRUNC('month', p.created_at) = DATE_TRUNC('month', NOW())) as month_collected,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
+          AND DATE_TRUNC('month', e.created_at) = DATE_TRUNC('month', NOW())) as month_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
+          AND DATE_TRUNC('month', e.created_at) = DATE_TRUNC('month', NOW())
+          AND e.status = 'completed') as month_completed
+      FROM users u
+      WHERE (u.role = 'sales' OR u.role = 'manager' OR u.can_sell = true)
+      ORDER BY collected DESC, enrollments DESC
+    `);
+    const users = result.rows.map((u) => ({
+      ...u,
+      collected: Number(u.collected) || 0,
+      pending: Number(u.pending) || 0,
+      enrollments: Number(u.enrollments) || 0,
+      active_enrollments: Number(u.active_enrollments) || 0,
+      month_collected: Number(u.month_collected) || 0,
+      avg_deal_size: Number(u.collected) && Number(u.enrollments) ? Math.round(Number(u.collected) / Number(u.enrollments)) : 0,
+    }));
+    const totals = users.reduce((acc, u) => ({
+      collected: acc.collected + u.collected,
+      pending: acc.pending + u.pending,
+      enrollments: acc.enrollments + u.enrollments,
+      pending_approvals: acc.pending_approvals + Number(u.pending_approvals) || 0,
+      month_collected: acc.month_collected + u.month_collected,
+      active: acc.active + (u.status === 'active' ? 1 : 0),
+      on_leave: acc.on_leave + (u.status === 'on_leave' ? 1 : 0),
+    }), { collected: 0, pending: 0, enrollments: 0, pending_approvals: 0, month_collected: 0, active: 0, on_leave: 0 });
+    res.json({ users, totals });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1184,6 +1262,8 @@ async function init() {
       await query(`ALTER TABLE payments ADD CONSTRAINT payments_payment_mode_check CHECK (payment_mode IN ('upi', 'card', 'neft', 'cash', 'cheque', 'bank_transfer'))`);
       await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
       await query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('sales', 'manager', 'admin', 'ops'))`);
+      await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check`);
+      await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'pending', 'rejected', 'on_leave', 'inactive'))`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);

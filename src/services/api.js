@@ -92,7 +92,9 @@ export const api = {
   users: {
     list: () => request('/users'),
     getProfile: (id) => request(`/users/${id}/profile`),
+    create: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    teamAnalytics: () => request('/team/analytics'),
   },
   brands: {
     list: () => request('/brands'),
