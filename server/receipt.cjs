@@ -1,15 +1,19 @@
+const fs = require('fs');
+const path = require('path');
 const PDFDocument = require('pdfkit');
 
-const COMPANY = {
-  name: 'Neoskill Learning Solutions',
+const BRAND = {
+  name: 'Neoskills Learning Solutions',
+  tagline: 'NeoOps — Sales Command Center',
   address: '4th floor, Office no-402, Yugal Parnavi, Sai Chowk Rd, near Irani cafe, Laxman Nagar, Baner, Pune, Maharashtra 411045',
+  contact: 'account@neoskills.co.in',
   phone: '9975214585',
-  pan: 'AAVPN4318E',
-  email: 'account@neoskills.co.in',
+  pan: 'AAYFN4318E',
   website: 'www.neoskills.co.in',
 };
+const LOGO_PATH = path.join(__dirname, '../public/logo/nsl-logo-cropped.png');
 
-const CURRENCY = '\u20B9';
+const CURRENCY = '₹';
 
 function toWords(num) {
   num = Math.round(Number(num) || 0);
@@ -18,6 +22,7 @@ function toWords(num) {
   const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
   const two = (n) => (n < 20 ? a[n] : b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : ''));
   const three = (n) => (n < 100 ? two(n) : a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + two(n % 100) : ''));
+
   let words = '';
   if (num >= 10000000) { words += three(Math.floor(num / 10000000)) + ' Crore '; num %= 10000000; }
   if (num >= 100000) { words += three(Math.floor(num / 100000)) + ' Lakh '; num %= 100000; }
@@ -28,148 +33,137 @@ function toWords(num) {
 
 function formatINR(n) {
   const value = Number(n) || 0;
-  const s = Math.round(value).toString();
-  let lastThree = s.substring(s.length - 3);
-  const other = s.substring(0, s.length - 3);
+  const s = value.toFixed(2);
+  const parts = s.split('.');
+  let int = parts[0];
+  let lastThree = int.substring(int.length - 3);
+  const other = int.substring(0, int.length - 3);
   if (other !== '') lastThree = ',' + lastThree;
-  return other.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+  return other.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree + '.' + parts[1];
+}
+
+function pad(txt, len) {
+  return String(txt).padEnd(len);
 }
 
 function generateReceipt(data) {
-  const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+  const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
 
-  const W = doc.page.width - 100;
-  const margin = 50;
-  const dark = '#1e293b';
-  const gray = '#475569';
-  const border = '#cbd5e1';
+  const W = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const margin = doc.page.margins.left;
+  const dark = '#111827';
+  const midGray = '#4b5563';
+  const lightGray = '#f3f4f6';
+  const borderGray = '#d1d5db';
+  const accent = '#111827';
+  const positive = '#047857';
+  const warning = '#b45309';
 
   let y = margin;
 
-  // BILL OF SUPPLY header
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#111').text('BILL OF SUPPLY', margin, y);
-  doc.rect(margin + 115, y - 2, 120, 16).fill('#e2e8f0');
-  doc.font('Helvetica-Bold').fontSize(7).fillColor(gray).text('ORIGINAL FOR RECIPIENT', margin + 120, y + 2);
-  y += 28;
+  // ---------- Top header ----------
+  doc.rect(0, 0, doc.page.width, 92).fill(lightGray);
+  doc.fillColor(dark).font('Helvetica-Bold').fontSize(10).text('BILL OF SUPPLY', margin, y + 12);
+  doc.rect(margin + 90, y + 12, 150, 20).fill('#ffffff').strokeColor(borderGray).lineWidth(1).stroke();
+  doc.fillColor(midGray).font('Helvetica').fontSize(7).text('ORIGINAL FOR RECIPIENT', margin + 92, y + 16, { width: 146, align: 'center' });
 
-  // Company info
-  doc.font('Helvetica-Bold').fontSize(14).fillColor('#111').text(COMPANY.name, margin, y);
-  y += 20;
-  doc.font('Helvetica').fontSize(8).fillColor(gray);
-  doc.text(COMPANY.address, margin, y, { width: W - 120 });
-  y += 28;
-  doc.text('Mobile: ' + COMPANY.phone + '    PAN Number: ' + COMPANY.pan, margin, y);
-  y += 12;
-  doc.text('Email: ' + COMPANY.email, margin, y);
-  y += 12;
-  doc.text(COMPANY.website, margin, y);
-  y += 18;
-
-  // Invoice details bar
-  doc.rect(margin, y, W, 22).fill(dark);
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff');
-  doc.text('Invoice No.: ' + data.receipt_number, margin + 10, y + 7, { continued: true });
-  doc.text('    Invoice Date: ' + data.date, margin + 180, y + 7, { continued: true });
-  doc.text('    Due Date: ' + data.date, margin + 370, y + 7, { lineBreak: false });
-  y += 36;
-
-  // Bill To
-  doc.font('Helvetica-Bold').fontSize(9).fillColor('#111').text('BILL TO', margin, y);
-  y += 14;
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#111').text(data.student_name, margin, y);
-  y += 14;
-  if (data.student_phone) {
-    doc.font('Helvetica').fontSize(8).fillColor(gray).text('Mobile: ' + data.student_phone, margin, y);
-    y += 14;
+  if (fs.existsSync(LOGO_PATH)) {
+    doc.image(LOGO_PATH, margin, y + 38, { fit: [115, 42], align: 'left' });
   }
-  y += 6;
 
-  // Divider
-  doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(border).lineWidth(1).stroke();
+  const brandX = margin + 120;
+  doc.fillColor(dark).font('Helvetica-Bold').fontSize(16).text(BRAND.name, brandX, y + 16);
+  doc.font('Helvetica').fontSize(8).fillColor(midGray);
+  doc.text(BRAND.address, brandX, y + 36, { width: W - 120, lineGap: 2 });
+  doc.text(`Mobile: ${BRAND.phone}    PAN Number: ${BRAND.pan}`, { continued: false, lineGap: 2 });
+  doc.text(`Email: ${BRAND.contact}`, { lineGap: 2 });
+  doc.text(BRAND.website, { lineGap: 2 });
+
+  y += 110;
+  doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(borderGray).lineWidth(1).stroke();
+  y += 12;
+
+  const invoiceDate = data.invoice_date || data.date || '—';
+  const dueDate = data.due_date || data.date || '—';
+  const billToLines = [data.student_name || '—'];
+  if (data.student_phone) billToLines.push(`Mobile: ${data.student_phone}`);
+  if (data.student_email) billToLines.push(`Email: ${data.student_email}`);
+  if (data.student_city) billToLines.push(`City: ${data.student_city}`);
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Invoice No.:', margin, y);
+  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(data.receipt_number || '—', margin, y + 12);
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Invoice Date:', margin + 210, y);
+  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(invoiceDate, margin + 210, y + 12);
+
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('Due Date:', margin + 390, y);
+  doc.font('Helvetica').fontSize(9).fillColor(midGray).text(dueDate, margin + 390, y + 12);
+
+  y += 42;
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('BILL TO', margin, y);
+  doc.font('Helvetica').fontSize(9).fillColor(dark).text(billToLines[0], margin, y + 14);
+  doc.font('Helvetica').fontSize(8).fillColor(midGray);
+  billToLines.slice(1).forEach((line, index) => {
+    doc.text(line, margin, y + 28 + index * 11);
+  });
+
+  y += 65;
+
+  // ---------- Services table header ----------
+  doc.rect(margin, y, W, 26).fill(dark);
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+  doc.text('SERVICES', margin + 10, y + 8);
+  doc.text('QTY.', margin + 250, y + 8, { width: 60, align: 'right' });
+  doc.text('RATE', margin + 330, y + 8, { width: 100, align: 'right' });
+  doc.text('AMOUNT', margin + W - 75, y + 8, { width: 70, align: 'right' });
+
+  y += 26;
+  doc.strokeColor(borderGray).lineWidth(1).moveTo(margin, y).lineTo(margin + W, y).stroke();
+
+  const serviceDescription = data.course_name || 'Course Fee';
+  const lineAmount = Number(data.total_amount) || 0;
+
+  doc.font('Helvetica').fontSize(9).fillColor(dark);
+  doc.text(serviceDescription, margin + 10, y + 8);
+  doc.text('1', margin + 250, y + 8, { width: 60, align: 'right' });
+  doc.text(CURRENCY + formatINR(lineAmount), margin + 330, y + 8, { width: 100, align: 'right' });
+  doc.text(CURRENCY + formatINR(lineAmount), margin + W - 75, y + 8, { width: 70, align: 'right' });
+
+  y += 34;
+  doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(borderGray).lineWidth(1).stroke();
+
+  const summaryX = margin + W - 220;
+  const valueX = margin + W - 20;
   y += 10;
+  doc.font('Helvetica').fontSize(9).fillColor(midGray).text('SUBTOTAL', summaryX, y, { width: 130, align: 'left' });
+  doc.font('Helvetica').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
 
-  // Services table header
-  doc.rect(margin, y, W, 18).fill('#f1f5f9');
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#111');
-  doc.text('SERVICES', margin + 10, y + 5);
-  doc.text('QTY.', margin + 280, y + 5, { width: 50, align: 'center' });
-  doc.text('RATE', margin + 340, y + 5, { width: 70, align: 'right' });
-  doc.text('AMOUNT', margin + W - 80, y + 5, { width: 70, align: 'right' });
-  y += 24;
-
-  // Service row
-  doc.font('Helvetica').fontSize(9).fillColor('#111');
-  doc.text(data.course_name || 'Course', margin + 10, y);
-  doc.text('1', margin + 280, y, { width: 50, align: 'center' });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_amount), margin + 340, y, { width: 70, align: 'right' });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_amount), margin + W - 80, y, { width: 70, align: 'right' });
-  y += 20;
-
-  // Divider
-  doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(border).lineWidth(1).stroke();
-  y += 10;
-
-  // Subtotal
-  doc.font('Helvetica-Bold').fontSize(9).fillColor('#111');
-  doc.text('SUBTOTAL', margin + 10, y);
-  doc.text('1', margin + 280, y, { width: 50, align: 'center' });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_amount), margin + W - 80, y, { width: 70, align: 'right' });
   y += 16;
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(dark).text('TOTAL AMOUNT', summaryX, y, { width: 130, align: 'left' });
+  doc.text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
 
-  // Divider
-  doc.moveTo(margin, y).lineTo(margin + W, y).strokeColor(border).lineWidth(1).stroke();
-  y += 20;
+  y += 16;
+  doc.font('Helvetica').fontSize(9).fillColor(positive).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
+  doc.text(CURRENCY + formatINR(data.total_paid || 0), valueX, y, { width: 120, align: 'right' });
 
-  // Terms + Financial Summary
-  const halfW = W * 0.55;
-  const rightX = margin + halfW + 20;
+  y += 16;
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(warning).text('Balance', summaryX, y, { width: 130, align: 'left' });
+  doc.text(CURRENCY + formatINR(data.total_pending || 0), valueX, y, { width: 120, align: 'right' });
 
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#111').text('TERMS AND CONDITIONS', margin, y);
-  doc.font('Helvetica').fontSize(7.5).fillColor(gray);
-  doc.text('1. Goods once sold will not be taken back or exchanged', margin, y + 12, { width: halfW });
-  doc.text('2. All disputes are subject to Pune jurisdiction only', margin, y + 22, { width: halfW });
+  y += 34;
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(dark).text('TERMS AND CONDITIONS', margin, y);
+  doc.font('Helvetica').fontSize(7).fillColor(midGray);
+  doc.text('1. Goods once sold will not be taken back or exchanged.', margin, y + 12, { width: W - 240, lineGap: 2 });
+  doc.text('2. All disputes are subject to Pune jurisdiction only.', margin, y + 26, { width: W - 240, lineGap: 2 });
 
-  // Financial summary box
-  const summaryY = y;
-  doc.rect(rightX - 10, summaryY - 2, 190, 80).fill('#f8fafc').strokeColor(border).lineWidth(0.5).stroke();
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(dark).text('Total Amount (in words)', summaryX, y);
+  doc.font('Helvetica').fontSize(8).fillColor(midGray).text(toWords(lineAmount), summaryX, y + 12, { width: 220, align: 'right' });
 
-  let sy = summaryY + 8;
-  doc.font('Helvetica').fontSize(8.5).fillColor('#111');
-  doc.text('Total Amount', rightX, sy, { width: 120 });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_amount), rightX + 120, sy, { width: 60, align: 'right' });
-  sy += 16;
-
-  doc.text('Received Amount', rightX, sy, { width: 120 });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_paid), rightX + 120, sy, { width: 60, align: 'right' });
-  sy += 16;
-
-  doc.moveTo(rightX, sy - 4).lineTo(rightX + 180, sy - 4).strokeColor(border).lineWidth(0.5).stroke();
-
-  doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#111');
-  doc.text('Balance', rightX, sy, { width: 120 });
-  doc.text(CURRENCY + ' ' + formatINR(data.total_pending), rightX + 120, sy, { width: 60, align: 'right' });
-
-  y += 100;
-
-  // Amount in words
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#111').text('Total Amount (in words)', margin, y);
-  doc.font('Helvetica').fontSize(8).fillColor(gray).text(toWords(data.total_paid), margin, y + 12);
-  y += 30;
-
-  // Stamp placeholder
-  doc.circle(margin + W - 50, y + 10, 28).lineWidth(1).strokeColor('#1e3a8a');
-  doc.font('Helvetica-Bold').fontSize(6).fillColor('#1e3a8a');
-  doc.text('NEO', margin + W - 58, y + 3, { width: 16, align: 'center' });
-  doc.text('SKILLS', margin + W - 58, y + 11, { width: 16, align: 'center' });
-  doc.text('PUNE', margin + W - 58, y + 19, { width: 16, align: 'center' });
-
-  // Authorised Signatory
-  const sigY = doc.page.height - 100;
-  doc.moveTo(margin + 110, sigY + 30).lineTo(margin + 280, sigY + 30).strokeColor('#9ca3af').lineWidth(1).stroke();
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#111').text('AUTHORISED SIGNATORY FOR', margin + 110, sigY + 34, { width: 170, align: 'center' });
-  doc.font('Helvetica').fontSize(7.5).fillColor(gray).text('Neoskill Learning Solutions', margin + 110, sigY + 46, { width: 170, align: 'center' });
+  const signY = doc.page.height - 120;
+  doc.moveTo(summaryX, signY + 18).lineTo(summaryX + 180, signY + 18).strokeColor(borderGray).lineWidth(1).stroke();
+  doc.font('Helvetica').fontSize(8).fillColor(midGray).text('AUTHORISED SIGNATORY', summaryX, signY + 22, { width: 180, align: 'center' });
 
   doc.end();
   return new Promise((resolve, reject) => {
