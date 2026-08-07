@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download, ArrowUpDown } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
+import { CATEGORIES } from '../config/constants';
+
+const EMPTY_FILTERS = { category: '', status: '', from: '', to: '', sales_user_id: '' };
 
 export default function Reports() {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState('salesperson');
+  const [activeTab, setActiveTab] = useState('category');
   const [salesperson, setSalesperson] = useState([]);
   const [bankWise, setBankWise] = useState([]);
   const [pending, setPending] = useState([]);
+  const [categoryData, setCategoryData] = useState({ rows: [], totals: null });
+  const [salespeople, setSalespeople] = useState([]);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,23 +24,51 @@ export default function Reports() {
       api.reports.salesperson(),
       api.reports.bankWise(),
       api.reports.pendingPayments(),
+      api.reports.category(),
+      api.users.list(),
     ])
-      .then(([s, b, p]) => { setSalesperson(s); setBankWise(b); setPending(p); })
+      .then(([s, b, p, c, u]) => {
+        setSalesperson(s);
+        setBankWise(b);
+        setPending(p);
+        setCategoryData(c);
+        setSalespeople(u.filter((x) => x.role === 'sales' || x.can_sell || x.role === 'admin'));
+      })
       .catch(() => toast.error('Failed to load reports'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [toast]);
+
+  useEffect(() => {
+    if (activeTab !== 'category') return;
+    let cancelled = false;
+    setLoading(true);
+    api.reports.category(filters)
+      .then((c) => { if (!cancelled) setCategoryData(c); })
+      .catch(() => { if (!cancelled) toast.error('Failed to load category analytics'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, filters, toast]);
 
   const tabs = [
+    { key: 'category', label: 'Category Analytics' },
     { key: 'salesperson', label: 'Salesperson Performance' },
     { key: 'bank', label: 'Bank-wise Collection' },
     { key: 'pending', label: 'Pending Payments' },
+  ];
+
+  const categoryCols = [
+    { key: 'category', label: 'Category' },
+    { key: 'enrollments', label: 'Enrollments' },
+    { key: 'total_amount', label: 'Total Fee', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
+    { key: 'collected', label: 'Collected', render: (r) => <span className="text-emerald-600 font-medium">{`₹${Number(r.collected).toLocaleString()}`}</span> },
+    { key: 'pending', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">{`₹${Number(r.pending).toLocaleString()}`}</span> },
   ];
 
   const salespersonCols = [
     { key: 'salesperson', label: 'Salesperson' },
     { key: 'enrollments', label: 'Enrollments' },
     { key: 'collected', label: 'Collected', render: (r) => `₹${Number(r.collected).toLocaleString()}` },
-    { key: 'pending_collection', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">₹{Number(r.pending_collection).toLocaleString()}</span> },
+    { key: 'pending_collection', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">{`₹${Number(r.pending_collection).toLocaleString()}`}</span> },
     { key: 'pending_approvals', label: 'Pending Approvals' },
   ];
 
@@ -52,7 +86,7 @@ export default function Reports() {
     { key: 'course_name', label: 'Course' },
     { key: 'salesperson', label: 'Salesperson' },
     { key: 'pending_amount', label: 'Pending Amount', render: (r) => (
-      <span className="text-amber-600 font-semibold">₹{Number(r.pending_amount).toLocaleString()}</span>
+      <span className="text-amber-600 font-semibold">{`₹${Number(r.pending_amount).toLocaleString()}`}</span>
     )},
   ];
 
@@ -68,16 +102,24 @@ export default function Reports() {
     toast.success(`${filename} exported`);
   }
 
-  const currentData = activeTab === 'salesperson' ? salesperson : activeTab === 'bank' ? bankWise : pending;
-  const currentCols = activeTab === 'salesperson' ? salespersonCols : activeTab === 'bank' ? bankCols : pendingCols;
+  const currentData = activeTab === 'category' ? categoryData.rows
+    : activeTab === 'salesperson' ? salesperson
+    : activeTab === 'bank' ? bankWise : pending;
+  const currentCols = activeTab === 'category' ? categoryCols
+    : activeTab === 'salesperson' ? salespersonCols
+    : activeTab === 'bank' ? bankCols : pendingCols;
+
+  function setFilter(key, value) {
+    setFilters((f) => ({ ...f, [key]: value }));
+  }
+
+  const inputCls = 'input-field text-xs py-2';
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Export insights and track performance</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+        <p className="text-sm text-gray-400 mt-0.5">Export insights and track performance</p>
       </div>
 
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full overflow-x-auto">
@@ -90,6 +132,41 @@ export default function Reports() {
           </button>
         ))}
       </div>
+
+      {activeTab === 'category' && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-4 bg-white border border-gray-100 rounded-2xl">
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium mb-1 block">Category</label>
+            <select className={inputCls} value={filters.category} onChange={(e) => setFilter('category', e.target.value)}>
+              <option value="">All categories</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium mb-1 block">Status</label>
+            <select className={inputCls} value={filters.status} onChange={(e) => setFilter('status', e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium mb-1 block">From</label>
+            <input type="date" className={inputCls} value={filters.from} onChange={(e) => setFilter('from', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium mb-1 block">To</label>
+            <input type="date" className={inputCls} value={filters.to} onChange={(e) => setFilter('to', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-500 font-medium mb-1 block">Salesperson</label>
+            <select className={inputCls} value={filters.sales_user_id} onChange={(e) => setFilter('sales_user_id', e.target.value)}>
+              <option value="">All salespeople</option>
+              {salespeople.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -109,7 +186,17 @@ export default function Reports() {
           </CardHeader>
           <CardBody className="p-0">
             {currentData.length > 0 ? (
-              <Table columns={currentCols} data={currentData} />
+              <>
+                {activeTab === 'category' && categoryData.totals && (
+                  <div className="flex flex-wrap gap-4 px-5 py-3 border-b border-gray-100 text-sm">
+                    <span className="text-gray-500">Total: <b className="text-gray-900">{categoryData.totals.enrollments}</b> enrollments</span>
+                    <span className="text-gray-500">Fee: <b>{`₹${Number(categoryData.totals.total_amount).toLocaleString()}`}</b></span>
+                    <span className="text-gray-500">Collected: <b className="text-emerald-600">{`₹${Number(categoryData.totals.collected).toLocaleString()}`}</b></span>
+                    <span className="text-gray-500">Pending: <b className="text-amber-600">{`₹${Number(categoryData.totals.pending).toLocaleString()}`}</b></span>
+                  </div>
+                )}
+                <Table columns={currentCols} data={currentData} />
+              </>
             ) : (
               <div className="text-center py-12">
                 <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">

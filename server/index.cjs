@@ -1253,7 +1253,7 @@ app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, re
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      WHERE (u.role = 'sales' OR u.can_sell = true) AND u.status = 'active'
+      WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
       ORDER BY revenue DESC
     `);
     res.json(result.rows);
@@ -1359,7 +1359,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending_collection,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
-      WHERE (u.role = 'sales' OR u.can_sell = true) AND u.status = 'active'
+      WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
       ORDER BY collected DESC
     `);
     res.json(result.rows);
@@ -1404,6 +1404,75 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), asyn
       ORDER BY pending_amount DESC
     `);
     res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/reports/category', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { category, status, from, to, sales_user_id } = req.query;
+    const role = req.user.role;
+    const conditions = [];
+    const params = [];
+
+    if (role === 'sales') {
+      conditions.push(`e.sales_user_id = $${params.length + 1}`);
+      params.push(req.user.id);
+    } else if (role === 'ops') {
+      conditions.push(`e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')`);
+    }
+    if (category) {
+      conditions.push(`e.category = $${params.length + 1}`);
+      params.push(category);
+    }
+    if (sales_user_id) {
+      conditions.push(`e.sales_user_id = $${params.length + 1}`);
+      params.push(parseInt(sales_user_id));
+    }
+    if (status) {
+      conditions.push(`e.status = $${params.length + 1}`);
+      params.push(status);
+    }
+    if (from) {
+      conditions.push(`e.created_at >= $${params.length + 1}`);
+      params.push(new Date(from));
+    }
+    if (to) {
+      conditions.push(`e.created_at <= $${params.length + 1}`);
+      params.push(new Date(to));
+    }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const result = await query(`
+      WITH base AS (
+        SELECT e.id, COALESCE(NULLIF(e.category, ''), 'Training') as category,
+               e.total_amount, e.created_at,
+               COALESCE((
+                 SELECT SUM(p.amount_paid) FROM payments p
+                 WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+               ), 0) as paid
+        FROM enrollments e
+        ${where}
+      )
+      SELECT category,
+             COUNT(*) as enrollments,
+             COALESCE(SUM(total_amount), 0) as total_amount,
+             COALESCE(SUM(paid), 0) as collected,
+             COALESCE(SUM(GREATEST(total_amount - paid, 0)), 0) as pending
+      FROM base
+      GROUP BY category
+      ORDER BY enrollments DESC, category ASC
+    `, params);
+
+    const totals = result.rows.reduce((a, r) => ({
+      enrollments: a.enrollments + Number(r.enrollments),
+      total_amount: a.total_amount + Number(r.total_amount),
+      collected: a.collected + Number(r.collected),
+      pending: a.pending + Number(r.pending),
+    }), { enrollments: 0, total_amount: 0, collected: 0, pending: 0 });
+
+    res.json({ rows: result.rows, totals });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

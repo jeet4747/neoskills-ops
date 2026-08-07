@@ -90,6 +90,10 @@ export const api = {
     salesperson: () => request('/reports/salesperson'),
     bankWise: () => request('/reports/bank-wise'),
     pendingPayments: () => request('/reports/pending-payments'),
+    category: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/reports/category${q ? `?${q}` : ''}`);
+    },
   },
   users: {
     list: () => request('/users'),
