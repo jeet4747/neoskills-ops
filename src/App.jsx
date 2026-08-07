@@ -13,6 +13,8 @@ import SalespersonDetail from './pages/SalespersonDetail';
 import EnrollmentDetail from './pages/EnrollmentDetail';
 import Team from './pages/Team';
 import Receipts from './pages/Receipts';
+import GSTInvoices from './pages/GSTInvoices';
+import GSTSettings from './pages/GSTSettings';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -84,8 +86,24 @@ export default function App() {
         <Route
           path="bank-accounts"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'manager', 'ops']}>
               <BankAccounts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="gst-invoices"
+          element={
+            <ProtectedRoute roles={['admin', 'manager', 'ops']}>
+              <GSTInvoices />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="gst-settings"
+          element={
+            <ProtectedRoute roles={['admin', 'manager']}>
+              <GSTSettings />
             </ProtectedRoute>
           }
         />

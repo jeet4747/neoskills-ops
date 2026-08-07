@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Plus, Building2, Trash2 } from 'lucide-react';
+import { Plus, Building2, Trash2, Pencil } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 
+const EMPTY_FORM = { account_name: '', account_number: '', bank_name: '', ifsc: '', branch: '' };
+
 export default function BankAccounts() {
   const toast = useToast();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ account_name: '', account_number: '', bank_name: '', ifsc: '', branch: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
   useEffect(() => { load(); }, []);
@@ -31,15 +34,41 @@ export default function BankAccounts() {
     return Object.keys(errs).length === 0;
   }
 
+  function openAdd() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setErrors({});
+    setShowModal(true);
+  }
+
+  function openEdit(acc) {
+    setEditing(acc);
+    setForm({
+      account_name: acc.account_name,
+      account_number: acc.account_number,
+      bank_name: acc.bank_name,
+      ifsc: acc.ifsc || '',
+      branch: acc.branch || '',
+    });
+    setErrors({});
+    setShowModal(true);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!validate()) return;
     setSubmitting(true);
     try {
-      await api.bankAccounts.create(form);
-      toast.success(`Bank account "${form.account_name}" added`);
-      setShowAdd(false);
-      setForm({ account_name: '', account_number: '', bank_name: '', ifsc: '', branch: '' });
+      if (editing) {
+        await api.bankAccounts.update(editing.id, form);
+        toast.success(`Bank account "${form.account_name}" updated`);
+      } else {
+        await api.bankAccounts.create(form);
+        toast.success(`Bank account "${form.account_name}" added`);
+      }
+      setShowModal(false);
+      setForm(EMPTY_FORM);
+      setEditing(null);
       setErrors({});
       load();
     } catch (e) { toast.error(e.message); }
@@ -61,7 +90,7 @@ export default function BankAccounts() {
           <h1 className="text-2xl font-bold text-gray-900">Bank Accounts</h1>
           <p className="text-sm text-gray-400 mt-0.5">{accounts.length} account{accounts.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 shadow-sm">
+        <button onClick={openAdd} className="btn-primary flex items-center gap-2 shadow-sm">
           <Plus size={16} /> Add Account
         </button>
       </div>
@@ -88,11 +117,18 @@ export default function BankAccounts() {
                       {acc.branch && <span>{acc.branch}</span>}
                     </div>
                   </div>
-                  <button onClick={() => handleDelete(acc.id)}
-                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                    title="Remove account">
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => openEdit(acc)}
+                      className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      title="Edit account">
+                      <Pencil size={15} />
+                    </button>
+                    <button onClick={() => handleDelete(acc.id)}
+                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      title="Remove account">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               </CardBody>
             </Card>
@@ -107,7 +143,7 @@ export default function BankAccounts() {
                     </div>
                     <h3 className="text-sm font-medium text-gray-500 mb-1">No bank accounts</h3>
                     <p className="text-xs text-gray-400 mb-4">Add your first bank account to track payments</p>
-                    <button onClick={() => setShowAdd(true)} className="btn-primary text-sm">Add Account</button>
+                    <button onClick={openAdd} className="btn-primary text-sm">Add Account</button>
                   </div>
                 </CardBody>
               </Card>
@@ -116,7 +152,7 @@ export default function BankAccounts() {
         </div>
       )}
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Bank Account" size="md">
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? 'Edit Bank Account' : 'Add Bank Account'} size="md">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Account Name *</label>
@@ -153,9 +189,9 @@ export default function BankAccounts() {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-3 border-t">
-            <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
             <button type="submit" className="btn-primary px-6" disabled={submitting}>
-              {submitting ? 'Saving...' : 'Add Account'}
+              {submitting ? 'Saving...' : (editing ? 'Save Changes' : 'Add Account')}
             </button>
           </div>
         </form>

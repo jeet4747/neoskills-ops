@@ -76,6 +76,7 @@ export const api = {
   bankAccounts: {
     list: () => request('/bank-accounts'),
     create: (data) => request('/bank-accounts', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/bank-accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id) => request(`/bank-accounts/${id}`, { method: 'DELETE' }),
   },
   approvals: {
@@ -131,5 +132,36 @@ export const api = {
     list: () => request('/receipt-templates'),
     create: (data) => request('/receipt-templates', { method: 'POST', body: JSON.stringify(data) }),
     remove: (id) => request(`/receipt-templates/${id}`, { method: 'DELETE' }),
+  },
+  gstSettings: {
+    get: () => request('/gst-settings'),
+    update: (data) => request('/gst-settings', { method: 'PUT', body: JSON.stringify(data) }),
+  },
+  gstInvoices: {
+    list: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/gst-invoices${q ? `?${q}` : ''}`);
+    },
+    get: (id) => request(`/gst-invoices/${id}`),
+    create: (data) => request('/gst-invoices', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/gst-invoices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id) => request(`/gst-invoices/${id}`, { method: 'DELETE' }),
+    downloadPdf: async (id, filename) => {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BASE}/gst-invoices/${id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text ? JSON.parse(text).error || 'Download failed' : 'Download failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `gst-invoice-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   },
 };

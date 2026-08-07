@@ -8,6 +8,8 @@ const path = require('path');
 const { query, withTransaction } = require('./db.cjs');
 const { generateReceipt } = require('./receipt.cjs');
 const { generateInvoice } = require('./invoice.cjs');
+const { buildGst, fiscalYearParts, toWords } = require('./gst.cjs');
+const { generateGstInvoice } = require('./gst_invoice.cjs');
 const { BRANDS } = require('./brands.cjs');
 
 const app = express();
@@ -402,6 +404,11 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
         [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
       );
 
+      if (payStatus === 'approved' && pending <= 0) {
+        await client.query("UPDATE enrollments SET status = 'completed' WHERE id = $1", [enrollment.id]);
+        enrollment.status = 'completed';
+      }
+
       return { student, enrollment, payment: pay.rows[0] };
     });
 
@@ -606,7 +613,7 @@ app.get('/api/bank-accounts', auth(), async (req, res) => {
   }
 });
 
-app.post('/api/bank-accounts', auth(['admin']), async (req, res) => {
+app.post('/api/bank-accounts', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const { account_name, account_number, bank_name, ifsc, branch } = req.body;
     if (!account_name || !account_number || !bank_name)
@@ -621,7 +628,22 @@ app.post('/api/bank-accounts', auth(['admin']), async (req, res) => {
   }
 });
 
-app.delete('/api/bank-accounts/:id', auth(['admin']), async (req, res) => {
+app.put('/api/bank-accounts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { account_name, account_number, bank_name, ifsc, branch } = req.body;
+    const result = await query(
+      `UPDATE bank_accounts SET account_name = $1, account_number = $2, bank_name = $3, ifsc = $4, branch = $5
+       WHERE id = $6 AND is_active = true RETURNING *`,
+      [account_name, account_number, bank_name, ifsc, branch, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Bank account not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/bank-accounts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query('UPDATE bank_accounts SET is_active = false WHERE id = $1 RETURNING id', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Bank account not found' });
@@ -660,6 +682,9 @@ app.post('/api/payments', auth(), async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
     );
+    if (payStatus === 'approved' && pending <= 0) {
+      await query("UPDATE enrollments SET status = 'completed' WHERE id = $1", [enrollment_id]);
+    }
     res.status(201).json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -971,6 +996,210 @@ app.delete('/api/receipt-templates/:id', auth(['admin']), async (req, res) => {
   }
 });
 
+// ---------- GST Invoicing ----------
+async function getGstSettings() {
+  const r = await query('SELECT * FROM gst_settings WHERE id = 1');
+  if (r.rows.length) return r.rows[0];
+  await query('INSERT INTO gst_settings (id) VALUES (1)');
+  return (await query('SELECT * FROM gst_settings WHERE id = 1')).rows[0];
+}
+
+async function nextGstInvoiceNumber(prefix, fyLabel) {
+  const pre = prefix || 'NS';
+  const res = await query(
+    'SELECT COALESCE(MAX(sequence), 0) + 1 as n FROM gst_invoices WHERE prefix = $1 AND fiscal_year = $2',
+    [pre, fyLabel]
+  );
+  const seq = parseInt(res.rows[0].n);
+  return { number: `${pre}-${fyLabel}/${String(seq).padStart(4, '0')}`, seq };
+}
+
+function computeGstInvoice(b, settings) {
+  const rate = Number(settings.tax_rate) || 18;
+  const exportBill = String(b.state_code || '') === '99';
+  const sameState = !exportBill && (String(b.state_code || '') === String(settings.state_code || ''));
+  const items = (b.items || []).map((it) => {
+    const participants = Number(it.participants) || 1;
+    const unit_price = Number(it.unit_price) || 0;
+    return { description: it.description || '', participants, unit_price, amount: Math.round((participants * unit_price) * 100) / 100 };
+  });
+  const taxable = items.reduce((s, it) => s + it.amount, 0);
+  const g = buildGst({ taxable, rate, sameState, exportBill });
+  return { items, ...g, rate, sameState, exportBill };
+}
+
+app.get('/api/gst-settings', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    res.json(await getGstSettings());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/gst-settings', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const result = await query(
+      `UPDATE gst_settings SET
+        entity_name = $1, gstin = $2, pan = $3, sac = $4, sac_description = $5,
+        address = $6, website = $7, city = $8, state = $9, state_code = $10,
+        phone = $11, bank_account_name = $12, bank_account_number = $13,
+        bank_ifsc = $14, bank_account_type = $15, jurisdiction = $16,
+        tax_rate = $17, inclusive = $18, prefix = $19, terms = $20::jsonb,
+        updated_at = NOW()
+       WHERE id = 1 RETURNING *`,
+      [b.entity_name, b.gstin, b.pan, b.sac, b.sac_description,
+       b.address, b.website, b.city, b.state, b.state_code,
+       b.phone, b.bank_account_name, b.bank_account_number,
+       b.bank_ifsc, b.bank_account_type, b.jurisdiction,
+       b.tax_rate || 18, b.inclusive !== false, b.prefix || 'NS',
+       JSON.stringify(b.terms || [])]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Settings not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/gst-invoices', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const conditions = [];
+    const params = [];
+    if (search) {
+      conditions.push(`(i.invoice_number ILIKE $${params.length + 1} OR i.student_name ILIKE $${params.length + 1} OR i.company ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+    if (req.user.role === 'ops') {
+      conditions.push(`i.created_by NOT IN (SELECT id FROM users WHERE role = 'admin')`);
+    }
+    let where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const countRes = await query(`SELECT COUNT(*) as count FROM gst_invoices i ${where}`, params);
+    const result = await query(
+      `SELECT i.*, u.name as created_by_name
+       FROM gst_invoices i
+       LEFT JOIN users u ON i.created_by = u.id
+       ${where}
+       ORDER BY i.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, parseInt(limit), offset]
+    );
+    res.json({ invoices: result.rows, total: parseInt(countRes.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/gst-invoices/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM gst_invoices WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/gst-invoices', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const settings = await getGstSettings();
+    const fy = fiscalYearParts(b.invoice_date || new Date());
+    const { number, seq } = await nextGstInvoiceNumber(b.prefix || settings.prefix, fy.label);
+    const c = computeGstInvoice(b, settings);
+    const result = await query(
+      `INSERT INTO gst_invoices (
+         invoice_number, prefix, sequence, fiscal_year, invoice_date, reference,
+         student_name, company, location, city, state, state_code, customer_gstin, poc, status,
+         items, sac, gst_type, cgst_rate, cgst, sgst_rate, sgst, igst_rate, igst,
+         subtotal, round_off, total_amount, amount_in_words,
+         supplier_gstin, supplier_address, bank_account_name, bank_account_number, bank_ifsc,
+         enrollment_id, created_by
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,
+         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
+       ) RETURNING *`,
+      [number, b.prefix || settings.prefix, seq, fy.label, b.invoice_date || new Date(), b.reference,
+       b.student_name, b.company, b.location, b.city, b.state, b.state_code, b.customer_gstin, b.poc, b.status || 'paid',
+       JSON.stringify(c.items), b.sac || settings.sac, c.gst_type,
+       c.cgstRate, c.cgst, c.sgstRate, c.sgst, c.igstRate, c.igst,
+       c.subtotal, c.round_off, c.total, toWords(c.total),
+       settings.gstin, settings.address, settings.bank_account_name, settings.bank_account_number, settings.bank_ifsc,
+       b.enrollment_id || null, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/gst-invoices/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const b = req.body;
+    const settings = await getGstSettings();
+    const c = computeGstInvoice(b, settings);
+    const result = await query(
+      `UPDATE gst_invoices SET
+         invoice_date = $1, reference = $2, student_name = $3, company = $4,
+         location = $5, city = $6, state = $7, state_code = $8, customer_gstin = $9,
+         poc = $10, status = $11, items = $12::jsonb, sac = $13, gst_type = $14,
+         cgst_rate = $15, cgst = $16, sgst_rate = $17, sgst = $18, igst_rate = $19, igst = $20,
+         subtotal = $21, round_off = $22, total_amount = $23, amount_in_words = $24
+       WHERE id = $25 RETURNING *`,
+      [b.invoice_date || new Date(), b.reference, b.student_name, b.company,
+       b.location, b.city, b.state, b.state_code, b.customer_gstin,
+       b.poc, b.status || 'paid', JSON.stringify(c.items), b.sac || settings.sac, c.gst_type,
+       c.cgstRate, c.cgst, c.sgstRate, c.sgst, c.igstRate, c.igst,
+       c.subtotal, c.round_off, c.total, toWords(c.total), req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/gst-invoices/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('DELETE FROM gst_invoices WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/gst-invoices/:id/pdf', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM gst_invoices WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' });
+    const inv = result.rows[0];
+    const settings = await getGstSettings();
+    const pdf = await generateGstInvoice({
+      ...inv,
+      items: inv.items,
+      entity_name: settings.entity_name,
+      supplier_address: inv.supplier_address || settings.address,
+      phone: settings.phone,
+      pan: settings.pan,
+      sac: inv.sac || settings.sac,
+      sac_description: settings.sac_description,
+      jurisdiction: settings.jurisdiction,
+      bank_account_name: inv.bank_account_name || settings.bank_account_name,
+      bank_account_number: inv.bank_account_number || settings.bank_account_number,
+      bank_ifsc: inv.bank_ifsc || settings.bank_ifsc,
+      bank_account_type: settings.bank_account_type,
+      terms: settings.terms,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="GST-${inv.invoice_number}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/dashboard/summary', auth(), async (req, res) => {
   try {
@@ -1308,6 +1537,76 @@ async function init() {
         created_by INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS gst_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        entity_name TEXT DEFAULT 'Neoskills',
+        gstin TEXT DEFAULT '27AAQFN8793B1ZP',
+        pan TEXT DEFAULT 'AAQFN8793B',
+        sac TEXT DEFAULT '999293',
+        sac_description TEXT DEFAULT 'Commercial Training & Coaching Services',
+        address TEXT DEFAULT 'Opp Sadanand Hotel Baner, Near Westside Mall, Near DMart, Laxman Nagar, Baner, Pune, Maharashtra 411045',
+        website TEXT DEFAULT 'www.neoskills.co.in',
+        city TEXT DEFAULT 'Pune',
+        state TEXT DEFAULT 'Maharashtra',
+        state_code TEXT DEFAULT '27',
+        phone TEXT DEFAULT '+91-9767865254 / +91-8983690231',
+        bank_account_name TEXT DEFAULT 'NeoSkills',
+        bank_account_number TEXT DEFAULT '919020077472602',
+        bank_ifsc TEXT DEFAULT 'UTIB0003284',
+        bank_account_type TEXT DEFAULT 'Current Account',
+        jurisdiction TEXT DEFAULT 'Pune, Maharashtra',
+        tax_rate NUMERIC(5,2) DEFAULT 18,
+        inclusive BOOLEAN DEFAULT true,
+        prefix TEXT DEFAULT 'NS',
+        terms JSONB DEFAULT '[
+          "GST charged as applicable under SAC Code 999293 - Commercial Training & Coaching Services.",
+          "Non-refundable and non-transferable once payment is made.",
+          "Interest @18% p.a. applicable on delayed payments.",
+          "Accuracy of GST details is the responsibility of the recipient for ITC eligibility.",
+          "All disputes subject to Pune, Maharashtra jurisdiction.",
+          "This is a system-generated invoice and does not require a physical signature."
+        ]'::jsonb,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS gst_invoices (
+        id SERIAL PRIMARY KEY,
+        invoice_number TEXT UNIQUE NOT NULL,
+        prefix TEXT DEFAULT 'NS',
+        sequence INTEGER NOT NULL DEFAULT 0,
+        fiscal_year TEXT NOT NULL,
+        invoice_date DATE DEFAULT NOW(),
+        reference TEXT,
+        student_name TEXT,
+        company TEXT,
+        location TEXT,
+        city TEXT,
+        state TEXT,
+        state_code TEXT,
+        customer_gstin TEXT,
+        poc TEXT,
+        status TEXT DEFAULT 'paid' CHECK (status IN ('paid', 'unpaid', 'cancelled')),
+        items JSONB DEFAULT '[]'::jsonb,
+        sac TEXT DEFAULT '999293',
+        gst_type TEXT DEFAULT 'igst',
+        cgst_rate NUMERIC(5,2) DEFAULT 0,
+        cgst NUMERIC(12,2) DEFAULT 0,
+        sgst_rate NUMERIC(5,2) DEFAULT 0,
+        sgst NUMERIC(12,2) DEFAULT 0,
+        igst_rate NUMERIC(5,2) DEFAULT 0,
+        igst NUMERIC(12,2) DEFAULT 0,
+        subtotal NUMERIC(12,2) DEFAULT 0,
+        round_off NUMERIC(12,2) DEFAULT 0,
+        total_amount NUMERIC(12,2) DEFAULT 0,
+        amount_in_words TEXT,
+        supplier_gstin TEXT,
+        supplier_address TEXT,
+        bank_account_name TEXT,
+        bank_account_number TEXT,
+        bank_ifsc TEXT,
+        enrollment_id INTEGER REFERENCES enrollments(id),
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
     console.log('Database tables created');
 
@@ -1328,8 +1627,17 @@ async function init() {
       console.log('Migration note:', e.message);
     }
 
+    try {
+      const s = await query('SELECT id FROM gst_settings WHERE id = 1');
+      if (!s.rows.length) {
+        await query('INSERT INTO gst_settings (id) VALUES (1)');
+      }
+    } catch (e) {
+      console.log('GST settings note:', e.message);
+    }
+
     const defaultAccounts = [
-      { account_name: 'Neoskills GST', account_number: 'GST-ACCT', bank_name: 'Neoskills' },
+      { account_name: 'frolics HDFC', account_number: 'FL-HDFC', bank_name: 'frolics HDFC' },
       { account_name: 'NSL HDFC', account_number: 'NSL-HDFC', bank_name: 'HDFC Bank' },
       { account_name: 'CareerVU HDFC', account_number: 'CV-HDFC', bank_name: 'HDFC Bank' },
       { account_name: 'Cash', account_number: 'CASH', bank_name: 'Cash' },
@@ -1342,6 +1650,17 @@ async function init() {
           [acc.account_name, acc.account_number, acc.bank_name]
         );
       }
+    }
+    try {
+      const gst = await query("SELECT id FROM bank_accounts WHERE LOWER(account_name) = 'neoskills gst' LIMIT 1");
+      if (gst.rows.length) {
+        await query(
+          "UPDATE bank_accounts SET account_name = 'frolics HDFC', account_number = 'FL-HDFC', bank_name = 'frolics HDFC' WHERE id = $1",
+          [gst.rows[0].id]
+        );
+      }
+    } catch (e) {
+      console.log('Bank account rename note:', e.message);
     }
     console.log('Default bank accounts ensured');
 
