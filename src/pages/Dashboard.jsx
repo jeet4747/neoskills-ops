@@ -125,11 +125,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <GradientStatsCard icon={DollarSign} label="Total Revenue" value={`₹${(summary?.total_revenue || 0).toLocaleString()}`} color="primary" />
         <GradientStatsCard icon={Clock} label="Pending Collection" value={`₹${(summary?.total_pending || 0).toLocaleString()}`} color="amber" onClick={openPendingCollections} />
-        <GradientStatsCard icon={Users} label="Active Enrollments" value={summary?.active_enrollments || 0} color="emerald" />
+        <GradientStatsCard icon={Users} label="Payment Pending Candidates" value={summary?.active_enrollments || 0} color="emerald" onClick={openPendingCollections} />
         {isManager ? (
           <GradientStatsCard icon={AlertCircle} label="Pending Approvals" value={summary?.pending_approvals || 0} color="red" />
         ) : (
-          <GradientStatsCard icon={TrendingUp} label="Total Enrollments" value={summary?.total_enrollments || 0} color="blue" />
+          <GradientStatsCard icon={TrendingUp} label="Total Nominations" value={summary?.total_enrollments || 0} color="blue" />
         )}
       </div>
 

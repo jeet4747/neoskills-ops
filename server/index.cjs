@@ -1722,10 +1722,11 @@ async function init() {
     }
 
     const defaultAccounts = [
-      { account_name: 'frolics HDFC', account_number: 'FL-HDFC', bank_name: 'frolics HDFC' },
       { account_name: 'NSL HDFC', account_number: 'NSL-HDFC', bank_name: 'HDFC Bank' },
       { account_name: 'CareerVU HDFC', account_number: 'CV-HDFC', bank_name: 'HDFC Bank' },
       { account_name: 'Cash', account_number: 'CASH', bank_name: 'Cash' },
+      { account_name: 'Credit Card (GST)', account_number: 'CARD-GST', bank_name: 'Credit Card' },
+      { account_name: 'Credit Card (Non GST)', account_number: 'CARD-NONGST', bank_name: 'Credit Card' },
     ];
     for (const acc of defaultAccounts) {
       const exists = await query('SELECT id FROM bank_accounts WHERE LOWER(account_name) = LOWER($1)', [acc.account_name]);
@@ -1735,17 +1736,6 @@ async function init() {
           [acc.account_name, acc.account_number, acc.bank_name]
         );
       }
-    }
-    try {
-      const gst = await query("SELECT id FROM bank_accounts WHERE LOWER(account_name) = 'neoskills gst' LIMIT 1");
-      if (gst.rows.length) {
-        await query(
-          "UPDATE bank_accounts SET account_name = 'frolics HDFC', account_number = 'FL-HDFC', bank_name = 'frolics HDFC' WHERE id = $1",
-          [gst.rows[0].id]
-        );
-      }
-    } catch (e) {
-      console.log('Bank account rename note:', e.message);
     }
     console.log('Default bank accounts ensured');
 
