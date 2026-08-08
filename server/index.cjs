@@ -1225,6 +1225,12 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
       userFilter = "AND p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
       enrollFilter = "AND e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
     }
+    let monthFilter = '';
+    const month = req.query.month;
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      params.push(month);
+      monthFilter = ` AND to_char(e.created_at, 'YYYY-MM') = $${params.length} `;
+    }
 
     const kpi = await query(`
       SELECT
@@ -1238,6 +1244,7 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
          FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_pending,
         (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter}) as active_enrollments,
         (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${monthFilter}) as month_total_enrollments,
         (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter}) as pending_approvals
     `, params);
 

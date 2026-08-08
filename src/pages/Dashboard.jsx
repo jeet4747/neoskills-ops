@@ -43,7 +43,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const [s, t, tr, src, rec] = await Promise.all([
-        api.dashboard.summary(),
+        api.dashboard.summary({ month: selectedMonth }),
         isManager ? api.dashboard.team() : Promise.resolve([]),
         api.dashboard.trends(),
         isManager ? api.dashboard.sourceAnalytics() : Promise.resolve([]),
@@ -127,7 +127,11 @@ export default function Dashboard() {
         <GradientStatsCard icon={Clock} label="Pending Collection" value={`₹${(summary?.total_pending || 0).toLocaleString()}`} color="amber" onClick={openPendingCollections} />
         <GradientStatsCard icon={Users} label="Payment Pending Candidates" value={summary?.active_enrollments || 0} color="emerald" onClick={openPendingCollections} />
         {isManager ? (
-          <GradientStatsCard icon={AlertCircle} label="Pending Approvals" value={summary?.pending_approvals || 0} color="red" />
+          user?.role === 'admin' ? (
+            <GradientStatsCard icon={TrendingUp} label="Total Nominations (This Month)" value={summary?.month_total_enrollments || 0} color="blue" />
+          ) : (
+            <GradientStatsCard icon={AlertCircle} label="Pending Approvals" value={summary?.pending_approvals || 0} color="red" />
+          )
         ) : (
           <GradientStatsCard icon={TrendingUp} label="Total Nominations" value={summary?.total_enrollments || 0} color="blue" />
         )}

@@ -41,7 +41,10 @@ export const auth = {
 
 export const api = {
   dashboard: {
-    summary: () => request('/dashboard/summary'),
+    summary: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/dashboard/summary${q ? `?${q}` : ''}`);
+    },
     team: () => request('/dashboard/team'),
     trends: () => request('/dashboard/trends'),
     sourceAnalytics: () => request('/dashboard/source-analytics'),
