@@ -7,13 +7,13 @@ import { Card, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { SOURCES, PAYMENT_MODES, CATEGORIES } from '../config/constants';
+import { PAYMENT_MODES, CATEGORIES } from '../config/constants';
 import { compressImage } from '../utils/imageCompress';
 
 const CATEGORY_DEAL_MAP = {
   'Training': 'training',
   'Training and Certification': 'bundle',
-  'Exam': 'exam',
+  'Exam with Booking': 'exam',
   'Exam Consulting': 'exam',
 };
 
@@ -33,12 +33,12 @@ export default function Enrollments() {
   const [form, setForm] = useState({
     candidate_name: '', email: '', phone: '',
     category: 'Training',
-    course_name: 'PMP',
+    course_name: '',
     training_fee: '', exam_fee: '',
     support_included: false,
     payment_account: '', payment_mode: 'upi',
     payment_received: '', transaction_id: '',
-    source: 'Website', batch_name: '',
+    payment_date: new Date().toISOString().slice(0, 10),
   });
   const [receiptFile, setReceiptFile] = useState(null);
 
@@ -89,14 +89,30 @@ export default function Enrollments() {
   const isCash = isCashAccount(form.payment_account);
   const payIsCash = isCashAccount(payForm.bank_account_id);
 
+  const isTrainingOnly = form.category === 'Training';
+  const isExamConsulting = form.category === 'Exam Consulting';
+  const isExamOnly = form.category === 'Exam with Booking' || isExamConsulting;
+  const isBundle = form.category === 'Training and Certification';
+
+  function handleCategoryChange(cat) {
+    setForm((f) => ({
+      ...f,
+      category: cat,
+      support_included: cat === 'Exam Consulting',
+      training_fee: (cat === 'Exam with Booking' || cat === 'Exam Consulting') ? '' : f.training_fee,
+      exam_fee: cat === 'Training' ? '' : f.exam_fee,
+    }));
+  }
+
   function validate() {
     const errs = {};
     if (!form.candidate_name.trim()) errs.candidate_name = 'Candidate name is required';
-    if (total <= 0) errs.fees = 'Training / Exam fee must be greater than 0';
+    if (!form.course_name.trim()) errs.course_name = 'Module / course is required';
+    if (total <= 0) errs.fees = 'Fee must be greater than 0';
     if (!form.payment_account) errs.payment_account = 'Select where payment was received';
     if (received <= 0) errs.payment_received = 'Enter payment received amount';
     if (received > total) errs.payment_received = 'Received amount cannot exceed total fee';
-    if (!receiptFile) errs.receipt = 'Payment screenshot/receipt is required';
+    if (!isCash && !receiptFile) errs.receipt = 'Payment screenshot/receipt is required (not needed for cash)';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -117,10 +133,9 @@ export default function Enrollments() {
         exam_fee: examFee,
         total_amount: total,
         support_included: form.support_included,
-        source: form.source,
-        batch_name: form.batch_name,
         amount_paid: received,
         payment_mode: isCash ? 'cash' : form.payment_mode,
+        payment_date: form.payment_date || null,
         bank_account_id: parseInt(form.payment_account) || null,
         transaction_id: form.transaction_id,
       });
@@ -141,11 +156,11 @@ export default function Enrollments() {
   function resetForm() {
     setForm({
       candidate_name: '', email: '', phone: '',
-      category: 'Training', course_name: 'PMP',
+      category: 'Training', course_name: '',
       training_fee: '', exam_fee: '', support_included: false,
       payment_account: '', payment_mode: 'upi',
       payment_received: '', transaction_id: '',
-      source: 'Website', batch_name: '',
+      payment_date: new Date().toISOString().slice(0, 10),
     });
     setReceiptFile(null);
     setErrors({});
@@ -192,7 +207,7 @@ export default function Enrollments() {
 
   function openPay(enrollment) {
     setPaying(enrollment);
-    setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+    setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
     setPayReceiptFile(null);
     setPayErrors({});
   }
@@ -203,18 +218,19 @@ export default function Enrollments() {
     const amount = parseFloat(payForm.amount_paid) || 0;
     if (amount <= 0) errs.amount = 'Enter a valid amount';
     else if (amount > Number(paying.pending_amount)) errs.amount = `Cannot exceed pending amount of ₹${Number(paying.pending_amount).toLocaleString()}`;
-    if (!payReceiptFile) errs.receipt = 'Payment screenshot/receipt is required';
+    if (!payIsCash && !payReceiptFile) errs.receipt = 'Payment screenshot/receipt is required (not needed for cash)';
     setPayErrors(errs);
     if (Object.keys(errs).length) return;
 
     setPaySubmitting(true);
     try {
-      const isCash = isCashAccount(payForm.bank_account_id);
+      const isCash = payIsCash;
       const payment = await api.payments.create({
         enrollment_id: paying.id,
         student_id: paying.student_id,
         amount_paid: amount,
         payment_mode: isCash ? 'cash' : payForm.payment_mode,
+        payment_date: payForm.payment_date || null,
         bank_account_id: parseInt(payForm.bank_account_id) || null,
         transaction_id: payForm.transaction_id,
       });
@@ -224,7 +240,7 @@ export default function Enrollments() {
       }
       toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
       setPaying(null);
-      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
       setPayReceiptFile(null);
       load();
     } catch (e) { toast.error(e.message); }
@@ -252,7 +268,7 @@ export default function Enrollments() {
       </span>
     )},
     { key: 'support_included', label: 'Support', render: (r) => r.support_included ? 'Yes' : 'No' },
-    { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
+    { key: 'status', label: 'Status', render: (r) => <Badge status={r.status === 'waiting_approval' ? 'waiting' : r.status}>{r.status === 'waiting_approval' ? 'Waiting for Approval' : ''}</Badge> },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
     { key: 'actions', label: 'Actions', render: (r) => (
       <div className="flex items-center gap-1.5">
@@ -344,6 +360,7 @@ export default function Enrollments() {
         <select className="input-field w-44" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); }}>
           <option value="">All Status</option>
           <option value="active">Active</option>
+          <option value="waiting_approval">Waiting for Approval</option>
           <option value="completed">Completed</option>
         </select>
       </div>
@@ -410,7 +427,7 @@ export default function Enrollments() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Category *</label>
                 <select className="input-field" value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  onChange={(e) => handleCategoryChange(e.target.value)}>
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
@@ -418,24 +435,30 @@ export default function Enrollments() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Module *</label>
                 <input type="text" className={`input-field ${errors.course_name ? 'border-red-300' : ''}`}
                   value={form.course_name} placeholder="Type the module / course name"
-                  onChange={(e) => setForm({ ...form, course_name: e.target.value })} />
+                  onChange={(e) => { setForm({ ...form, course_name: e.target.value }); setErrors({}); }} />
+                {errors.course_name && <p className="text-xs text-red-500 mt-1">{errors.course_name}</p>}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Training Fees (₹)</label>
-                <input type="number" className={`input-field ${errors.fees ? 'border-red-300' : ''}`}
-                  value={form.training_fee}
-                  onChange={(e) => { setForm({ ...form, training_fee: e.target.value }); setErrors({}); }}
-                  placeholder="0" min="0" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Exam Fees (₹)</label>
-                <input type="number" className="input-field" value={form.exam_fee}
-                  onChange={(e) => { setForm({ ...form, exam_fee: e.target.value }); setErrors({}); }}
-                  placeholder="0" min="0" />
-              </div>
+              {(isTrainingOnly || isBundle) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Training Fees (₹)</label>
+                  <input type="number" className={`input-field ${errors.fees ? 'border-red-300' : ''}`}
+                    value={form.training_fee}
+                    onChange={(e) => { setForm({ ...form, training_fee: e.target.value }); setErrors({}); }}
+                    placeholder="0" min="0" />
+                </div>
+              )}
+              {(isExamOnly || isBundle) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{isExamConsulting ? 'Exam Consulting Fee (₹)' : 'Exam Fees (₹)'}</label>
+                  <input type="number" className={`input-field ${errors.fees ? 'border-red-300' : ''}`}
+                    value={form.exam_fee}
+                    onChange={(e) => { setForm({ ...form, exam_fee: e.target.value }); setErrors({}); }}
+                    placeholder="0" min="0" />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Total (auto)</label>
                 <input type="number" className="input-field bg-gray-50 font-semibold text-primary-700" value={total} readOnly />
@@ -488,10 +511,15 @@ export default function Enrollments() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received (₹) *</label>
-                <input type="number" className={`input-field ${errors.payment_received ? 'border-red-300' : ''}`}
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received Date</label>
+                <input type="date" className="input-field" value={form.payment_date}
+                  onChange={(e) => setForm({ ...form, payment_date: e.target.value })} />
+              </div>
+              <div className="rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3">
+                <label className="block text-sm font-bold text-amber-800 mb-1.5">Payment Received (₹) *</label>
+                <input type="number" className={`w-full h-11 rounded-lg border border-amber-300 bg-white text-lg font-bold text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-amber-400 ${errors.payment_received ? 'border-red-400' : ''}`}
                   value={form.payment_received}
                   onChange={(e) => { setForm({ ...form, payment_received: e.target.value }); setErrors({}); }}
                   placeholder="0" min="1" />
@@ -509,7 +537,7 @@ export default function Enrollments() {
             </div>
 
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt {isCash ? '(optional for cash)' : '*'}</label>
               <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${receiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${errors.receipt ? 'border-red-300' : ''}`}>
                 {receiptFile ? (
                   <div>
@@ -534,25 +562,6 @@ export default function Enrollments() {
                 )}
               </div>
               {errors.receipt && <p className="text-xs text-red-500 mt-1">{errors.receipt}</p>}
-            </div>
-          </section>
-
-          {/* Source & Batch */}
-          <section>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
-                <select className="input-field" value={form.source}
-                  onChange={(e) => setForm({ ...form, source: e.target.value })}>
-                  {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Batch (optional)</label>
-                <input className="input-field" value={form.batch_name}
-                  onChange={(e) => setForm({ ...form, batch_name: e.target.value })}
-                  placeholder="e.g. PMP July 2026" />
-              </div>
             </div>
           </section>
 
@@ -677,7 +686,12 @@ export default function Enrollments() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received Date</label>
+                <input type="date" className="input-field" value={payForm.payment_date}
+                  onChange={(e) => setPayForm({ ...payForm, payment_date: e.target.value })} />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (₹) *</label>
                 <input type="number" className={`input-field ${payErrors.amount ? 'border-red-300' : ''}`}
@@ -715,7 +729,7 @@ export default function Enrollments() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt {payIsCash ? '(optional for cash)' : '*'}</label>
               <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${payReceiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${payErrors.receipt ? 'border-red-300' : ''}`}>
                 {payReceiptFile ? (
                   <div>

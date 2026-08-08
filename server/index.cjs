@@ -217,7 +217,7 @@ app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, re
       SELECT
         u.id, u.name, u.email, u.role, u.status, u.can_sell, u.created_at,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.status = 'active') as active_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.status IN ('active', 'waiting_approval')) as active_enrollments,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
@@ -354,7 +354,7 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
   try {
     const { student_name, student_email, student_phone, course_name, category, deal_type,
             training_fee, exam_fee, total_amount, support_included, source, batch_name,
-            amount_paid, payment_mode, bank_account_id, transaction_id } = req.body;
+            amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
 
     if (!student_name || !course_name)
       return res.status(400).json({ error: 'student_name and course_name required' });
@@ -399,15 +399,14 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
 
       const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
       const pay = await client.query(
-        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
+        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at, payment_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
       );
 
-      if (payStatus === 'approved' && pending <= 0) {
-        await client.query("UPDATE enrollments SET status = 'completed' WHERE id = $1", [enrollment.id]);
-        enrollment.status = 'completed';
-      }
+      const enrollStatus = payStatus === 'approved' ? (pending <= 0 ? 'completed' : 'active') : 'waiting_approval';
+      await client.query("UPDATE enrollments SET status = $1 WHERE id = $2", [enrollStatus, enrollment.id]);
+      enrollment.status = enrollStatus;
 
       return { student, enrollment, payment: pay.rows[0] };
     });
@@ -655,7 +654,7 @@ app.delete('/api/bank-accounts/:id', auth(['admin', 'manager', 'ops']), async (r
 
 app.post('/api/payments', auth(), async (req, res) => {
   try {
-    const { enrollment_id, student_id, amount_paid, payment_mode, bank_account_id, transaction_id } = req.body;
+    const { enrollment_id, student_id, amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
     if (!enrollment_id || !amount_paid)
       return res.status(400).json({ error: 'enrollment_id and amount_paid required' });
 
@@ -678,13 +677,11 @@ app.post('/api/payments', auth(), async (req, res) => {
 
     const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
     const result = await query(
-      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null]
+      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at, payment_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
     );
-    if (payStatus === 'approved' && pending <= 0) {
-      await query("UPDATE enrollments SET status = 'completed' WHERE id = $1", [enrollment_id]);
-    }
+    await refreshEnrollmentStatus(enrollment_id);
     res.status(201).json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -742,15 +739,7 @@ app.post('/api/approvals/:id/approve', auth(['admin', 'manager', 'ops']), async 
     if (!result.rows.length) return res.status(404).json({ error: 'Payment not found or already processed' });
 
     const payment = result.rows[0];
-    const enrollPayments = await query(
-      "SELECT SUM(amount_paid) as total_paid FROM payments WHERE enrollment_id = $1 AND status = 'approved'",
-      [payment.enrollment_id]
-    );
-    const totalPaid = parseFloat(enrollPayments.rows[0].total_paid || 0);
-    const enroll = await query('SELECT total_amount FROM enrollments WHERE id = $1', [payment.enrollment_id]);
-    if (enroll.rows.length && totalPaid >= parseFloat(enroll.rows[0].total_amount)) {
-      await query("UPDATE enrollments SET status = 'completed' WHERE id = $1", [payment.enrollment_id]);
-    }
+    await refreshEnrollmentStatus(payment.enrollment_id);
 
     res.json(result.rows[0]);
   } catch (e) {
@@ -766,6 +755,8 @@ app.post('/api/approvals/:id/reject', auth(['admin', 'manager', 'ops']), async (
       [req.user.id, reason || 'No reason provided', req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Payment not found or already processed' });
+    const rejected = result.rows[0];
+    await refreshEnrollmentStatus(rejected.enrollment_id);
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -997,6 +988,25 @@ app.delete('/api/receipt-templates/:id', auth(['admin']), async (req, res) => {
 });
 
 // ---------- GST Invoicing ----------
+async function refreshEnrollmentStatus(enrollmentId) {
+  const r = await query(`
+    SELECT e.total_amount,
+      COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as approved,
+      COUNT(*) FILTER (WHERE p.status = 'pending_approval') as pending_count
+    FROM enrollments e
+    LEFT JOIN payments p ON p.enrollment_id = e.id
+    WHERE e.id = $1
+    GROUP BY e.id
+  `, [enrollmentId]);
+  if (!r.rows.length) return;
+  const { total_amount, approved, pending_count } = r.rows[0];
+  let status;
+  if (Number(pending_count) > 0) status = 'waiting_approval';
+  else if (parseFloat(approved) >= parseFloat(total_amount)) status = 'completed';
+  else status = 'active';
+  await query('UPDATE enrollments SET status = $1 WHERE id = $2', [status, enrollmentId]);
+}
+
 async function getGstSettings() {
   const r = await query('SELECT * FROM gst_settings WHERE id = 1');
   if (r.rows.length) return r.rows[0];
@@ -1226,7 +1236,7 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_pending,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.status = 'active' ${enrollFilter}) as active_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter}) as active_enrollments,
         (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_enrollments,
         (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter}) as pending_approvals
     `, params);
@@ -1691,6 +1701,12 @@ async function init() {
       await query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('sales', 'manager', 'admin', 'ops'))`);
       await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check`);
       await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'pending', 'rejected', 'on_leave', 'inactive'))`);
+      await query(`ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check`);
+      await query(`ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status IN ('active', 'completed', 'waiting_approval'))`);
+      await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_date DATE`);
+      await query(`UPDATE enrollments e SET status = 'waiting_approval'
+                   FROM payments p
+                   WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);

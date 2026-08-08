@@ -21,7 +21,7 @@ export const DEAL_TYPES = [
 export const CATEGORIES = [
   'Training',
   'Training and Certification',
-  'Exam',
+  'Exam with Booking',
   'Exam Consulting',
 ];
 
