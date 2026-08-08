@@ -845,6 +845,16 @@ app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => 
   }
 });
 
+app.get('/api/receipts/next-number', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { prefix } = req.query;
+    const { number, seq } = await nextReceiptNumber(prefix);
+    res.json({ number, prefix: prefix || 'NEO', sequence: seq });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     if (req.user.role === 'ops') {

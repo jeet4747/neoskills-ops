@@ -21,6 +21,8 @@ const MODE_OPTIONS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
 ];
 
+const COMPANY_PREFIX = { neoskills: 'NEO', careervue: 'CV', frolics: 'FRO' };
+
 function emptyForm() {
   return {
     id: null,
@@ -242,8 +244,31 @@ export default function Receipts() {
     setForm(emptyForm());
     setPreviewUrl(null);
     setMode('create');
+    refreshNextNumber('NEO');
     const en = await api.enrollments.list({}).catch(() => []);
     setEnrollments(en);
+  }
+
+  async function refreshNextNumber(prefix) {
+    const pre = prefix || COMPANY_PREFIX[form.company] || 'NEO';
+    try {
+      const d = await api.receipts.nextNumber(pre);
+      setForm((f) => (f.id ? f : { ...f, prefix: pre, receipt_number: d.number }));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function handleCompanyChange(company) {
+    const prefix = COMPANY_PREFIX[company] || 'NEO';
+    setForm((f) => ({ ...f, company, prefix }));
+    if (!form.id) {
+      try {
+        api.receipts.nextNumber(prefix).then((d) =>
+          setForm((f) => (f.id ? f : { ...f, receipt_number: d.number }))
+        ).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
   }
 
   async function openEnrollPicker() {
@@ -362,7 +387,7 @@ export default function Receipts() {
               <CardBody className="space-y-3">
                 <div>
                   <label className="text-xs text-gray-500 font-medium mb-1 block">Company on receipt</label>
-                  <select className="input-field" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })}>
+                  <select className="input-field" value={form.company} onChange={(e) => handleCompanyChange(e.target.value)}>
                     {brands.length ? brands.map((b) => (
                       <option key={b.key} value={b.key}>{b.name}</option>
                     )) : (

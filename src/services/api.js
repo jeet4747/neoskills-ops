@@ -114,6 +114,7 @@ export const api = {
       return request(`/receipts${q ? `?${q}` : ''}`);
     },
     get: (id) => request(`/receipts/${id}`),
+    nextNumber: (prefix) => request(`/receipts/next-number?prefix=${encodeURIComponent(prefix || 'NEO')}`),
     create: (data) => request('/receipts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/receipts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id) => request(`/receipts/${id}`, { method: 'DELETE' }),
