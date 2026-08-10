@@ -855,6 +855,33 @@ app.get('/api/receipts/next-number', auth(['admin', 'manager', 'ops']), async (r
   }
 });
 
+app.get('/api/receipts/pending', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT e.id, e.student_id, e.course_name, e.category, e.total_amount, e.status, e.created_at,
+        s.name as student_name, s.phone as student_phone, s.email as student_email, s.city as student_city,
+        u.name as salesperson_name,
+        COALESCE((
+          SELECT SUM(p.amount_paid) FROM payments p
+          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+        ), 0) as paid_amount,
+        GREATEST(e.total_amount - COALESCE((
+          SELECT SUM(p.amount_paid) FROM payments p
+          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+        ), 0), 0) as pending_amount,
+        (SELECT COUNT(*) FROM payments p WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')) as payment_count
+      FROM enrollments e
+      JOIN students s ON e.student_id = s.id
+      JOIN users u ON e.sales_user_id = u.id
+      WHERE NOT EXISTS (SELECT 1 FROM receipts r WHERE r.enrollment_id = e.id)
+      ORDER BY e.created_at ASC
+    `);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     if (req.user.role === 'ops') {

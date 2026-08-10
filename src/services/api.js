@@ -115,6 +115,7 @@ export const api = {
     },
     get: (id) => request(`/receipts/${id}`),
     nextNumber: (prefix) => request(`/receipts/next-number?prefix=${encodeURIComponent(prefix || 'NEO')}`),
+    pending: () => request('/receipts/pending'),
     create: (data) => request('/receipts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/receipts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id) => request(`/receipts/${id}`, { method: 'DELETE' }),

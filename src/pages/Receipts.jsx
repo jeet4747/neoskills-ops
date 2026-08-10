@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, FileText, Download, Pencil, Trash2, Save,
-  X, ArrowLeft, Copy, RefreshCw, User, Banknote, Settings2,
+  X, ArrowLeft, Copy, RefreshCw, User, Banknote, Settings2, FileCheck2,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { api } from '../services/api';
@@ -50,7 +50,7 @@ function emptyForm() {
 
 export default function Receipts() {
   const toast = useToast();
-  const [mode, setMode] = useState('create');
+  const [mode, setMode] = useState('history');
   const [form, setForm] = useState(emptyForm());
   const [receipts, setReceipts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -58,6 +58,8 @@ export default function Receipts() {
   const [search, setSearch] = useState('');
   const [enrollments, setEnrollments] = useState([]);
   const [enrollSearch, setEnrollSearch] = useState('');
+  const [pendingEnrolls, setPendingEnrolls] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [brands, setBrands] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -83,7 +85,20 @@ export default function Receipts() {
 
   useEffect(() => {
     if (mode === 'history') load(page, search);
+    if (mode === 'pending') loadPending();
   }, [mode, page, search, load]);
+
+  async function loadPending() {
+    try {
+      setPendingLoading(true);
+      const list = await api.receipts.pending();
+      setPendingEnrolls(list);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setPendingLoading(false);
+    }
+  }
 
   useEffect(() => {
     api.receiptTemplates.list().then(setTemplates).catch(() => {});
@@ -313,18 +328,64 @@ export default function Receipts() {
           <p className="text-sm text-gray-400 mt-0.5">Create customizable receipts, invoices & payment receipts</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => setMode('history')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${mode === 'history' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+            >
+              All Receipts ({total})
+            </button>
+            <button
+              onClick={() => setMode('pending')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${mode === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+            >
+              Pending Receipts ({pendingEnrolls.length})
+            </button>
+          </div>
           <button
-            onClick={() => setMode(mode === 'create' ? 'history' : 'create')}
-            className={mode === 'history' ? 'btn-primary flex items-center gap-2' : 'btn-secondary flex items-center gap-2'}
+            onClick={() => setMode(mode === 'create' ? (pendingEnrolls.length ? 'pending' : 'history') : 'create')}
+            className={mode === 'create' ? 'btn-secondary flex items-center gap-2' : 'btn-primary flex items-center gap-2'}
           >
-            {mode === 'create' ? (
-              <><FileText size={16} /> Receipt History ({total})</>
-            ) : (
-              <><Plus size={16} /> Create Receipt</>
-            )}
+            <><Plus size={16} /> Create Receipt</>
           </button>
         </div>
       </div>
+
+      {mode === 'pending' && (
+        <Card>
+          <CardHeader>
+            <h3 className="font-semibold text-gray-900">Enrollments pending receipt creation</h3>
+          </CardHeader>
+          <CardBody className="p-0">
+            {pendingLoading ? (
+              <div className="p-8 space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-10 skeleton" />)}</div>
+            ) : pendingEnrolls.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 text-sm">
+                <FileCheck2 size={32} className="mx-auto mb-3 text-gray-300" />
+                No pending receipts. All enrollments have receipts.
+              </div>
+            ) : (
+              <Table
+                columns={[
+                  { key: 'id', label: 'ID' },
+                  { key: 'student_name', label: 'Customer', render: (r) => <div><p className="font-medium">{r.student_name}</p><p className="text-xs text-gray-400">{r.student_phone}</p></div> },
+                  { key: 'course_name', label: 'Course', render: (r) => <span className="text-sm">{r.course_name}</span> },
+                  { key: 'total_amount', label: 'Total', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
+                  { key: 'paid_amount', label: 'Paid', render: (r) => <span className="text-emerald-600 font-medium">₹{Number(r.paid_amount).toLocaleString()}</span> },
+                  { key: 'pending_amount', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">₹{Number(r.pending_amount).toLocaleString()}</span> },
+                  { key: 'salesperson_name', label: 'Salesperson', render: (r) => <span className="text-xs text-gray-500">{r.salesperson_name}</span> },
+                  { key: 'actions', label: '', render: (r) => (
+                    <button onClick={() => { selectEnrollment(r); setMode('create'); }} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1">
+                      <Plus size={13} /> Receipt
+                    </button>
+                  ) },
+                ]}
+                data={pendingEnrolls}
+              />
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {mode === 'history' && (
         <Card>
