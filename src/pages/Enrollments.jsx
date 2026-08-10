@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown } from 'lucide-react';
+import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown, X } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
