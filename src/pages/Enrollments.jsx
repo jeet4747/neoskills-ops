@@ -31,7 +31,7 @@ export default function Enrollments() {
   const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
-    candidate_name: '', email: '', phone: '',
+    candidate_name: '', email: '', phone: '', telecrm_link: '',
     category: 'Training',
     course_name: '',
     training_fee: '', exam_fee: '',
@@ -107,6 +107,7 @@ export default function Enrollments() {
   function validate() {
     const errs = {};
     if (!form.candidate_name.trim()) errs.candidate_name = 'Candidate name is required';
+    if (!form.telecrm_link.trim()) errs.telecrm_link = 'TeleCRM link is required';
     if (!form.course_name.trim()) errs.course_name = 'Module / course is required';
     if (total <= 0) errs.fees = 'Fee must be greater than 0';
     if (!form.payment_account) errs.payment_account = 'Select where payment was received';
@@ -133,6 +134,7 @@ export default function Enrollments() {
         exam_fee: examFee,
         total_amount: total,
         support_included: form.support_included,
+        telecrm_link: form.telecrm_link.trim(),
         amount_paid: received,
         payment_mode: isCash ? 'cash' : form.payment_mode,
         payment_date: form.payment_date || null,
@@ -155,7 +157,7 @@ export default function Enrollments() {
 
   function resetForm() {
     setForm({
-      candidate_name: '', email: '', phone: '',
+      candidate_name: '', email: '', phone: '', telecrm_link: '',
       category: 'Training', course_name: '',
       training_fee: '', exam_fee: '', support_included: false,
       payment_account: '', payment_mode: 'upi',
@@ -173,6 +175,7 @@ export default function Enrollments() {
       student_name: enrollment.student_name || '',
       student_email: enrollment.student_email || '',
       student_phone: enrollment.student_phone || '',
+      telecrm_link: enrollment.telecrm_link || '',
       category: enrollment.category || 'Training',
       course_name: enrollment.course_name,
       training_fee: enrollment.training_fee || '',
@@ -252,6 +255,27 @@ export default function Enrollments() {
       <div>
         <p className="font-medium text-gray-900">{r.student_name}</p>
         <p className="text-xs text-gray-400">{r.student_phone || r.student_email || ''}</p>
+        <div className="flex items-center gap-1.5 mt-2">
+          <button onClick={(ev) => { ev.stopPropagation(); openEdit(r); }}
+            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+            title="Edit enrollment">
+            <Pencil size={14} />
+          </button>
+          {Number(r.pending_amount) > 0 && (
+            <button onClick={(ev) => { ev.stopPropagation(); openPay(r); }}
+              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              title="Record payment for pending">
+              <Banknote size={14} />
+            </button>
+          )}
+          {isOps && (
+            <button onClick={(ev) => { ev.stopPropagation(); handleDownloadReceipt(r); }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Download receipt (PDF)">
+              <FileDown size={14} />
+            </button>
+          )}
+        </div>
       </div>
     )},
     { key: 'category', label: 'Category', render: (r) => r.category || <span className="capitalize">{r.deal_type}</span> },
@@ -274,29 +298,6 @@ export default function Enrollments() {
       </Badge>
     ) },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
-    { key: 'actions', label: 'Actions', render: (r) => (
-      <div className="flex items-center gap-1.5">
-        <button onClick={(ev) => { ev.stopPropagation(); openEdit(r); }}
-          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-          title="Edit enrollment">
-          <Pencil size={14} />
-        </button>
-        {Number(r.pending_amount) > 0 && (
-          <button onClick={(ev) => { ev.stopPropagation(); openPay(r); }}
-            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-            title="Record payment for pending">
-            <Banknote size={14} />
-          </button>
-        )}
-        {isOps && (
-          <button onClick={(ev) => { ev.stopPropagation(); handleDownloadReceipt(r); }}
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Download receipt (PDF)">
-            <FileDown size={14} />
-          </button>
-        )}
-      </div>
-    )},
   ];
 
   async function handleDownloadReceipt(r) {
@@ -397,7 +398,7 @@ export default function Enrollments() {
               <span className="w-6 h-6 bg-primary-100 rounded-lg flex items-center justify-center text-xs font-bold text-primary-700">1</span>
               Candidate Details
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Name *</label>
                 <input className={`input-field ${errors.candidate_name ? 'border-red-300' : ''}`}
@@ -417,6 +418,14 @@ export default function Enrollments() {
                 <input className="input-field" value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   placeholder="10-digit mobile number" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">TeleCRM Link of the Candidate *</label>
+                <input className={`input-field ${errors.telecrm_link ? 'border-red-300' : ''}`}
+                  value={form.telecrm_link}
+                  onChange={(e) => { setForm({ ...form, telecrm_link: e.target.value }); setErrors({}); }}
+                  placeholder="https://neoskills.telecrm.in/..." />
+                {errors.telecrm_link && <p className="text-xs text-red-500 mt-1">{errors.telecrm_link}</p>}
               </div>
             </div>
           </section>
@@ -590,7 +599,7 @@ export default function Enrollments() {
           <form onSubmit={handleEditSubmit} className="space-y-5">
             <section>
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Candidate Details</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Name *</label>
                   <input className="input-field" value={editForm.student_name}
@@ -605,6 +614,12 @@ export default function Enrollments() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Number</label>
                   <input className="input-field" value={editForm.student_phone}
                     onChange={(e) => setEditForm({ ...editForm, student_phone: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">TeleCRM Link of the Candidate</label>
+                  <input className="input-field" value={editForm.telecrm_link}
+                    onChange={(e) => setEditForm({ ...editForm, telecrm_link: e.target.value })}
+                    placeholder="https://neoskills.telecrm.in/..." />
                 </div>
               </div>
             </section>

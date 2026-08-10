@@ -336,13 +336,13 @@ app.post('/api/students', auth(), async (req, res) => {
 
 app.post('/api/enrollments', auth(), async (req, res) => {
   try {
-    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, source, batch_name, support_included } = req.body;
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, source, batch_name, support_included, telecrm_link } = req.body;
     if (!student_id || !course_name || !total_amount)
       return res.status(400).json({ error: 'student_id, course_name, total_amount required' });
     const result = await query(
-      `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [student_id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name]
+      `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [student_id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name, telecrm_link || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -353,7 +353,7 @@ app.post('/api/enrollments', auth(), async (req, res) => {
 app.post('/api/enrollments/combined', auth(), async (req, res) => {
   try {
     const { student_name, student_email, student_phone, course_name, category, deal_type,
-            training_fee, exam_fee, total_amount, support_included, source, batch_name,
+            training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link,
             amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
 
     if (!student_name || !course_name)
@@ -382,9 +382,9 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
       }
 
       const enroll = await client.query(
-        `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-        [student.id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name]
+        `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [student.id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name, telecrm_link || null]
       );
       const enrollment = enroll.rows[0];
 
@@ -563,7 +563,7 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
     if (!isManager && enroll.sales_user_id !== req.user.id)
       return res.status(403).json({ error: 'You can only edit your own enrollments' });
 
-    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name } = req.body;
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link } = req.body;
 
     const newTotal = total_amount !== undefined
       ? parseFloat(total_amount)
@@ -573,8 +573,8 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
       `UPDATE enrollments SET
          course_name = $1, deal_type = $2, category = $3,
          training_fee = $4, exam_fee = $5, total_amount = $6,
-         support_included = $7, source = $8, batch_name = $9
-       WHERE id = $10 RETURNING *`,
+         support_included = $7, source = $8, batch_name = $9, telecrm_link = $10
+       WHERE id = $11 RETURNING *`,
       [
         course_name || enroll.course_name,
         deal_type || enroll.deal_type,
@@ -585,6 +585,7 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
         support_included !== undefined ? !!support_included : enroll.support_included,
         source !== undefined ? source : enroll.source,
         batch_name !== undefined ? batch_name : enroll.batch_name,
+        telecrm_link !== undefined ? telecrm_link : enroll.telecrm_link,
         req.params.id,
       ]
     );
@@ -1748,6 +1749,7 @@ async function init() {
       await query(`ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check`);
       await query(`ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status IN ('active', 'completed', 'waiting_approval'))`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_date DATE`);
+      await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
                    WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);
