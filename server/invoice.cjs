@@ -3,6 +3,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 
 const LOGO_PATH = path.join(__dirname, '../public/logo/nsl-logo-cropped.png');
+const STAMP_PATH = path.join(__dirname, 'assets/stamp.png');
 const FONT_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans.ttf');
 const FONT_BOLD_PATH = path.join(__dirname, 'assets/fonts/DejaVuSans-Bold.ttf');
 const { getBrand } = require('./brands.cjs');
@@ -236,6 +237,11 @@ function generateInvoice(data) {
 
   const signY = doc.page.height - 120;
   doc.moveTo(summaryX, signY + 18).lineTo(summaryX + 180, signY + 18).strokeColor(borderGray).lineWidth(1).stroke();
+  try {
+    doc.image(STAMP_PATH, summaryX + 40, signY + 8, { width: 100, height: 100 });
+  } catch (e) {
+    /* stamp optional */
+  }
   doc.font('DejaVu').fontSize(8).fillColor(midGray).text('AUTHORISED SIGNATORY', summaryX, signY + 22, { width: 180, align: 'center' });
 
   doc.end();
