@@ -70,9 +70,9 @@ export const api = {
       return request(`/payments${q ? `?${q}` : ''}`);
     },
     create: (data) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
-    uploadReceipt: (id, file) => {
+    uploadReceipt: (id, files) => {
       const form = new FormData();
-      form.append('receipt', file);
+      (Array.isArray(files) ? files : [files]).forEach((f) => form.append('receipts', f));
       return request(`/payments/${id}/receipt`, { method: 'POST', body: form });
     },
   },

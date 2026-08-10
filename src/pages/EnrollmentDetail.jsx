@@ -8,6 +8,7 @@ import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import { getReceiptUrls } from '../utils/receipts';
 
 export default function EnrollmentDetail() {
   const { id } = useParams();
@@ -80,12 +81,14 @@ export default function EnrollmentDetail() {
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'salesperson_name', label: 'Recorded by' },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
-    { key: 'receipt_url', label: 'Receipt', render: (r) =>
-      r.receipt_url ? (
+    { key: 'receipt_url', label: 'Receipt', render: (r) => {
+      const urls = getReceiptUrls(r);
+      return urls.length ? (
         <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
-          <Download size={12} /> View
+          <Download size={12} /> View ({urls.length})
         </button>
-      ) : '-' },
+      ) : '-';
+    } },
   ];
 
   if (loading) {
@@ -182,8 +185,12 @@ export default function EnrollmentDetail() {
       <Modal open={!!viewPayment} onClose={() => setViewPayment(null)}
         title={viewPayment ? `Payment Receipt — ₹${Number(viewPayment.amount_paid).toLocaleString()}` : ''} size="xl">
         {viewPayment && (
-          <img src={viewPayment.receipt_url} alt="Payment receipt"
-            className="w-full rounded-xl object-contain max-h-[75vh] bg-gray-50" />
+          <div className="grid grid-cols-2 gap-3">
+            {getReceiptUrls(viewPayment).map((u, i) => (
+              <img key={i} src={u} alt={`Payment receipt ${i + 1}`}
+                className="w-full rounded-xl object-contain max-h-[70vh] bg-gray-50 border border-gray-100" />
+            ))}
+          </div>
         )}
       </Modal>
     </div>

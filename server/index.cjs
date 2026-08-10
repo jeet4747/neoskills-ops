@@ -798,12 +798,12 @@ app.get('/api/approvals/count', auth(['admin', 'manager', 'ops']), async (req, r
   }
 });
 
-app.post('/api/payments/:id/receipt', auth(), upload.single('receipt'), async (req, res) => {
+app.post('/api/payments/:id/receipt', auth(), upload.array('receipts', 6), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    await query('UPDATE payments SET receipt_url = $1 WHERE id = $2', [dataUrl, req.params.id]);
-    res.json({ receipt_url: dataUrl });
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'No file uploaded' });
+    const urls = req.files.map((f) => `data:${f.mimetype};base64,${f.buffer.toString('base64')}`);
+    await query('UPDATE payments SET receipt_url = $1, receipt_urls = $2 WHERE id = $3', [urls[0], JSON.stringify(urls), req.params.id]);
+    res.json({ receipt_url: urls[0], receipt_urls: urls });
   } catch (e) {
     if (e.message && e.message.includes('Only JPG')) return res.status(400).json({ error: e.message });
     res.status(500).json({ error: e.message });
@@ -1748,7 +1748,7 @@ async function init() {
       await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'pending', 'rejected', 'on_leave', 'inactive'))`);
       await query(`ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check`);
       await query(`ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status IN ('active', 'completed', 'waiting_approval'))`);
-      await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_date DATE`);
+      await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

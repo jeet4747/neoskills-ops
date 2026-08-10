@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+import { getReceiptUrls } from '../utils/receipts';
 
 export default function Approvals() {
   const { user } = useAuth();
@@ -158,17 +159,17 @@ export default function Approvals() {
                         </div>
                       )}
                     </div>
-                    {p.receipt_url && (
-                      <div className="flex items-center gap-2 mt-2">
-                        {isImageUrl(p.receipt_url) && (
-                          <button onClick={() => setLightbox(p)} className="shrink-0">
-                            <img src={p.receipt_url} alt="Screenshot"
+                    {getReceiptUrls(p).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {getReceiptUrls(p).map((u, i) => isImageUrl(u) && (
+                          <button key={i} onClick={() => setLightbox({ p, url: u })} className="shrink-0">
+                            <img src={u} alt={`Screenshot ${i + 1}`}
                               className="w-10 h-10 rounded-lg object-cover border border-gray-100 cursor-zoom-in" />
                           </button>
-                        )}
-                        <button onClick={() => setLightbox(p)}
+                        ))}
+                        <button onClick={() => setLightbox({ p, url: getReceiptUrls(p)[0] })}
                           className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline">
-                          <Download size={12} /> View Screenshot
+                          <Download size={12} /> View ({getReceiptUrls(p).length})
                         </button>
                       </div>
                     )}
@@ -242,20 +243,22 @@ export default function Approvals() {
                 <p>{new Date(selected.created_at).toLocaleDateString()}</p>
               </div>
             </div>
-            {selected.receipt_url && (
+            {getReceiptUrls(selected).length > 0 && (
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Payment Screenshot</p>
-                {isImageUrl(selected.receipt_url) ? (
-                  <button onClick={() => setLightbox(selected)} className="block w-full">
-                    <img src={selected.receipt_url} alt="Payment screenshot"
-                      className="w-full rounded-xl border border-gray-100 shadow-sm cursor-zoom-in max-h-72 object-contain bg-gray-50" />
-                  </button>
-                ) : (
-                  <button onClick={() => setLightbox(selected)}
-                    className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
-                    <Download size={14} /> Open Receipt
-                  </button>
-                )}
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Payment Screenshots ({getReceiptUrls(selected).length})</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {getReceiptUrls(selected).map((u, i) => isImageUrl(u) ? (
+                    <button key={i} onClick={() => setLightbox({ p: selected, url: u })} className="block">
+                      <img src={u} alt={`Payment screenshot ${i + 1}`}
+                        className="w-full rounded-xl border border-gray-100 shadow-sm cursor-zoom-in object-cover h-28 bg-gray-50" />
+                    </button>
+                  ) : (
+                    <button key={i} onClick={() => setLightbox({ p: selected, url: u })}
+                      className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
+                      <Download size={14} /> Receipt {i + 1}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             <div className="flex items-center gap-3 pt-4 border-t">
@@ -281,15 +284,15 @@ export default function Approvals() {
       </Modal>
 
       <Modal open={!!lightbox} onClose={() => setLightbox(null)}
-        title={lightbox ? `${lightbox.student_name} — Payment Screenshot` : ''} size="xl">
+        title={lightbox ? `${lightbox.p.student_name} — Payment Screenshot` : ''} size="xl">
         {lightbox && (
           <div className="space-y-4">
-            <img src={lightbox.receipt_url} alt="Payment screenshot"
+            <img src={lightbox.url} alt="Payment screenshot"
               className="w-full rounded-xl object-contain max-h-[70vh] bg-gray-50" />
             <div className="flex justify-end gap-3">
               <button onClick={() => { setLightbox(null); setShowDetail(true); }}
                 className="btn-secondary">Close</button>
-              <button onClick={() => handleDownloadReceipt(lightbox)}
+              <button onClick={() => handleDownloadReceipt(lightbox.p)}
                 className="btn-primary inline-flex items-center gap-2"
                 disabled={receiptLoading}>
                 <FileDown size={16} /> {receiptLoading ? 'Generating…' : 'Download Receipt (PDF)'}

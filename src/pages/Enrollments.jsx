@@ -40,7 +40,7 @@ export default function Enrollments() {
     payment_received: '', transaction_id: '',
     payment_date: new Date().toISOString().slice(0, 10),
   });
-  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptFiles, setReceiptFiles] = useState([]);
 
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -48,7 +48,7 @@ export default function Enrollments() {
 
   const [paying, setPaying] = useState(null);
   const [payForm, setPayForm] = useState({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
-  const [payReceiptFile, setPayReceiptFile] = useState(null);
+  const [payReceiptFiles, setPayReceiptFiles] = useState([]);
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payErrors, setPayErrors] = useState({});
 
@@ -113,7 +113,7 @@ export default function Enrollments() {
     if (!form.payment_account) errs.payment_account = 'Select where payment was received';
     if (received <= 0) errs.payment_received = 'Enter payment received amount';
     if (received > total) errs.payment_received = 'Received amount cannot exceed total fee';
-    if (!isCash && !receiptFile) errs.receipt = 'Payment screenshot/receipt is required (not needed for cash)';
+    if (!isCash && !receiptFiles.length) errs.receipt = 'At least one payment screenshot/receipt is required (not needed for cash)';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -142,9 +142,10 @@ export default function Enrollments() {
         transaction_id: form.transaction_id,
       });
 
-      if (receiptFile && result.payment?.id) {
-        const receipt = await compressImage(receiptFile);
-        await api.payments.uploadReceipt(result.payment.id, receipt);
+      if (receiptFiles.length && result.payment?.id) {
+        const compressed = [];
+        for (const f of receiptFiles) compressed.push(await compressImage(f));
+        await api.payments.uploadReceipt(result.payment.id, compressed);
       }
 
       toast.success(`Enrollment + payment of ₹${received.toLocaleString()} recorded. Awaiting manager approval.`);
@@ -164,7 +165,7 @@ export default function Enrollments() {
       payment_received: '', transaction_id: '',
       payment_date: new Date().toISOString().slice(0, 10),
     });
-    setReceiptFile(null);
+    setReceiptFiles([]);
     setErrors({});
   }
 
@@ -211,7 +212,7 @@ export default function Enrollments() {
   function openPay(enrollment) {
     setPaying(enrollment);
     setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
-    setPayReceiptFile(null);
+    setPayReceiptFiles([]);
     setPayErrors({});
   }
 
@@ -221,7 +222,7 @@ export default function Enrollments() {
     const amount = parseFloat(payForm.amount_paid) || 0;
     if (amount <= 0) errs.amount = 'Enter a valid amount';
     else if (amount > Number(paying.pending_amount)) errs.amount = `Cannot exceed pending amount of ₹${Number(paying.pending_amount).toLocaleString()}`;
-    if (!payIsCash && !payReceiptFile) errs.receipt = 'Payment screenshot/receipt is required (not needed for cash)';
+    if (!payIsCash && !payReceiptFiles.length) errs.receipt = 'At least one payment screenshot/receipt is required (not needed for cash)';
     setPayErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -237,14 +238,15 @@ export default function Enrollments() {
         bank_account_id: parseInt(payForm.bank_account_id) || null,
         transaction_id: payForm.transaction_id,
       });
-      if (payReceiptFile && payment.id) {
-        const receipt = await compressImage(payReceiptFile);
-        await api.payments.uploadReceipt(payment.id, receipt);
+      if (payReceiptFiles.length && payment.id) {
+        const compressed = [];
+        for (const f of payReceiptFiles) compressed.push(await compressImage(f));
+        await api.payments.uploadReceipt(payment.id, compressed);
       }
       toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
       setPaying(null);
       setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
-      setPayReceiptFile(null);
+      setPayReceiptFiles([]);
       load();
     } catch (e) { toast.error(e.message); }
     finally { setPaySubmitting(false); }
@@ -551,28 +553,33 @@ export default function Enrollments() {
 
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt {isCash ? '(optional for cash)' : '*'}</label>
-              <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${receiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${errors.receipt ? 'border-red-300' : ''}`}>
-                {receiptFile ? (
-                  <div>
-                    {isImage(receiptFile) ? (
-                      <img src={URL.createObjectURL(receiptFile)} alt="Receipt preview" className="max-h-40 mx-auto rounded-lg shadow-sm mb-2" />
-                    ) : (
-                      <div className="flex items-center justify-center gap-2 text-sm mb-2">
-                        <FileText size={16} className="text-primary-600" />
-                        <span className="text-gray-700">{receiptFile.name}</span>
+              <div className={`border-2 border-dashed rounded-xl p-4 transition-colors ${receiptFiles.length ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 hover:border-primary-300'} ${errors.receipt ? 'border-red-300' : ''}`}>
+                {receiptFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {receiptFiles.map((f, i) => (
+                      <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 bg-white group">
+                        {isImage(f) ? (
+                          <img src={URL.createObjectURL(f)} alt={`Receipt ${i + 1}`} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileText size={20} className="text-primary-600" />
+                          </div>
+                        )}
+                        <button type="button" onClick={() => setReceiptFiles(receiptFiles.filter((_, j) => j !== i))}
+                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-600" title="Remove">
+                          <X size={12} />
+                        </button>
                       </div>
-                    )}
-                    <button type="button" onClick={() => setReceiptFile(null)} className="text-xs text-red-500 hover:underline">Remove file</button>
+                    ))}
                   </div>
-                ) : (
-                  <label className="cursor-pointer flex flex-col items-center gap-1.5">
-                    <Upload size={24} className="text-gray-400" />
-                    <span className="text-sm font-medium text-gray-600">Click to upload payment screenshot</span>
-                    <span className="text-xs text-gray-400">Manager will verify this screenshot before approving</span>
-                    <input type="file" className="hidden" accept="image/*,application/pdf"
-                      onChange={(e) => { setReceiptFile(e.target.files[0]); setErrors({}); }} />
-                  </label>
                 )}
+                <label className="cursor-pointer flex flex-col items-center gap-1.5">
+                  <Upload size={24} className="text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">Click to upload payment screenshots</span>
+                  <span className="text-xs text-gray-400">You can upload multiple images (Manager verifies before approving)</span>
+                  <input type="file" className="hidden" accept="image/*,application/pdf" multiple
+                    onChange={(e) => { setReceiptFiles([...receiptFiles, ...Array.from(e.target.files || [])]); setErrors({}); e.target.value = ''; }} />
+                </label>
               </div>
               {errors.receipt && <p className="text-xs text-red-500 mt-1">{errors.receipt}</p>}
             </div>
@@ -749,27 +756,32 @@ export default function Enrollments() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt {payIsCash ? '(optional for cash)' : '*'}</label>
-              <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${payReceiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${payErrors.receipt ? 'border-red-300' : ''}`}>
-                {payReceiptFile ? (
-                  <div>
-                    {payReceiptFile.type.startsWith('image/') ? (
-                      <img src={URL.createObjectURL(payReceiptFile)} alt="Receipt preview" className="max-h-36 mx-auto rounded-lg shadow-sm mb-2" />
-                    ) : (
-                      <div className="flex items-center justify-center gap-2 text-sm mb-2">
-                        <FileText size={16} className="text-primary-600" />
-                        <span className="text-gray-700">{payReceiptFile.name}</span>
+              <div className={`border-2 border-dashed rounded-xl p-4 transition-colors ${payReceiptFiles.length ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 hover:border-primary-300'} ${payErrors.receipt ? 'border-red-300' : ''}`}>
+                {payReceiptFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {payReceiptFiles.map((f, i) => (
+                      <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-white group">
+                        {f.type.startsWith('image/') ? (
+                          <img src={URL.createObjectURL(f)} alt={`Receipt ${i + 1}`} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileText size={16} className="text-primary-600" />
+                          </div>
+                        )}
+                        <button type="button" onClick={() => setPayReceiptFiles(payReceiptFiles.filter((_, j) => j !== i))}
+                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-600" title="Remove">
+                          <X size={12} />
+                        </button>
                       </div>
-                    )}
-                    <button type="button" onClick={() => setPayReceiptFile(null)} className="text-xs text-red-500 hover:underline">Remove file</button>
+                    ))}
                   </div>
-                ) : (
-                  <label className="cursor-pointer flex flex-col items-center gap-1.5">
-                    <Upload size={24} className="text-gray-400" />
-                    <span className="text-sm font-medium text-gray-600">Click to upload payment screenshot</span>
-                    <input type="file" className="hidden" accept="image/*,application/pdf"
-                      onChange={(e) => { setPayReceiptFile(e.target.files[0]); setPayErrors({}); }} />
-                  </label>
                 )}
+                <label className="cursor-pointer flex flex-col items-center gap-1.5">
+                  <Upload size={24} className="text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">Click to upload payment screenshots</span>
+                  <input type="file" className="hidden" accept="image/*,application/pdf" multiple
+                    onChange={(e) => { setPayReceiptFiles([...payReceiptFiles, ...Array.from(e.target.files || [])]); setPayErrors({}); e.target.value = ''; }} />
+                </label>
               </div>
               {payErrors.receipt && <p className="text-xs text-red-500 mt-1">{payErrors.receipt}</p>}
             </div>

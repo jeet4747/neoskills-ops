@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Download, Search, Upload, FileText } from 'lucide-react';
+import { Plus, Download, Search, Upload, FileText, X } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -9,6 +9,7 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { PAYMENT_MODES } from '../config/constants';
 import { compressImage } from '../utils/imageCompress';
+import { getReceiptUrls } from '../utils/receipts';
 
 export default function Payments() {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ export default function Payments() {
     enrollment_id: '', student_id: '', amount_paid: '',
     payment_mode: 'upi', bank_account_id: '', transaction_id: '',
   });
-  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptFiles, setReceiptFiles] = useState([]);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
   const [viewPayment, setViewPayment] = useState(null);
   const [errors, setErrors] = useState({});
@@ -65,12 +66,14 @@ export default function Payments() {
     { key: 'payment_mode', label: 'Mode', render: (r) => <span className="capitalize">{r.payment_mode}</span> },
     { key: 'bank_account_name', label: 'Account', render: (r) => r.bank_account_name || '-' },
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'receipt_url', label: 'Receipt', render: (r) =>
-      r.receipt_url ? (
+    { key: 'receipt_url', label: 'Receipt', render: (r) => {
+      const urls = getReceiptUrls(r);
+      return urls.length ? (
         <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
-          <Download size={12} /> View
+          <Download size={12} /> View ({urls.length})
         </button>
-      ) : '-' },
+      ) : '-';
+    } },
   ];
 
   useEffect(() => { load(); }, []);
@@ -93,7 +96,7 @@ export default function Payments() {
     const errs = {};
     if (!form.enrollment_id) errs.enrollment = 'Select an enrollment';
     if (!form.amount_paid || parseFloat(form.amount_paid) <= 0) errs.amount = 'Enter a valid amount';
-    if (!receiptFile) errs.receipt = 'Payment screenshot/receipt is required for approval';
+    if (!receiptFiles.length) errs.receipt = 'Payment screenshot/receipt is required for approval';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -114,16 +117,17 @@ export default function Payments() {
         transaction_id: form.transaction_id,
       });
 
-      if (receiptFile && payment.id) {
-        const receipt = await compressImage(receiptFile);
-        await api.payments.uploadReceipt(payment.id, receipt);
+      if (receiptFiles.length && payment.id) {
+        const compressed = [];
+        for (const f of receiptFiles) compressed.push(await compressImage(f));
+        await api.payments.uploadReceipt(payment.id, compressed);
       }
 
       toast.success(`Payment of ₹${Number(form.amount_paid).toLocaleString()} recorded and sent for approval`);
       setShowAdd(false);
       setForm({ enrollment_id: '', student_id: '', amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
       setSelectedEnrollment(null);
-      setReceiptFile(null);
+      setReceiptFiles([]);
       setEnrollSearch('');
       setErrors({});
       load();
@@ -300,28 +304,33 @@ export default function Payments() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Screenshot / Receipt *</label>
-            <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${receiptFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 hover:border-primary-300'} ${errors.receipt ? 'border-red-300' : ''}`}>
-              {receiptFile ? (
-                <div>
-                  {isImage(receiptFile) ? (
-                    <img src={URL.createObjectURL(receiptFile)} alt="Receipt preview" className="max-h-40 mx-auto rounded-lg shadow-sm mb-2" />
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 text-sm mb-2">
-                      <FileText size={16} className="text-primary-600" />
-                      <span className="text-gray-700">{receiptFile.name}</span>
+            <div className={`border-2 border-dashed rounded-xl p-4 transition-colors ${receiptFiles.length ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 hover:border-primary-300'} ${errors.receipt ? 'border-red-300' : ''}`}>
+              {receiptFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {receiptFiles.map((f, i) => (
+                    <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-white group">
+                      {isImage(f) ? (
+                        <img src={URL.createObjectURL(f)} alt={`Receipt ${i + 1}`} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FileText size={16} className="text-primary-600" />
+                        </div>
+                      )}
+                      <button type="button" onClick={() => setReceiptFiles(receiptFiles.filter((_, j) => j !== i))}
+                        className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-600" title="Remove">
+                        <X size={12} />
+                      </button>
                     </div>
-                  )}
-                  <button type="button" onClick={() => setReceiptFile(null)} className="text-xs text-red-500 hover:underline">Remove file</button>
+                  ))}
                 </div>
-              ) : (
-                <label className="cursor-pointer flex flex-col items-center gap-1.5">
-                  <Upload size={24} className="text-gray-400" />
-                  <span className="text-sm font-medium text-gray-600">Click to upload payment screenshot</span>
-                  <span className="text-xs text-gray-400">Upload the UPI/transfer confirmation screenshot — manager will verify & approve</span>
-                  <input type="file" className="hidden" accept="image/*,application/pdf"
-                    onChange={(e) => { setReceiptFile(e.target.files[0]); setErrors({}); }} />
-                </label>
               )}
+              <label className="cursor-pointer flex flex-col items-center gap-1.5">
+                <Upload size={24} className="text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Click to upload payment screenshots</span>
+                <span className="text-xs text-gray-400">You can upload multiple images — manager will verify & approve</span>
+                <input type="file" className="hidden" accept="image/*,application/pdf" multiple
+                  onChange={(e) => { setReceiptFiles([...receiptFiles, ...Array.from(e.target.files || [])]); setErrors({}); e.target.value = ''; }} />
+              </label>
             </div>
             {errors.receipt && <p className="text-xs text-red-500 mt-1">{errors.receipt}</p>}
           </div>
@@ -345,8 +354,12 @@ export default function Payments() {
       <Modal open={!!viewPayment} onClose={() => setViewPayment(null)}
         title={viewPayment ? `Payment Receipt — ₹${Number(viewPayment.amount_paid).toLocaleString()}` : ''} size="xl">
         {viewPayment && (
-          <img src={viewPayment.receipt_url} alt="Payment receipt"
-            className="w-full rounded-xl object-contain max-h-[75vh] bg-gray-50" />
+          <div className="grid grid-cols-2 gap-3">
+            {getReceiptUrls(viewPayment).map((u, i) => (
+              <img key={i} src={u} alt={`Payment receipt ${i + 1}`}
+                className="w-full rounded-xl object-contain max-h-[70vh] bg-gray-50 border border-gray-100" />
+            ))}
+          </div>
         )}
       </Modal>
     </div>
