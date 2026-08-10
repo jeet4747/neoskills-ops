@@ -147,12 +147,12 @@ function generateReceipt(data) {
   doc.text(CURRENCY + formatINR(lineAmount), valueX, y, { width: 120, align: 'right' });
 
   y += 16;
-  doc.font('DejaVu').fontSize(9).fillColor(positive).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
-  doc.text(CURRENCY + formatINR(data.total_paid || 0), valueX, y, { width: 120, align: 'right' });
+  doc.font('DejaVu').fontSize(9).fillColor(midGray).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(data.total_paid || 0), valueX, y, { width: 120, align: 'right' });
 
   y += 16;
-  doc.font('DejaVu-Bold').fontSize(9).fillColor(warning).text('Balance', summaryX, y, { width: 130, align: 'left' });
-  doc.text(CURRENCY + formatINR(data.total_pending || 0), valueX, y, { width: 120, align: 'right' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(midGray).text('Balance', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(data.total_pending || 0), valueX, y, { width: 120, align: 'right' });
 
   y += 34;
   doc.font('DejaVu-Bold').fontSize(8).fillColor(dark).text('TERMS AND CONDITIONS', margin, y);

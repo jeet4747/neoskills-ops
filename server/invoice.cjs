@@ -191,15 +191,13 @@ function generateInvoice(data) {
   doc.text(CURRENCY + formatINR(totalAmount), valueX, y, { width: 120, align: 'right' });
   y += 28;
 
-  doc.rect(summaryX - 8, y - 4, 228, 22).fill('#ecfdf5');
-  doc.font('DejaVu-Bold').fontSize(9).fillColor(positive).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
-  doc.text(CURRENCY + formatINR(receivedAmount), valueX, y, { width: 120, align: 'right' });
+  doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Received Amount', summaryX, y, { width: 130, align: 'left' });
+  doc.font('DejaVu').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(receivedAmount), valueX, y, { width: 120, align: 'right' });
   y += 28;
 
   if (balanceAmount > 0) {
-    doc.rect(summaryX - 8, y - 4, 228, 22).fill('#fffbeb');
-    doc.font('DejaVu-Bold').fontSize(9).fillColor(warning).text('Balance', summaryX, y, { width: 130, align: 'left' });
-    doc.text(CURRENCY + formatINR(balanceAmount), valueX, y, { width: 120, align: 'right' });
+    doc.font('DejaVu-Bold').fontSize(9).fillColor(dark).text('Balance', summaryX, y, { width: 130, align: 'left' });
+    doc.font('DejaVu').fontSize(9).fillColor(dark).text(CURRENCY + formatINR(balanceAmount), valueX, y, { width: 120, align: 'right' });
     y += 28;
   }
 
