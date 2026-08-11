@@ -63,6 +63,7 @@ export const api = {
     create: (data) => request('/enrollments', { method: 'POST', body: JSON.stringify(data) }),
     createCombined: (data) => request('/enrollments/combined', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/enrollments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id, reason) => request(`/enrollments/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
   },
   payments: {
     list: (params) => {
@@ -88,6 +89,10 @@ export const api = {
     reject: (id, reason) =>
       request(`/approvals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
     count: () => request('/approvals/count'),
+  },
+  notifications: {
+    list: () => request('/notifications'),
+    markAllRead: () => request('/notifications/read', { method: 'POST' }),
   },
   reports: {
     salesperson: () => request('/reports/salesperson'),

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, Trophy } from 'lucide-react';
 import Sidebar from './Sidebar';
+import NotificationsBell from './NotificationsBell';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -28,6 +29,7 @@ export default function AppLayout() {
             </div>
           </div>
           <div className="flex-1" />
+          <NotificationsBell />
         </header>
         <main className="flex-1 overflow-y-auto p-5 lg:p-8 bg-gray-100">
           <div className="max-w-7xl mx-auto">

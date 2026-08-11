@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown, X } from 'lucide-react';
+import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown, X, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -52,7 +52,12 @@ export default function Enrollments() {
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payErrors, setPayErrors] = useState({});
 
+  const [deleting, setDeleting] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
+  const canDelete = user?.role === 'admin' || user?.role === 'manager';
 
   useEffect(() => { load(); }, []);
 
@@ -277,6 +282,13 @@ export default function Enrollments() {
               <FileDown size={14} />
             </button>
           )}
+          {canDelete && (
+            <button onClick={(ev) => { ev.stopPropagation(); setDeleting(r); setDeleteReason(''); }}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete enrollment">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
     )},
@@ -325,6 +337,20 @@ export default function Enrollments() {
     } catch (e) {
       toast.error(e.message);
     }
+  }
+
+  async function handleDeleteSubmit(e) {
+    e.preventDefault();
+    if (!deleteReason.trim()) { toast.error('Please enter a reason for deletion'); return; }
+    setDeleteSubmitting(true);
+    try {
+      await api.enrollments.remove(deleting.id, deleteReason.trim());
+      toast.success('Enrollment deleted. The salesperson will be notified.');
+      setDeleting(null);
+      setDeleteReason('');
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setDeleteSubmitting(false); }
   }
 
   function exportCSV() {
@@ -794,6 +820,32 @@ export default function Enrollments() {
                   {paySubmitting ? 'Saving...' : 'Record Payment'}
                 </button>
               </div>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Delete Enrollment Modal */}
+      <Modal open={!!deleting} onClose={() => { setDeleting(null); setDeleteReason(''); }} title="Delete Enrollment" size="md">
+        {deleting && (
+          <form onSubmit={handleDeleteSubmit} className="space-y-4">
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+              <p className="font-semibold text-gray-900">{deleting.student_name}</p>
+              <p className="text-sm text-gray-500">{deleting.course_name} · ₹{Number(deleting.total_amount).toLocaleString()}</p>
+              <p className="text-xs text-red-600 mt-2">This will permanently remove the enrollment and its payments. The salesperson who added it will be notified.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason for deletion *</label>
+              <textarea className="input-field min-h-[100px]" placeholder="e.g. Added twice by mistake, duplicate entry..."
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                required />
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t">
+              <button type="button" onClick={() => { setDeleting(null); setDeleteReason(''); }} className="btn-secondary">Cancel</button>
+              <button type="submit" className="px-6 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors" disabled={deleteSubmitting}>
+                {deleteSubmitting ? 'Deleting...' : 'Delete Enrollment'}
+              </button>
             </div>
           </form>
         )}

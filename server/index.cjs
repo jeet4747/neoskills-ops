@@ -604,6 +604,67 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
   }
 });
 
+app.delete('/api/enrollments/:id', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason || !reason.trim())
+      return res.status(400).json({ error: 'Reason is required to delete an enrollment' });
+
+    const enroll = await query(
+      `SELECT e.id, e.course_name, e.total_amount, e.sales_user_id,
+              s.name as student_name, u.name as salesperson_name
+       FROM enrollments e
+       JOIN students s ON e.student_id = s.id
+       JOIN users u ON e.sales_user_id = u.id
+       WHERE e.id = $1`,
+      [req.params.id]
+    );
+    if (!enroll.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+    const e = enroll.rows[0];
+
+    const message = `${e.student_name} — ${e.course_name} (₹${Number(e.total_amount).toLocaleString()}). Deleted by ${req.user.name}. Reason: ${reason.trim()}`;
+
+    await withTransaction(async (client) => {
+      await client.query('DELETE FROM payments WHERE enrollment_id = $1', [e.id]);
+      await client.query('DELETE FROM receipts WHERE enrollment_id = $1', [e.id]);
+      await client.query('DELETE FROM gst_invoices WHERE enrollment_id = $1', [e.id]);
+      await client.query('DELETE FROM enrollments WHERE id = $1', [e.id]);
+      await client.query(
+        `INSERT INTO notifications (user_id, type, title, message) VALUES ($1, 'enrollment_deleted', 'Enrollment Deleted', $2)`,
+        [e.sales_user_id, message]
+      );
+    });
+
+    res.json({ message: 'Enrollment deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/notifications', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, type, title, message, is_read, created_at
+       FROM notifications WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 30`,
+      [req.user.id]
+    );
+    const unread = result.rows.filter((n) => !n.is_read).length;
+    res.json({ items: result.rows, unread });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/notifications/read', auth(), async (req, res) => {
+  try {
+    await query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.user.id]);
+    res.json({ message: 'Marked as read' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/bank-accounts', auth(), async (req, res) => {
   try {
     const result = await query('SELECT * FROM bank_accounts WHERE is_active = true ORDER BY bank_name');
@@ -1729,6 +1790,15 @@ async function init() {
         bank_ifsc TEXT,
         enrollment_id INTEGER REFERENCES enrollments(id),
         created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        type TEXT DEFAULT 'enrollment_deleted',
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
