@@ -120,7 +120,7 @@ export default function Receipts() {
         rate: en.total_amount || '',
         amount: Number(en.total_amount) || 0,
       }],
-      received_amount: en.pending_amount || en.total_amount || '',
+      received_amount: en.paid_amount || '',
     }));
     setShowEnrollPicker(false);
     setEnrollSearch('');
