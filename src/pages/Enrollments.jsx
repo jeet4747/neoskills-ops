@@ -295,8 +295,8 @@ export default function Enrollments() {
     )},
     { key: 'support_included', label: 'Support', render: (r) => r.support_included ? 'Yes' : 'No' },
     { key: 'status', label: 'Status', render: (r) => (
-      <Badge status={r.status === 'waiting_approval' || r.status === 'active' ? 'waiting' : r.status}>
-        {r.status === 'waiting_approval' ? 'Waiting for Approval' : r.status === 'active' ? 'Approval Pending' : ''}
+      <Badge status={r.status === 'waiting_approval' ? 'waiting' : r.status === 'active' ? 'pending' : r.status}>
+        {r.status === 'waiting_approval' ? 'Approval Pending' : r.status === 'active' ? 'Payment Pending' : 'Completed'}
       </Badge>
     ) },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
@@ -366,8 +366,8 @@ export default function Enrollments() {
         </div>
         <select className="input-field w-44" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); }}>
           <option value="">All Status</option>
-          <option value="active">Approval Pending</option>
-          <option value="waiting_approval">Waiting for Approval</option>
+          <option value="active">Payment Pending</option>
+          <option value="waiting_approval">Approval Pending</option>
           <option value="completed">Completed</option>
         </select>
       </div>

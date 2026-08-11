@@ -69,7 +69,7 @@ export default function Reports() {
     { key: 'enrollments', label: 'Enrollments' },
     { key: 'collected', label: 'Collected', render: (r) => `₹${Number(r.collected).toLocaleString()}` },
     { key: 'pending_collection', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">{`₹${Number(r.pending_collection).toLocaleString()}`}</span> },
-    { key: 'pending_approvals', label: 'Pending Approvals' },
+    { key: 'pending_approvals', label: 'Approval Needed' },
   ];
 
   const bankCols = [

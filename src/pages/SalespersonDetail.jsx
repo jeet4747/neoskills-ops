@@ -99,7 +99,7 @@ export default function SalespersonDetail() {
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-purple-100 rounded-xl shrink-0"><Medal size={20} className="text-purple-600" /></div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Approvals</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wider">Approval Needed</p>
               <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{profile?.pending_approvals || 0}</p>
             </div>
           </div>

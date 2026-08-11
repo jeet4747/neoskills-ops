@@ -154,7 +154,7 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
@@ -222,7 +222,7 @@ app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, re
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
@@ -273,7 +273,7 @@ app.get('/api/users/:id/profile', auth(), async (req, res) => {
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
@@ -424,11 +424,11 @@ app.get('/api/enrollments', auth(), async (req, res) => {
       SELECT e.*, s.name as student_name, s.email as student_email, s.phone as student_phone, u.name as salesperson_name,
         COALESCE((
           SELECT SUM(p.amount_paid) FROM payments p
-          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+          WHERE p.enrollment_id = e.id AND p.status = 'approved'
         ), 0) as paid_amount,
         GREATEST(e.total_amount - COALESCE((
           SELECT SUM(p.amount_paid) FROM payments p
-          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+          WHERE p.enrollment_id = e.id AND p.status = 'approved'
         ), 0), 0) as pending_amount
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
@@ -508,7 +508,7 @@ app.get('/api/enrollments/:id/receipt', auth(['admin', 'manager', 'ops']), async
       [req.params.id]
     );
 
-    const considered = paysResult.rows.filter((p) => p.status === 'approved' || p.status === 'pending_approval');
+    const considered = paysResult.rows.filter((p) => p.status === 'approved');
     const totalPaid = considered.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
     const totalPending = Math.max(0, parseFloat(e.total_amount) - totalPaid);
     const lastPayment = considered[considered.length - 1] || null;
@@ -864,13 +864,13 @@ app.get('/api/receipts/pending', auth(['admin', 'manager', 'ops']), async (req, 
         u.name as salesperson_name,
         COALESCE((
           SELECT SUM(p.amount_paid) FROM payments p
-          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+          WHERE p.enrollment_id = e.id AND p.status = 'approved'
         ), 0) as paid_amount,
         GREATEST(e.total_amount - COALESCE((
           SELECT SUM(p.amount_paid) FROM payments p
-          WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+          WHERE p.enrollment_id = e.id AND p.status = 'approved'
         ), 0), 0) as pending_amount,
-        (SELECT COUNT(*) FROM payments p WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')) as payment_count
+        (SELECT COUNT(*) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved') as payment_count
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id
@@ -1276,7 +1276,7 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_pending,
@@ -1302,7 +1302,7 @@ app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, re
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
@@ -1376,11 +1376,11 @@ app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
              u.name as salesperson_name, e.total_amount,
              COALESCE((
                SELECT SUM(p2.amount_paid) FROM payments p2
-               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+               WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
              ), 0) as paid_amount,
              GREATEST(e.total_amount - COALESCE((
                SELECT SUM(p2.amount_paid) FROM payments p2
-               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+               WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
              ), 0), 0) as pending_amount
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
@@ -1388,7 +1388,7 @@ app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
       WHERE 1=1 ${salesFilter}
         AND GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0) > 0
       ORDER BY pending_amount DESC, e.created_at DESC
     `, params);
@@ -1408,7 +1408,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
-             WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+             WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending_collection,
@@ -1446,7 +1446,7 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), asyn
       SELECT s.name as student_name, s.phone, e.course_name, u.name as salesperson,
              GREATEST(e.total_amount - COALESCE((
                SELECT SUM(p2.amount_paid) FROM payments p2
-               WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+               WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
              ), 0), 0) as pending_amount,
              (SELECT MAX(p3.created_at) FROM payments p3 WHERE p3.enrollment_id = e.id) as last_payment_date
       FROM enrollments e
@@ -1454,7 +1454,7 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), asyn
       JOIN users u ON e.sales_user_id = u.id
       WHERE GREATEST(e.total_amount - COALESCE((
               SELECT SUM(p2.amount_paid) FROM payments p2
-              WHERE p2.enrollment_id = e.id AND p2.status IN ('pending_approval', 'approved')
+              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
             ), 0), 0) > 0
       ORDER BY pending_amount DESC
     `);
@@ -1505,7 +1505,7 @@ app.get('/api/reports/category', auth(['admin', 'manager', 'ops']), async (req, 
                e.total_amount, e.created_at,
                COALESCE((
                  SELECT SUM(p.amount_paid) FROM payments p
-                 WHERE p.enrollment_id = e.id AND p.status IN ('pending_approval', 'approved')
+                 WHERE p.enrollment_id = e.id AND p.status = 'approved'
                ), 0) as paid
         FROM enrollments e
         ${where}

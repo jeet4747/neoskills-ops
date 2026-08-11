@@ -130,7 +130,7 @@ export default function Dashboard() {
           user?.role === 'admin' ? (
             <GradientStatsCard icon={TrendingUp} label="Total Nominations (This Month)" value={summary?.month_total_enrollments || 0} color="blue" />
           ) : (
-            <GradientStatsCard icon={AlertCircle} label="Pending Approvals" value={summary?.pending_approvals || 0} color="red" />
+            <GradientStatsCard icon={AlertCircle} label="Approval Needed" value={summary?.pending_approvals || 0} color="red" />
           )
         ) : (
           <GradientStatsCard icon={TrendingUp} label="Total Nominations" value={summary?.total_enrollments || 0} color="blue" />
