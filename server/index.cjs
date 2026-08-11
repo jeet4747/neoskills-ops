@@ -16,6 +16,8 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'neosecret2026';
 
+const COMPANY_PREFIX = { neoskills: 'NEO', careervue: 'CV', frolics: 'FRO' };
+
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -979,7 +981,8 @@ async function nextReceiptNumber(prefix) {
 app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const b = req.body;
-    const { number, seq } = await nextReceiptNumber(b.prefix);
+    const prefix = COMPANY_PREFIX[b.company] || b.prefix || 'NEO';
+    const { number, seq } = await nextReceiptNumber(prefix);
     const items = JSON.stringify(b.items || []);
     const result = await query(
       `INSERT INTO receipts (
@@ -993,7 +996,7 @@ app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) =>
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15,
          $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
        ) RETURNING *`,
-      [number, b.prefix || 'NEO', seq, b.enrollment_id || null,
+      [number, prefix, seq, b.enrollment_id || null,
        b.student_name, b.student_phone, b.student_email, b.student_city, b.course_name,
        items, b.company || 'neoskills', b.tax_rate || 0, b.discount || 0, b.subtotal || 0, b.tax_amount || 0, b.total_amount || 0,
        b.received_amount || 0, b.balance_amount || 0, b.payment_mode, b.transaction_id,
@@ -1009,6 +1012,22 @@ app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) =>
 app.put('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const b = req.body;
+    const existing = await query('SELECT * FROM receipts WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+    const cur = existing.rows[0];
+
+    const newCompany = b.company || cur.company || 'neoskills';
+    const expectedPrefix = COMPANY_PREFIX[newCompany] || cur.prefix || 'NEO';
+    let prefix = cur.prefix;
+    let number = cur.receipt_number;
+    let seq = cur.sequence;
+    if (newCompany !== cur.company || prefix !== expectedPrefix) {
+      const n = await nextReceiptNumber(expectedPrefix);
+      prefix = expectedPrefix;
+      number = n.number;
+      seq = n.seq;
+    }
+
     const items = JSON.stringify(b.items || []);
     const result = await query(
       `UPDATE receipts SET
@@ -1016,15 +1035,15 @@ app.put('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res)
          student_city = $5, course_name = $6, items = $7::jsonb, company = $8,
          tax_rate = $9, discount = $10, subtotal = $11, tax_amount = $12, total_amount = $13,
          received_amount = $14, balance_amount = $15, payment_mode = $16, transaction_id = $17,
-         bank_account_name = $18, bank_account_number = $19, bank_name = $20, bank_ifsc = $21, notes = $22
-       WHERE id = $23 RETURNING *`,
+         bank_account_name = $18, bank_account_number = $19, bank_name = $20, bank_ifsc = $21,
+         notes = $22, receipt_number = $23, prefix = $24, sequence = $25
+       WHERE id = $26 RETURNING *`,
       [b.enrollment_id || null, b.student_name, b.student_phone, b.student_email,
-       b.student_city, b.course_name, items, b.company || 'neoskills', b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
+       b.student_city, b.course_name, items, newCompany, b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
        b.tax_amount || 0, b.total_amount || 0, b.received_amount || 0, b.balance_amount || 0,
        b.payment_mode, b.transaction_id, b.bank_account_name, b.bank_account_number,
-       b.bank_name, b.bank_ifsc, b.notes, req.params.id]
+       b.bank_name, b.bank_ifsc, b.notes, number, prefix, seq, req.params.id]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });

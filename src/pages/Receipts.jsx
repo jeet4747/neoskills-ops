@@ -127,10 +127,12 @@ export default function Receipts() {
   }
 
   function applyTemplate(t) {
+    const company = t.company || 'neoskills';
+    const prefix = COMPANY_PREFIX[company] || t.prefix || 'NEO';
     setForm((f) => ({
       ...f,
-      prefix: t.prefix || f.prefix,
-      company: t.company || f.company,
+      prefix,
+      company,
       payment_mode: t.payment_mode || f.payment_mode,
       bank_account_name: t.bank_account_name || f.bank_account_name,
       bank_account_number: t.bank_account_number || f.bank_account_number,
@@ -138,6 +140,9 @@ export default function Receipts() {
       bank_ifsc: t.bank_ifsc || f.bank_ifsc,
       notes: t.notes || f.notes,
     }));
+    api.receipts.nextNumber(prefix).then((d) =>
+      setForm((f) => ({ ...f, prefix, receipt_number: d.number }))
+    ).catch(() => {});
     toast.success(`Template "${t.name}" applied`);
   }
 
@@ -277,13 +282,9 @@ export default function Receipts() {
   function handleCompanyChange(company) {
     const prefix = COMPANY_PREFIX[company] || 'NEO';
     setForm((f) => ({ ...f, company, prefix }));
-    if (!form.id) {
-      try {
-        api.receipts.nextNumber(prefix).then((d) =>
-          setForm((f) => (f.id ? f : { ...f, receipt_number: d.number }))
-        ).catch(() => {});
-      } catch (e) { /* ignore */ }
-    }
+    api.receipts.nextNumber(prefix).then((d) =>
+      setForm((f) => ({ ...f, prefix, receipt_number: d.number }))
+    ).catch(() => {});
   }
 
   async function openEnrollPicker() {
@@ -685,7 +686,7 @@ export default function Receipts() {
                 </div>
                 <div className="flex items-center justify-between mt-4 gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                    <Settings2 size={13} /> Prefix: <input className="input-field w-20 py-1 text-xs" value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })} />
+                    <Settings2 size={13} /> Prefix: <span className="px-2 py-1 bg-gray-50 rounded-lg border text-xs font-semibold text-gray-700">{COMPANY_PREFIX[form.company] || form.prefix || 'NEO'}</span>
                   </div>
                   <button onClick={() => handleSave().then(() => {})} className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-1.5">
                     <RefreshCw size={13} /> Generate number on save
