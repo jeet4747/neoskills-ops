@@ -339,6 +339,8 @@ app.post('/api/enrollments', auth(), async (req, res) => {
     const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, source, batch_name, support_included, telecrm_link } = req.body;
     if (!student_id || !course_name || !total_amount)
       return res.status(400).json({ error: 'student_id, course_name, total_amount required' });
+    if (!telecrm_link || !String(telecrm_link).trim())
+      return res.status(400).json({ error: 'TeleCRM link is required' });
     const result = await query(
       `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
@@ -358,6 +360,10 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
 
     if (!student_name || !course_name)
       return res.status(400).json({ error: 'student_name and course_name required' });
+    if (!student_email || !String(student_email).trim())
+      return res.status(400).json({ error: 'Email is required' });
+    if (!telecrm_link || !String(telecrm_link).trim())
+      return res.status(400).json({ error: 'TeleCRM link is required' });
     if (!amount_paid || parseFloat(amount_paid) <= 0)
       return res.status(400).json({ error: 'Enter payment received amount' });
     if (parseFloat(amount_paid) > parseFloat(total_amount))

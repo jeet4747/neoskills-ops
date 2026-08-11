@@ -112,6 +112,7 @@ export default function Enrollments() {
   function validate() {
     const errs = {};
     if (!form.candidate_name.trim()) errs.candidate_name = 'Candidate name is required';
+    if (!form.email.trim()) errs.email = 'Email is required';
     if (!form.telecrm_link.trim()) errs.telecrm_link = 'TeleCRM link is required';
     if (!form.course_name.trim()) errs.course_name = 'Module / course is required';
     if (total <= 0) errs.fees = 'Fee must be greater than 0';
@@ -436,10 +437,11 @@ export default function Enrollments() {
                 {errors.candidate_name && <p className="text-xs text-red-500 mt-1">{errors.candidate_name}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email ID</label>
-                <input type="email" className="input-field" value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email ID *</label>
+                <input type="email" className={`input-field ${errors.email ? 'border-red-300' : ''}`} value={form.email}
+                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors({}); }}
                   placeholder="candidate@email.com" />
+                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Number</label>
