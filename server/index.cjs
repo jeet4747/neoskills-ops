@@ -271,6 +271,7 @@ app.get('/api/users/:id/profile', auth(), async (req, res) => {
 
     const stats = await query(`
       SELECT
+        (SELECT COALESCE(SUM(e.total_amount), 0) FROM enrollments e WHERE e.sales_user_id = u.id) as total_business,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
@@ -668,6 +669,150 @@ app.post('/api/notifications/read', auth(), async (req, res) => {
   try {
     await query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.user.id]);
     res.json({ message: 'Marked as read' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const BATCH_STATS = `
+  COALESCE(m.cnt, 0) AS student_count,
+  COALESCE(m.total_fee, 0) AS total_fee,
+  COALESCE(m.received, 0) AS received,
+  COALESCE(m.pending_approval, 0) AS pending_approval
+`;
+const BATCH_STATS_JOIN = `
+  LEFT JOIN (
+    SELECT bm.batch_id,
+      COUNT(*) AS cnt,
+      SUM(e.total_amount) AS total_fee,
+      COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) AS received,
+      COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'pending_approval'), 0) AS pending_approval
+    FROM batch_members bm
+    JOIN enrollments e ON e.id = bm.enrollment_id
+    LEFT JOIN payments p ON p.enrollment_id = e.id
+    GROUP BY bm.batch_id
+  ) m ON m.batch_id = b.id
+`;
+
+app.get('/api/batches', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT b.*, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} ORDER BY b.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/batches/:id', auth(), async (req, res) => {
+  try {
+    const batch = await query(
+      `SELECT b.*, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} WHERE b.id = $1`,
+      [req.params.id]
+    );
+    if (!batch.rows.length) return res.status(404).json({ error: 'Batch not found' });
+    const members = await query(
+      `SELECT e.id AS enrollment_id, e.course_name, e.total_amount, e.status AS enrollment_status,
+              s.name AS student_name, s.phone AS student_phone, s.email AS student_email,
+              u.name AS salesperson_name,
+              COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) AS received,
+              COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'pending_approval'), 0) AS pending_approval
+       FROM batch_members bm
+       JOIN enrollments e ON e.id = bm.enrollment_id
+       JOIN students s ON s.id = e.student_id
+       JOIN users u ON u.id = e.sales_user_id
+       LEFT JOIN payments p ON p.enrollment_id = e.id
+       WHERE bm.batch_id = $1
+       GROUP BY e.id, s.id, u.name
+       ORDER BY s.name`,
+      [req.params.id]
+    );
+    res.json({ ...batch.rows[0], members: members.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/batches', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
+    if (!name || !name.trim())
+      return res.status(400).json({ error: 'Batch name is required' });
+    const result = await query(
+      `INSERT INTO batches (name, course_name, trainer_name, start_date, status, zoom_link, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [name.trim(), course_name || null, trainer_name || null, start_date || null, status === 'completed' ? 'completed' : 'active', zoom_link || null, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/batches/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
+    const existing = await query('SELECT id FROM batches WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Batch not found' });
+    const result = await query(
+      `UPDATE batches SET
+         name = COALESCE($1, name),
+         course_name = COALESCE($2, course_name),
+         trainer_name = COALESCE($3, trainer_name),
+         start_date = COALESCE($4, start_date),
+         status = CASE WHEN $5::text IN ('active', 'completed') THEN $5::text ELSE status END,
+         zoom_link = COALESCE($6, zoom_link)
+       WHERE id = $7 RETURNING *`,
+      [name?.trim() || null, course_name || null, trainer_name || null, start_date || null, status || null, zoom_link || null, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/batches/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query('DELETE FROM batches WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Batch not found' });
+    res.json({ message: 'Batch deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/batches/:id/members', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const batch = await query('SELECT id FROM batches WHERE id = $1', [req.params.id]);
+    if (!batch.rows.length) return res.status(404).json({ error: 'Batch not found' });
+    const ids = Array.isArray(req.body.enrollment_ids) ? req.body.enrollment_ids : [];
+    const valid = ids.filter((x) => Number.isInteger(x) || /^\d+$/.test(String(x)));
+    if (!valid.length) return res.status(400).json({ error: 'Select at least one enrollment' });
+    await withTransaction(async (client) => {
+      for (const id of valid) {
+        await client.query(
+          `INSERT INTO batch_members (batch_id, enrollment_id)
+           VALUES ($1, $2)
+           ON CONFLICT (batch_id, enrollment_id) DO NOTHING`,
+          [req.params.id, Number(id)]
+        );
+      }
+    });
+    res.status(201).json({ message: `Added ${valid.length} student(s)` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/batches/:id/members/:enrollmentId', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const result = await query(
+      'DELETE FROM batch_members WHERE batch_id = $1 AND enrollment_id = $2 RETURNING id',
+      [req.params.id, req.params.enrollmentId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Student not in batch' });
+    res.json({ message: 'Student removed from batch' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1380,23 +1525,32 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
 
 app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const { month } = req.query;
+    let monthE = '';
+    let monthP = '';
+    let params = [];
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      monthE = `AND date_trunc('month', e.created_at) = date_trunc('month', $1::date)`;
+      monthP = `AND date_trunc('month', p.created_at) = date_trunc('month', $1::date)`;
+      params.push(month + '-01');
+    }
     const result = await query(`
       SELECT
         u.id, u.name, u.email, u.role, u.can_sell,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as deals_closed,
-        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as revenue,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id ${monthE}) as deals_closed,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved' ${monthP}) as revenue,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
-         FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
-        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
+         FROM enrollments e WHERE e.sales_user_id = u.id ${monthE}) as pending,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval' ${monthP}) as pending_approvals
       FROM users u
       WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
       ORDER BY revenue DESC
-    `);
+    `, params);
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1826,6 +1980,23 @@ async function init() {
         is_read BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS batches (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        course_name TEXT,
+        trainer_name TEXT,
+        start_date DATE,
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS batch_members (
+        id SERIAL PRIMARY KEY,
+        batch_id INTEGER REFERENCES batches(id) ON DELETE CASCADE,
+        enrollment_id INTEGER REFERENCES enrollments(id) ON DELETE CASCADE,
+        added_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (batch_id, enrollment_id)
+      );
     `);
     console.log('Database tables created');
 
@@ -1845,6 +2016,7 @@ async function init() {
       await query(`ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status IN ('active', 'completed', 'waiting_approval'))`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
+      await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
                    WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);

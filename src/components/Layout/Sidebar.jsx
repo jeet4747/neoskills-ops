@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -26,6 +26,7 @@ export default function Sidebar({ open, onClose }) {
       badge: pendingCount > 0 ? pendingCount : null,
     },
     { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin', 'ops'] },
+    { to: '/batches', icon: Layers, label: 'Batches', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/receipts', icon: FileText, label: 'Receipts', roles: ['admin', 'manager', 'ops'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin', 'manager', 'ops'] },
     { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },

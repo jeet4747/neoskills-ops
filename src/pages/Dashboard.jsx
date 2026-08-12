@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +14,7 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
   const [team, setTeam] = useState([]);
   const [trends, setTrends] = useState([]);
@@ -166,6 +168,7 @@ export default function Dashboard() {
               <div className="space-y-2">
                 {team.map((person, i) => (
                   <div key={person.id}
+                    onClick={() => navigate(`/salesperson/${person.id}`)}
                     className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group">
                     <div className="w-8 h-8 flex items-center justify-center text-lg shrink-0">
                       {rankEmojis[i] || `#${i + 1}`}
@@ -173,14 +176,15 @@ export default function Dashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate group-hover:text-primary-600 transition-colors">{person.name}</p>
                       <div className="flex items-center gap-3 text-xs text-gray-400">
-                        <span>{person.deals_closed} deals</span>
-                        <span>₹{Number(person.revenue).toLocaleString()}</span>
+                        <span>{person.deals_closed} {person.deals_closed === 1 ? 'nomination' : 'nominations'}</span>
+                        <span>₹{Number(person.revenue).toLocaleString()} received</span>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-gray-900">₹{Number(person.revenue).toLocaleString()}</p>
                       <p className="text-xs text-amber-500">₹{Number(person.pending).toLocaleString()} pending</p>
                     </div>
+                    <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-500 transition-colors shrink-0" />
                   </div>
                 ))}
                 {!team.length && <p className="text-center text-gray-400 py-8 text-sm">No team data for this period</p>}
@@ -254,17 +258,17 @@ export default function Dashboard() {
                   <thead>
                     <tr className="border-b border-gray-50">
                       <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Salesperson</th>
+                      <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Nominations</th>
                       <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Revenue</th>
-                      <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Deals</th>
                       <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Pending</th>
                     </tr>
                   </thead>
                   <tbody>
                     {team.map((person) => (
-                      <tr key={person.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
-                        <td className="px-5 py-3.5 font-medium text-gray-900">{person.name}</td>
-                        <td className="px-5 py-3.5">₹{Number(person.revenue).toLocaleString()}</td>
+                      <tr key={person.id} onClick={() => navigate(`/salesperson/${person.id}`)} className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
+                        <td className="px-5 py-3.5 font-medium text-gray-900 hover:text-primary-600 transition-colors">{person.name}</td>
                         <td className="px-5 py-3.5 text-gray-600">{person.deals_closed}</td>
+                        <td className="px-5 py-3.5">₹{Number(person.revenue).toLocaleString()}</td>
                         <td className="px-5 py-3.5 text-amber-600 font-medium">₹{Number(person.pending).toLocaleString()}</td>
                       </tr>
                     ))}

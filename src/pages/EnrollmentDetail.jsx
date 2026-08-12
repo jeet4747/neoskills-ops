@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, DollarSign, Calendar, User, BookOpen, Download, FileDown } from 'lucide-react';
+import { ArrowLeft, DollarSign, Calendar, User, BookOpen, Download, FileDown, ExternalLink, Pencil, Save } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -20,8 +20,13 @@ export default function EnrollmentDetail() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [viewPayment, setViewPayment] = useState(null);
+  const [showEditTelecrm, setShowEditTelecrm] = useState(false);
+  const [telecrmInput, setTelecrmInput] = useState('');
+  const [savingTelecrm, setSavingTelecrm] = useState(false);
 
   const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
+  const isOwner = user && user.id === enrollment?.sales_user_id;
+  const canEditTelecrm = isOps || isOwner;
 
   useEffect(() => { load(); }, [id]);
 
@@ -66,6 +71,26 @@ export default function EnrollmentDetail() {
       navigate('/enrollments');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openEditTelecrm() {
+    setTelecrmInput(enrollment?.telecrm_link || '');
+    setShowEditTelecrm(true);
+  }
+
+  async function saveTelecrm() {
+    if (!telecrmInput.trim()) { toast.error('TeleCRM link is required'); return; }
+    try {
+      setSavingTelecrm(true);
+      await api.enrollments.update(id, { telecrm_link: telecrmInput.trim() });
+      setEnrollment((e) => ({ ...e, telecrm_link: telecrmInput.trim() }));
+      setShowEditTelecrm(false);
+      toast.success('TeleCRM link updated');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSavingTelecrm(false);
     }
   }
 
@@ -140,6 +165,24 @@ export default function EnrollmentDetail() {
               <Badge status={Number(totalPending) > 0 ? 'active' : 'completed'} />
             </div>
           </div>
+          <div className="mt-4 pt-4 border-t border-gray-50 flex flex-col sm:flex-row sm:items-center gap-2">
+            <span className="text-xs text-gray-400 uppercase tracking-wider">TeleCRM Link</span>
+            {enrollment.telecrm_link ? (
+              <a href={enrollment.telecrm_link} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline truncate max-w-full">
+                {enrollment.telecrm_link}
+                <ExternalLink size={13} className="shrink-0" />
+              </a>
+            ) : (
+              <span className="text-sm text-gray-400">Not added</span>
+            )}
+            {canEditTelecrm && (
+              <button onClick={openEditTelecrm}
+                className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-primary-600 hover:bg-primary-50 px-2.5 py-1.5 rounded-lg transition-colors">
+                <Pencil size={13} /> Edit
+              </button>
+            )}
+          </div>
         </CardBody>
       </Card>
 
@@ -192,6 +235,27 @@ export default function EnrollmentDetail() {
             ))}
           </div>
         )}
+      </Modal>
+      <Modal open={showEditTelecrm} onClose={() => setShowEditTelecrm(false)} title="Edit TeleCRM Link">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">TeleCRM Link *</label>
+            <input
+              value={telecrmInput}
+              onChange={(e) => setTelecrmInput(e.target.value)}
+              placeholder="https://neoskills.telecrm.in/..."
+              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Link to this candidate's deal in TeleCRM.</p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setShowEditTelecrm(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
+            <button onClick={saveTelecrm} disabled={savingTelecrm}
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 disabled:opacity-50 transition-colors">
+              <Save size={15} /> {savingTelecrm ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

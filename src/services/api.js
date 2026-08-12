@@ -94,6 +94,17 @@ export const api = {
     list: () => request('/notifications'),
     markAllRead: () => request('/notifications/read', { method: 'POST' }),
   },
+  batches: {
+    list: () => request('/batches'),
+    get: (id) => request(`/batches/${id}`),
+    create: (data) => request('/batches', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/batches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id) => request(`/batches/${id}`, { method: 'DELETE' }),
+    addMembers: (id, enrollmentIds) =>
+      request(`/batches/${id}/members`, { method: 'POST', body: JSON.stringify({ enrollment_ids: enrollmentIds }) }),
+    removeMember: (id, enrollmentId) =>
+      request(`/batches/${id}/members/${enrollmentId}`, { method: 'DELETE' }),
+  },
   reports: {
     salesperson: () => request('/reports/salesperson'),
     bankWise: () => request('/reports/bank-wise'),
