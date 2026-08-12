@@ -444,18 +444,18 @@ export default function Enrollments() {
                 {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Number</label>
-                <input className="input-field" value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="10-digit mobile number" />
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">TeleCRM Link of the Candidate *</label>
                 <input className={`input-field ${errors.telecrm_link ? 'border-red-300' : ''}`}
                   value={form.telecrm_link}
                   onChange={(e) => { setForm({ ...form, telecrm_link: e.target.value }); setErrors({}); }}
                   placeholder="https://neoskills.telecrm.in/..." />
                 {errors.telecrm_link && <p className="text-xs text-red-500 mt-1">{errors.telecrm_link}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Number</label>
+                <input className="input-field" value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="10-digit mobile number" />
               </div>
             </div>
           </section>
