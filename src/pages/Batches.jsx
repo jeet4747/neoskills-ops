@@ -629,11 +629,9 @@ export default function Batches() {
                     <Mail size={15} /> Email Zoom Invite
                   </button>
                 )}
-                {canManage && (
-                  <button onClick={openAddStudents} className="flex items-center gap-2 px-3.5 py-2 bg-primary-600 text-white text-xs font-medium rounded-xl hover:bg-primary-700 transition-colors">
-                    <UserPlus size={15} /> Add Students
-                  </button>
-                )}
+                <button onClick={openAddStudents} className="flex items-center gap-2 px-3.5 py-2 bg-primary-600 text-white text-xs font-medium rounded-xl hover:bg-primary-700 transition-colors">
+                  <UserPlus size={15} /> Add Students
+                </button>
               </div>
             </div>
 
@@ -645,7 +643,7 @@ export default function Batches() {
               <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
                 <Users size={32} className="mx-auto text-gray-300 mb-2" />
                 <p className="text-sm text-gray-500">No students in this batch yet.</p>
-                {canManage && <button onClick={openAddStudents} className="mt-3 text-sm font-medium text-primary-600 hover:underline">Add students from enrollments</button>}
+                <button onClick={openAddStudents} className="mt-3 text-sm font-medium text-primary-600 hover:underline">Add students from enrollments</button>
               </div>
             ) : (
               <div className="overflow-x-auto border border-gray-100 rounded-xl">
