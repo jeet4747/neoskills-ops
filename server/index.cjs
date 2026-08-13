@@ -1549,7 +1549,7 @@ app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, re
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval' ${monthP}) as pending_approvals
       FROM users u
       WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
-      ORDER BY revenue DESC
+      ORDER BY deals_closed DESC, revenue DESC
     `, params);
     res.json(result.rows);
   } catch (e) {

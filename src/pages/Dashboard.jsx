@@ -175,14 +175,13 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate group-hover:text-primary-600 transition-colors">{person.name}</p>
-                      <div className="flex items-center gap-3 text-xs text-gray-400">
-                        <span>{person.deals_closed} {person.deals_closed === 1 ? 'nomination' : 'nominations'}</span>
-                        <span>₹{Number(person.revenue).toLocaleString()} received</span>
-                      </div>
+                      <p className="text-xs text-gray-400">
+                        {person.deals_closed} {person.deals_closed === 1 ? 'nomination' : 'nominations'}
+                      </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-gray-900">₹{Number(person.revenue).toLocaleString()}</p>
-                      <p className="text-xs text-amber-500">₹{Number(person.pending).toLocaleString()} pending</p>
+                      <p className="text-sm font-bold text-gray-900">{person.deals_closed}</p>
+                      <p className="text-xs text-gray-400">{person.deals_closed === 1 ? 'deal' : 'deals'}</p>
                     </div>
                     <ChevronRight size={16} className="text-gray-300 group-hover:text-primary-500 transition-colors shrink-0" />
                   </div>
