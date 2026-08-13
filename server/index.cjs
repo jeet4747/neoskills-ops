@@ -962,9 +962,6 @@ app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res)
     const existing = await query('SELECT * FROM payments WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Payment not found' });
     const payment = existing.rows[0];
-    if (payment.status === 'approved') {
-      return res.status(400).json({ error: 'Approved payments cannot be edited' });
-    }
 
     const amount = amount_paid !== undefined && amount_paid !== '' ? parseFloat(amount_paid) : parseFloat(payment.amount_paid);
     if (isNaN(amount) || amount <= 0) {
