@@ -438,10 +438,21 @@ app.get('/api/enrollments', auth(), async (req, res) => {
         GREATEST(e.total_amount - COALESCE((
           SELECT SUM(p.amount_paid) FROM payments p
           WHERE p.enrollment_id = e.id AND p.status = 'approved'
-        ), 0), 0) as pending_amount
+        ), 0), 0) as pending_amount,
+        lp.id as last_payment_id,
+        lp.bank_account_id as bank_account_id,
+        lp.bank_account_name as bank_account_name
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id
+      LEFT JOIN LATERAL (
+        SELECT p.id, p.bank_account_id, ba.account_name as bank_account_name
+        FROM payments p
+        LEFT JOIN bank_accounts ba ON p.bank_account_id = ba.id
+        WHERE p.enrollment_id = e.id
+        ORDER BY p.created_at DESC
+        LIMIT 1
+      ) lp ON true
     `;
     let params = [];
     const conditions = [];

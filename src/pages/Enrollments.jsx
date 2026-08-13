@@ -56,6 +56,9 @@ export default function Enrollments() {
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
+  const [bankEdit, setBankEdit] = useState(null);
+  const [savingBank, setSavingBank] = useState(false);
+
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
   const canDelete = user?.role === 'admin' || user?.role === 'manager';
 
@@ -306,6 +309,18 @@ export default function Enrollments() {
         ₹{Number(r.pending_amount || 0).toLocaleString()}
       </span>
     )},
+    { key: 'bank_account_name', label: 'Bank', render: (r) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span className={r.bank_account_name ? 'text-gray-700' : 'text-gray-300'}>{r.bank_account_name || '—'}</span>
+        {isOps && (
+          <button onClick={(ev) => { ev.stopPropagation(); setBankEdit({ ...r, bank_account_id: r.bank_account_id ? String(r.bank_account_id) : '' }); }}
+            className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+            title="Edit bank account">
+            <Pencil size={13} />
+          </button>
+        )}
+      </span>
+    )},
     { key: 'support_included', label: 'Support', render: (r) => r.support_included ? 'Yes' : 'No' },
     { key: 'status', label: 'Status', render: (r) => (
       <Badge status={r.status === 'waiting_approval' ? 'waiting' : r.status === 'active' ? 'pending' : r.status}>
@@ -352,6 +367,24 @@ export default function Enrollments() {
       load();
     } catch (e) { toast.error(e.message); }
     finally { setDeleteSubmitting(false); }
+  }
+
+  async function handleBankSave(e) {
+    e.preventDefault();
+    if (!bankEdit.last_payment_id) { toast.error('No payment recorded for this enrollment yet'); return; }
+    setSavingBank(true);
+    try {
+      const account = bankAccounts.find((b) => b.id === parseInt(bankEdit.bank_account_id));
+      const updated = await api.payments.update(bankEdit.last_payment_id, {
+        bank_account_id: bankEdit.bank_account_id ? parseInt(bankEdit.bank_account_id) : null,
+      });
+      setEnrollments((prev) => prev.map((r) => r.id === bankEdit.id
+        ? { ...r, bank_account_id: updated.bank_account_id, bank_account_name: account?.account_name || null }
+        : r));
+      setBankEdit(null);
+      toast.success('Bank account updated');
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingBank(false); }
   }
 
   function exportCSV() {
@@ -856,6 +889,39 @@ export default function Enrollments() {
               <button type="button" onClick={() => { setDeleting(null); setDeleteReason(''); }} className="btn-secondary">Cancel</button>
               <button type="submit" className="px-6 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors" disabled={deleteSubmitting}>
                 {deleteSubmitting ? 'Deleting...' : 'Delete Enrollment'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Edit Bank Account Modal */}
+      <Modal open={!!bankEdit} onClose={() => setBankEdit(null)} title="Edit Bank Account" size="sm">
+        {bankEdit && (
+          <form onSubmit={handleBankSave} className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="font-semibold text-gray-900">{bankEdit.student_name}</p>
+              <p className="text-sm text-gray-500">{bankEdit.course_name}</p>
+              {!bankEdit.last_payment_id && (
+                <p className="text-xs text-red-600 mt-2">No payment recorded for this enrollment yet, so no bank account to edit.</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Bank Account</label>
+              <select className="input-field" value={bankEdit.bank_account_id || ''}
+                onChange={(e) => setBankEdit({ ...bankEdit, bank_account_id: e.target.value })}
+                disabled={!bankEdit.last_payment_id}>
+                <option value="">No account selected</option>
+                {bankAccounts.map((b) => (
+                  <option key={b.id} value={b.id}>{accountLabel(b)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setBankEdit(null)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
+              <button type="submit" disabled={savingBank || !bankEdit.last_payment_id}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 disabled:opacity-50 transition-colors">
+                <Check size={15} /> {savingBank ? 'Saving...' : 'Save'}
               </button>
             </div>
           </form>
