@@ -361,7 +361,7 @@ export default function Batches() {
       )}
 
       {!canManage && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card><CardBody>
             <div className="flex items-center gap-4">
               <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><Layers size={20} /></div>
@@ -377,16 +377,6 @@ export default function Batches() {
               <div>
                 <p className="text-xs text-gray-500">Students in Batches</p>
                 <p className="text-xl font-bold text-gray-900">{totalStudents}</p>
-              </div>
-            </div>
-          </CardBody></Card>
-          <Card><CardBody>
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 bg-primary-50 text-primary-600 rounded-xl flex items-center justify-center"><Banknote size={20} /></div>
-              <div>
-                <p className="text-xs text-gray-500">Received from Batches</p>
-                <p className="text-xl font-bold text-emerald-600">{fmt(totalReceived)}</p>
-                <p className="text-xs text-gray-400">of {fmt(totalBusiness)} business</p>
               </div>
             </div>
           </CardBody></Card>
