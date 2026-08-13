@@ -63,8 +63,8 @@ export default function SalespersonDetail() {
       ),
     },
     { key: 'total_amount', label: 'Total', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
-    { key: 'paid_amount', label: 'Received', render: (r) => <span className="text-emerald-600 font-medium">₹${Number(r.paid_amount || 0).toLocaleString()}</span> },
-    { key: 'pending_amount', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">₹${Number(r.pending_amount || 0).toLocaleString()}</span> },
+    { key: 'paid_amount', label: 'Received', render: (r) => <span className="text-emerald-600 font-medium">₹{Number(r.paid_amount || 0).toLocaleString()}</span> },
+    { key: 'pending_amount', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">₹{Number(r.pending_amount || 0).toLocaleString()}</span> },
     {
       key: 'telecrm_link', label: 'TeleCRM',
       render: (r) => r.telecrm_link ? (
