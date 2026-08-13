@@ -368,6 +368,15 @@ export default function Enrollments() {
     toast.success('CSV exported');
   }
 
+  const filteredEnrollments = enrollments.filter((r) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (r.student_name || '').toLowerCase().includes(q)
+      || (r.student_phone || '').toLowerCase().includes(q)
+      || (r.student_email || '').toLowerCase().includes(q)
+      || (r.course_name || '').toLowerCase().includes(q);
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -405,15 +414,15 @@ export default function Enrollments() {
         </div>
       ) : (
         <Card><CardBody className="p-0">
-          <Table columns={columns} data={enrollments} />
-          {!enrollments.length && (
+          <Table columns={columns} data={filteredEnrollments} />
+          {!filteredEnrollments.length && (
             <div className="text-center py-16">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <GraduationCap size={28} className="text-gray-300" />
               </div>
-              <h3 className="text-sm font-medium text-gray-500 mb-1">No enrollments yet</h3>
-              <p className="text-xs text-gray-400 mb-4">Create your first enrollment to get started</p>
-              <button onClick={() => setShowAdd(true)} className="btn-primary text-sm">Add Enrollment</button>
+              <h3 className="text-sm font-medium text-gray-500 mb-1">{search ? 'No enrollments match your search' : 'No enrollments yet'}</h3>
+              <p className="text-xs text-gray-400 mb-4">{search ? 'Try a different name, phone or module' : 'Create your first enrollment to get started'}</p>
+              {!search && <button onClick={() => setShowAdd(true)} className="btn-primary text-sm">Add Enrollment</button>}
             </div>
           )}
         </CardBody></Card>

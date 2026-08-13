@@ -7,6 +7,7 @@ import { Card, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
 import { getReceiptUrls } from '../utils/receipts';
+import { PAYMENT_MODES } from '../config/constants';
 
 export default function Approvals() {
   const { user } = useAuth();
@@ -22,22 +23,57 @@ export default function Approvals() {
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [filterBank, setFilterBank] = useState('');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [editForm, setEditForm] = useState(null);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      setPayments(await api.approvals.pending());
+      const [pending, accounts] = await Promise.all([
+        api.approvals.pending(),
+        api.bankAccounts.list(),
+      ]);
+      setPayments(pending);
+      setBankAccounts(accounts);
     } catch (e) { toast.error('Failed to load pending approvals'); }
     finally { setLoading(false); }
+  }
+
+  function openReview(p) {
+    setSelected(p);
+    setEditForm({
+      amount_paid: String(Number(p.amount_paid)),
+      payment_date: (p.payment_date || p.created_at || '').slice(0, 10),
+      payment_mode: p.payment_mode || 'upi',
+      bank_account_id: p.bank_account_id ? String(p.bank_account_id) : '',
+      transaction_id: p.transaction_id || '',
+    });
+    setShowDetail(true);
+  }
+
+  function accountLabel(b) {
+    return b.bank_name === b.account_name ? b.account_name : `${b.account_name} — ${b.bank_name}`;
   }
 
   async function handleApprove(payment) {
     setActionLoading(true);
     try {
+      if (editForm) {
+        const updated = await api.payments.update(payment.id, {
+          amount_paid: parseFloat(editForm.amount_paid) || Number(payment.amount_paid),
+          payment_date: editForm.payment_date || null,
+          payment_mode: editForm.payment_mode,
+          bank_account_id: editForm.bank_account_id ? parseInt(editForm.bank_account_id) : null,
+          transaction_id: editForm.transaction_id,
+        });
+        payment = { ...payment, ...updated };
+      }
       await api.approvals.approve(payment.id);
       setPayments((prev) => prev.filter((p) => p.id !== payment.id));
       setShowDetail(false);
+      setSelected(null);
+      setEditForm(null);
       toast.success(`Payment of ₹${Number(payment.amount_paid).toLocaleString()} from ${payment.student_name} marked as received`);
     } catch (e) { toast.error(e.message); }
     finally { setActionLoading(false); }
@@ -51,6 +87,8 @@ export default function Approvals() {
       setPayments((prev) => prev.filter((p) => p.id !== selected.id));
       setShowReject(false);
       setShowDetail(false);
+      setSelected(null);
+      setEditForm(null);
       setRejectReason('');
       toast.info(`Payment marked as not received: ${rejectReason}`);
     } catch (e) { toast.error(e.message); }
@@ -175,7 +213,7 @@ export default function Approvals() {
                     )}
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
-                    <button onClick={() => { setSelected(p); setShowDetail(true); }}
+                    <button onClick={() => openReview(p)}
                       className="btn-ghost px-3 py-1.5 text-sm flex items-center gap-1.5">
                       <Eye size={14} /> Review
                     </button>
@@ -200,8 +238,8 @@ export default function Approvals() {
         </div>
       )}
 
-      <Modal open={showDetail} onClose={() => { setShowDetail(false); setSelected(null); }} title="Review Payment" size="md">
-        {selected && (
+      <Modal open={showDetail} onClose={() => { setShowDetail(false); setSelected(null); setEditForm(null); }} title="Review Payment" size="md">
+        {selected && editForm && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -212,34 +250,56 @@ export default function Approvals() {
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Course</p>
                 <p className="font-semibold text-gray-900">{selected.course_name}</p>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Amount</p>
-                <p className="font-lg font-bold text-primary-700">₹{Number(selected.amount_paid).toLocaleString()}</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (₹) *</label>
+                <input type="number" min="1" className="input-field"
+                  value={editForm.amount_paid}
+                  onChange={(e) => setEditForm({ ...editForm, amount_paid: e.target.value })} />
               </div>
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Total</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Date</label>
+                <input type="date" className="input-field" value={editForm.payment_date}
+                  onChange={(e) => setEditForm({ ...editForm, payment_date: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode</label>
+                <select className="input-field" value={editForm.payment_mode}
+                  onChange={(e) => setEditForm({ ...editForm, payment_mode: e.target.value })}>
+                  {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Bank Account</label>
+                <select className="input-field" value={editForm.bank_account_id}
+                  onChange={(e) => setEditForm({ ...editForm, bank_account_id: e.target.value })}>
+                  <option value="">No account selected</option>
+                  {bankAccounts.map((b) => (
+                    <option key={b.id} value={b.id}>{accountLabel(b)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-1 sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Transaction ID</label>
+                <input className="input-field" value={editForm.transaction_id}
+                  onChange={(e) => setEditForm({ ...editForm, transaction_id: e.target.value })}
+                  placeholder="e.g. UTR/ref number" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-xl p-3 text-sm">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Pending Balance</p>
                 <p className="font-bold text-amber-600">₹{Number(selected.pending_amount).toLocaleString()}</p>
               </div>
-              <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Payment Mode</p>
-                <p className="capitalize">{selected.payment_mode}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Bank Account</p>
-                <p>{selected.bank_account_name || '-'}</p>
-              </div>
-              {selected.transaction_id && (
-                <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wider">Transaction ID</p>
-                  <p className="text-sm">{selected.transaction_id}</p>
-                </div>
-              )}
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Salesperson</p>
                 <p>{selected.salesperson_name}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Date</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Recorded On</p>
                 <p>{new Date(selected.created_at).toLocaleDateString()}</p>
               </div>
             </div>

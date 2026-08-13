@@ -23,6 +23,10 @@ export default function EnrollmentDetail() {
   const [showEditTelecrm, setShowEditTelecrm] = useState(false);
   const [telecrmInput, setTelecrmInput] = useState('');
   const [savingTelecrm, setSavingTelecrm] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [showEditBank, setShowEditBank] = useState(false);
+  const [bankEdit, setBankEdit] = useState(null);
+  const [savingBank, setSavingBank] = useState(false);
 
   const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
   const isOwner = user && user.id === enrollment?.sales_user_id;
@@ -60,17 +64,49 @@ export default function EnrollmentDetail() {
 
   async function load() {
     try {
-      const [enrollData, paymentsData] = await Promise.all([
+      const [enrollData, paymentsData, accounts] = await Promise.all([
         api.enrollments.get(id),
         api.payments.list({ enrollment_id: id }),
+        api.bankAccounts.list(),
       ]);
       setEnrollment(enrollData);
       setPayments(paymentsData);
+      setBankAccounts(accounts);
     } catch (e) {
       toast.error('Failed to load enrollment');
       navigate('/enrollments');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openEditBank(payment) {
+    setBankEdit(payment);
+    setShowEditBank(true);
+  }
+
+  function accountLabel(b) {
+    return b.bank_name === b.account_name ? b.account_name : `${b.account_name} — ${b.bank_name}`;
+  }
+
+  async function saveBank(e) {
+    e.preventDefault();
+    setSavingBank(true);
+    try {
+      const account = bankAccounts.find((b) => b.id === parseInt(bankEdit.bank_account_id));
+      const updated = await api.payments.update(bankEdit.id, {
+        bank_account_id: bankEdit.bank_account_id ? parseInt(bankEdit.bank_account_id) : null,
+      });
+      setPayments((prev) => prev.map((p) => (p.id === bankEdit.id
+        ? { ...p, ...updated, bank_account_id: account?.id ?? null, bank_account_name: account?.account_name || null }
+        : p)));
+      setShowEditBank(false);
+      setBankEdit(null);
+      toast.success('Bank account updated');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSavingBank(false);
     }
   }
 
@@ -102,7 +138,18 @@ export default function EnrollmentDetail() {
       </span>
     )},
     { key: 'payment_mode', label: 'Mode', render: (r) => <span className="capitalize">{r.payment_mode}</span> },
-    { key: 'bank_account_name', label: 'Account', render: (r) => r.bank_account_name || '-' },
+    { key: 'bank_account_name', label: 'Account', render: (r) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span>{r.bank_account_name || '-'}</span>
+        {isOps && (
+          <button onClick={() => openEditBank(r)}
+            className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+            title="Edit bank account">
+            <Pencil size={12} />
+          </button>
+        )}
+      </span>
+    )},
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'salesperson_name', label: 'Recorded by' },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
@@ -234,6 +281,34 @@ export default function EnrollmentDetail() {
                 className="w-full rounded-xl object-contain max-h-[70vh] bg-gray-50 border border-gray-100" />
             ))}
           </div>
+        )}
+      </Modal>
+      <Modal open={showEditBank} onClose={() => { setShowEditBank(false); setBankEdit(null); }} title="Edit Bank Account" size="sm">
+        {bankEdit && (
+          <form onSubmit={saveBank} className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="font-semibold text-gray-900">{enrollment?.student_name}</p>
+              <p className="text-sm text-gray-500">{enrollment?.course_name}</p>
+              <p className="text-xs text-gray-500 mt-1">Payment of ₹{Number(bankEdit.amount_paid).toLocaleString()}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Bank Account</label>
+              <select className="input-field" value={bankEdit.bank_account_id || ''}
+                onChange={(e) => setBankEdit({ ...bankEdit, bank_account_id: e.target.value })}>
+                <option value="">No account selected</option>
+                {bankAccounts.map((b) => (
+                  <option key={b.id} value={b.id}>{accountLabel(b)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => { setShowEditBank(false); setBankEdit(null); }} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
+              <button type="submit" disabled={savingBank}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 disabled:opacity-50 transition-colors">
+                <Save size={15} /> {savingBank ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
       <Modal open={showEditTelecrm} onClose={() => setShowEditTelecrm(false)} title="Edit TeleCRM Link">

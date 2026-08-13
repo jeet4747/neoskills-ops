@@ -945,6 +945,52 @@ app.get('/api/payments', auth(), async (req, res) => {
   }
 });
 
+app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const { amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
+    const existing = await query('SELECT * FROM payments WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Payment not found' });
+    const payment = existing.rows[0];
+    if (payment.status === 'approved') {
+      return res.status(400).json({ error: 'Approved payments cannot be edited' });
+    }
+
+    const amount = amount_paid !== undefined && amount_paid !== '' ? parseFloat(amount_paid) : parseFloat(payment.amount_paid);
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Enter a valid amount' });
+    }
+
+    const enroll = await query('SELECT total_amount FROM enrollments WHERE id = $1', [payment.enrollment_id]);
+    if (!enroll.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+    const total = parseFloat(enroll.rows[0].total_amount);
+
+    const prior = await query(
+      `SELECT COALESCE(SUM(amount_paid), 0) as paid_so_far FROM payments
+       WHERE enrollment_id = $1 AND status IN ('pending_approval', 'approved') AND id <> $2`,
+      [payment.enrollment_id, payment.id]
+    );
+    const paidSoFar = parseFloat(prior.rows[0].paid_so_far);
+    if (paidSoFar + amount > total) {
+      return res.status(400).json({ error: `Amount exceeds pending balance. Already paid ₹${paidSoFar}, pending ₹${Math.max(0, total - paidSoFar)}` });
+    }
+    const pending = Math.max(0, total - (paidSoFar + amount));
+
+    const result = await query(
+      `UPDATE payments SET amount_paid = $1, pending_amount = $2, payment_mode = $3, payment_date = $4, bank_account_id = $5, transaction_id = $6
+       WHERE id = $7 RETURNING *`,
+      [amount, pending, payment_mode !== undefined ? payment_mode : payment.payment_mode,
+       payment_date !== undefined ? payment_date : payment.payment_date,
+       bank_account_id !== undefined ? bank_account_id : payment.bank_account_id,
+       transaction_id !== undefined ? transaction_id : payment.transaction_id,
+       payment.id]
+    );
+    await refreshEnrollmentStatus(payment.enrollment_id);
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/approvals/:id/approve', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
