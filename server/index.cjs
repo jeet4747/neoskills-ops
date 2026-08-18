@@ -2366,6 +2366,9 @@ async function init() {
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'queued'`);
+      await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
+      await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
