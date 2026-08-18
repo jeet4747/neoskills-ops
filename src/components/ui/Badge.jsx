@@ -10,6 +10,10 @@ const variants = {
   manager: 'bg-blue-50 text-blue-700 border-blue-200',
   sales: 'bg-teal-50 text-teal-700 border-teal-200',
   ops: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  low: 'bg-gray-50 text-gray-600 border-gray-200',
+  medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  high: 'bg-orange-50 text-orange-700 border-orange-200',
+  urgent: 'bg-red-50 text-red-700 border-red-200',
 };
 
 export default function Badge({ status, children, className = '' }) {

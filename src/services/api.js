@@ -101,6 +101,13 @@ export const api = {
     list: () => request('/notifications'),
     markAllRead: () => request('/notifications/read', { method: 'POST' }),
   },
+  tasks: {
+    list: () => request('/tasks'),
+    create: (data) => request('/tasks', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    updateStatus: (id, status) => request(`/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+    remove: (id) => request(`/tasks/${id}`, { method: 'DELETE' }),
+  },
   batches: {
     list: () => request('/batches'),
     get: (id) => request(`/batches/${id}`),

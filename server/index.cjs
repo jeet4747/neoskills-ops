@@ -785,6 +785,137 @@ app.post('/api/deletion-requests/:id/reject', auth(['admin', 'manager']), async 
   }
 });
 
+app.post('/api/tasks', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { title, description, assignee_id, priority, due_date } = req.body;
+    if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
+    const result = await query(
+      `INSERT INTO tasks (title, description, status, priority, assignee_id, created_by, due_date)
+       VALUES ($1, $2, 'backlog', $3, $4, $5, $6) RETURNING *`,
+      [title.trim(), description || null, priority || 'medium', assignee_id || null, req.user.id, due_date || null]
+    );
+    if (assignee_id) {
+      const assignee = await query('SELECT name FROM users WHERE id = $1', [assignee_id]);
+      if (assignee.rows.length) {
+        await query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES ($1, 'task_assigned', 'New Task Assigned', $2)`,
+          [assignee_id, `${req.user.name} assigned you a task: ${title.trim()}`]
+        );
+      }
+    }
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/tasks', auth(), async (req, res) => {
+  try {
+    const role = req.user.role;
+    let sql = `
+      SELECT t.*, u.name AS assignee_name, c.name AS created_by_name
+      FROM tasks t
+      LEFT JOIN users u ON u.id = t.assignee_id
+      LEFT JOIN users c ON c.id = t.created_by
+    `;
+    const params = [];
+    if (role === 'sales') {
+      sql += ' WHERE t.assignee_id = $1';
+      params.push(req.user.id);
+    } else if (role === 'ops') {
+      sql += ' WHERE (t.assignee_id = $1 OR t.created_by = $1)';
+      params.push(req.user.id);
+    }
+    sql += ' ORDER BY t.created_at DESC';
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const existing = await query('SELECT id FROM tasks WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
+    const { title, description, assignee_id, priority, due_date } = req.body;
+    const result = await query(
+      `UPDATE tasks SET
+         title = COALESCE($1, title),
+         description = COALESCE($2, description),
+         assignee_id = $3,
+         priority = COALESCE($4, priority),
+         due_date = $5,
+         updated_at = NOW()
+       WHERE id = $6 RETURNING *`,
+      [title || null, description !== undefined ? description : null, assignee_id || null, priority || null, due_date || null, req.params.id]
+    );
+    if (assignee_id) {
+      const existing = await query('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id]);
+      const oldAssignee = existing.rows[0]?.assignee_id;
+      if (oldAssignee !== assignee_id) {
+        const assignee = await query('SELECT name FROM users WHERE id = $1', [assignee_id]);
+        if (assignee.rows.length) {
+          await query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES ($1, 'task_assigned', 'Task Assigned', $2)`,
+            [assignee_id, `${req.user.name} assigned you a task: ${result.rows[0].title}`]
+          );
+        }
+      }
+    }
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/tasks/:id/status', auth(), async (req, res) => {
+  try {
+    const { status } = req.body;
+    const valid = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
+    if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
+    const task = existing.rows[0];
+    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
+    if (!isManager && task.assignee_id !== req.user.id)
+      return res.status(403).json({ error: 'You can only move your own tasks' });
+    const result = await query(
+      'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, req.params.id]
+    );
+    if (status === 'done' && task.assignee_id && task.assignee_id !== req.user.id) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message)
+         VALUES ($1, 'task_completed', 'Task Completed', $2)`,
+        [task.assignee_id, `"${task.title}" has been marked as done by ${req.user.name}.`]
+      );
+    }
+    if (status === 'in_review' && task.created_by && task.created_by !== req.user.id) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message)
+         VALUES ($1, 'task_in_review', 'Task In Review', $2)`,
+        [task.created_by, `"${task.title}" has been moved to In Review by ${req.user.name}.`]
+      );
+    }
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const result = await query('DELETE FROM tasks WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Task not found' });
+    res.json({ message: 'Task deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/notifications', auth(), async (req, res) => {
   try {
     const result = await query(
@@ -2202,6 +2333,18 @@ async function init() {
         reviewed_at TIMESTAMPTZ,
         review_note TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT DEFAULT 'backlog' CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
+        priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+        assignee_id INTEGER REFERENCES users(id),
+        created_by INTEGER REFERENCES users(id),
+        due_date DATE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     console.log('Database tables created');
