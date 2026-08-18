@@ -64,6 +64,12 @@ export const api = {
     createCombined: (data) => request('/enrollments/combined', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/enrollments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id, reason) => request(`/enrollments/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
+    requestDeletion: (id, reason) => request(`/enrollments/${id}/request-deletion`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  },
+  deletionRequests: {
+    list: (status) => request(`/deletion-requests${status ? `?status=${status}` : ''}`),
+    approve: (id, review_note) => request(`/deletion-requests/${id}/approve`, { method: 'POST', body: JSON.stringify({ review_note }) }),
+    reject: (id, review_note) => request(`/deletion-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ review_note }) }),
   },
   payments: {
     list: (params) => {

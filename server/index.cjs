@@ -661,6 +661,130 @@ app.delete('/api/enrollments/:id', auth(['admin', 'manager']), async (req, res) 
   }
 });
 
+app.post('/api/enrollments/:id/request-deletion', auth(), async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason || !reason.trim())
+      return res.status(400).json({ error: 'Reason is required' });
+    const existing = await query(
+      `SELECT e.id, e.course_name, e.total_amount, e.sales_user_id, s.name as student_name
+       FROM enrollments e JOIN students s ON e.student_id = s.id WHERE e.id = $1`,
+      [req.params.id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+    const e = existing.rows[0];
+    if (req.user.role === 'sales' && e.sales_user_id !== req.user.id)
+      return res.status(403).json({ error: 'You can only request deletion of your own enrollments' });
+    const dup = await query(
+      `SELECT id FROM enrollment_deletion_requests WHERE enrollment_id = $1 AND status = 'pending'`,
+      [req.params.id]
+    );
+    if (dup.rows.length) return res.status(400).json({ error: 'A pending deletion request already exists for this enrollment' });
+    const result = await query(
+      `INSERT INTO enrollment_deletion_requests (enrollment_id, requested_by, reason)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [req.params.id, req.user.id, reason.trim()]
+    );
+    const managers = await query(`SELECT id FROM users WHERE role IN ('admin', 'manager') AND status = 'active'`);
+    for (const m of managers.rows) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message)
+         VALUES ($1, 'deletion_request', 'Enrollment Deletion Request',
+                 $2)`,
+        [m.id, `${req.user.name} requested deletion of ${e.student_name} — ${e.course_name} (₹${Number(e.total_amount).toLocaleString()}). Reason: ${reason.trim()}`]
+      );
+    }
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/deletion-requests', auth(['admin', 'manager', 'ops']), async (req, res) => {
+  try {
+    const status = req.query.status || 'pending';
+    const result = await query(
+      `SELECT dr.*, e.course_name, e.total_amount, e.status as enrollment_status,
+              s.name as student_name, u.name as requested_by_name
+       FROM enrollment_deletion_requests dr
+       JOIN enrollments e ON e.id = dr.enrollment_id
+       JOIN students s ON s.id = e.student_id
+       JOIN users u ON u.id = dr.requested_by
+       WHERE dr.status = $1
+       ORDER BY dr.created_at DESC`,
+      [status]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/deletion-requests/:id/approve', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { review_note } = req.body;
+    const reqResult = await query(
+      `SELECT dr.*, e.course_name, e.total_amount, e.sales_user_id, s.name as student_name
+       FROM enrollment_deletion_requests dr
+       JOIN enrollments e ON e.id = dr.enrollment_id
+       JOIN students s ON s.id = e.student_id
+       WHERE dr.id = $1 AND dr.status = 'pending'`,
+      [req.params.id]
+    );
+    if (!reqResult.rows.length) return res.status(404).json({ error: 'Pending request not found' });
+    const dr = reqResult.rows[0];
+    await withTransaction(async (client) => {
+      await client.query('DELETE FROM payments WHERE enrollment_id = $1', [dr.enrollment_id]);
+      await client.query('DELETE FROM receipts WHERE enrollment_id = $1', [dr.enrollment_id]);
+      await client.query('DELETE FROM gst_invoices WHERE enrollment_id = $1', [dr.enrollment_id]);
+      await client.query('DELETE FROM batch_members WHERE enrollment_id = $1', [dr.enrollment_id]);
+      await client.query('DELETE FROM enrollments WHERE id = $1', [dr.enrollment_id]);
+      await client.query(
+        `UPDATE enrollment_deletion_requests SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_note = $2 WHERE id = $3`,
+        [req.user.id, review_note || null, dr.id]
+      );
+    });
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message)
+       VALUES ($1, 'deletion_approved', 'Deletion Request Approved',
+               $2)`,
+      [dr.requested_by, `Your deletion request for ${dr.student_name} — ${dr.course_name} (₹${Number(dr.total_amount).toLocaleString()}) has been approved by ${req.user.name}.`]
+    );
+    res.json({ message: 'Enrollment deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/deletion-requests/:id/reject', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { review_note } = req.body;
+    const reqResult = await query(
+      `SELECT dr.*, e.course_name, e.total_amount, e.sales_user_id, s.name as student_name
+       FROM enrollment_deletion_requests dr
+       JOIN enrollments e ON e.id = dr.enrollment_id
+       JOIN students s ON s.id = e.student_id
+       WHERE dr.id = $1 AND dr.status = 'pending'`,
+      [req.params.id]
+    );
+    if (!reqResult.rows.length) return res.status(404).json({ error: 'Pending request not found' });
+    const dr = reqResult.rows[0];
+    await query(
+      `UPDATE enrollment_deletion_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2 WHERE id = $3`,
+      [req.user.id, review_note || null, dr.id]
+    );
+    await query(
+      `INSERT INTO notifications (user_id, type, title, message)
+       VALUES ($1, 'deletion_rejected', 'Deletion Request Rejected',
+               $2)`,
+      [dr.requested_by, `Your deletion request for ${dr.student_name} — ${dr.course_name} (₹${Number(dr.total_amount).toLocaleString()}) has been rejected by ${req.user.name}.${review_note ? ' Note: ' + review_note : ''}`]
+    );
+    res.json({ message: 'Request rejected' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/notifications', auth(), async (req, res) => {
   try {
     const result = await query(
@@ -2068,6 +2192,17 @@ async function init() {
         added_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (batch_id, enrollment_id)
       );
+      CREATE TABLE IF NOT EXISTS enrollment_deletion_requests (
+        id SERIAL PRIMARY KEY,
+        enrollment_id INTEGER REFERENCES enrollments(id) ON DELETE CASCADE,
+        requested_by INTEGER REFERENCES users(id),
+        reason TEXT NOT NULL,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        reviewed_by INTEGER REFERENCES users(id),
+        reviewed_at TIMESTAMPTZ,
+        review_note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
     console.log('Database tables created');
 
@@ -2087,6 +2222,7 @@ async function init() {
       await query(`ALTER TABLE enrollments ADD CONSTRAINT enrollments_status_check CHECK (status IN ('active', 'completed', 'waiting_approval'))`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown, X, Trash2 } from 'lucide-react';
+import { Plus, Search, Download, GraduationCap, Upload, FileText, Check, Pencil, Banknote, FileDown, X, Trash2, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -58,6 +58,14 @@ export default function Enrollments() {
 
   const [bankEdit, setBankEdit] = useState(null);
   const [savingBank, setSavingBank] = useState(false);
+
+  const [requestingDeletion, setRequestingDeletion] = useState(null);
+  const [requestReason, setRequestReason] = useState('');
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [deletionRequests, setDeletionRequests] = useState([]);
+  const [showDeletionRequests, setShowDeletionRequests] = useState(false);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewingId, setReviewingId] = useState(null);
 
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
   const canDelete = user?.role === 'admin' || user?.role === 'manager';
@@ -293,6 +301,13 @@ export default function Enrollments() {
               <Trash2 size={14} />
             </button>
           )}
+          {!canDelete && r.sales_user_id === user?.id && (
+            <button onClick={(ev) => { ev.stopPropagation(); setRequestingDeletion(r); setRequestReason(''); }}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Request deletion">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
     )},
@@ -387,6 +402,47 @@ export default function Enrollments() {
     finally { setSavingBank(false); }
   }
 
+  async function handleSubmitDeletionRequest(e) {
+    e.preventDefault();
+    if (!requestReason.trim()) { toast.error('Please enter a reason'); return; }
+    setRequestSubmitting(true);
+    try {
+      await api.enrollments.requestDeletion(requestingDeletion.id, requestReason.trim());
+      toast.success('Deletion request submitted. Admin/manager will review it.');
+      setRequestingDeletion(null);
+      setRequestReason('');
+    } catch (e) { toast.error(e.message); }
+    finally { setRequestSubmitting(false); }
+  }
+
+  async function loadDeletionRequests() {
+    try {
+      const data = await api.deletionRequests.list('pending');
+      setDeletionRequests(data);
+    } catch (e) { toast.error('Failed to load deletion requests'); }
+  }
+
+  async function handleApproveRequest(dr) {
+    try {
+      await api.deletionRequests.approve(dr.id, reviewNote || null);
+      toast.success('Enrollment deleted');
+      setReviewingId(null);
+      setReviewNote('');
+      loadDeletionRequests();
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function handleRejectRequest(dr) {
+    try {
+      await api.deletionRequests.reject(dr.id, reviewNote || null);
+      toast.success('Request rejected');
+      setReviewingId(null);
+      setReviewNote('');
+      loadDeletionRequests();
+    } catch (e) { toast.error(e.message); }
+  }
+
   function exportCSV() {
     if (!enrollments.length) { toast.info('No data to export'); return; }
     const headers = 'Candidate,Category,Module,Training Fee,Exam Fee,Total,Received,Pending,Support,Status,Date\n';
@@ -418,6 +474,17 @@ export default function Enrollments() {
           <p className="text-sm text-gray-400 mt-0.5">{enrollments.length} total enrollments</p>
         </div>
         <div className="flex items-center gap-2">
+          {isManager && (
+            <button onClick={() => { setShowDeletionRequests(true); loadDeletionRequests(); }}
+              className="btn-ghost flex items-center gap-2 text-sm relative">
+              <Clock size={15} /> Deletion Requests
+              {deletionRequests.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center min-w-[18px]">
+                  {deletionRequests.length}
+                </span>
+              )}
+            </button>
+          )}
           <button onClick={exportCSV} className="btn-ghost flex items-center gap-2 text-sm">
             <Download size={15} /> Export
           </button>
@@ -925,6 +992,85 @@ export default function Enrollments() {
               </button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Request Deletion Modal (Sales Users) */}
+      <Modal open={!!requestingDeletion} onClose={() => { setRequestingDeletion(null); setRequestReason(''); }} title="Request Enrollment Deletion" size="md">
+        {requestingDeletion && (
+          <form onSubmit={handleSubmitDeletionRequest} className="space-y-4">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <p className="font-semibold text-gray-900">{requestingDeletion.student_name}</p>
+              <p className="text-sm text-gray-500">{requestingDeletion.course_name} · ₹{Number(requestingDeletion.total_amount).toLocaleString()}</p>
+              <p className="text-xs text-amber-700 mt-2">Your request will be sent to admin/manager for review. The enrollment will be deleted only after approval.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason for deletion *</label>
+              <textarea className="input-field min-h-[100px]" placeholder="e.g. Added twice by mistake, duplicate entry..."
+                value={requestReason}
+                onChange={(e) => setRequestReason(e.target.value)}
+                required />
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t">
+              <button type="button" onClick={() => { setRequestingDeletion(null); setRequestReason(''); }} className="btn-secondary">Cancel</button>
+              <button type="submit" className="px-6 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors" disabled={requestSubmitting}>
+                {requestSubmitting ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Deletion Requests Panel (Admin/Manager) */}
+      <Modal open={showDeletionRequests} onClose={() => setShowDeletionRequests(false)} title="Deletion Requests" size="lg">
+        {deletionRequests.length === 0 ? (
+          <div className="text-center py-10 text-gray-400">
+            <Clock size={32} className="mx-auto mb-2 opacity-40" />
+            <p>No pending deletion requests</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {deletionRequests.map((dr) => (
+              <div key={dr.id} className="border border-gray-100 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">{dr.student_name}</p>
+                    <p className="text-sm text-gray-500">{dr.course_name} · ₹{Number(dr.total_amount).toLocaleString()}</p>
+                    <p className="text-xs text-gray-400 mt-1">Requested by {dr.requested_by_name} · {new Date(dr.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                    <div className="mt-2 bg-gray-50 rounded-lg p-2.5">
+                      <p className="text-xs font-medium text-gray-500 mb-0.5">Reason:</p>
+                      <p className="text-sm text-gray-700">{dr.reason}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {reviewingId === dr.id ? (
+                      <div className="flex items-center gap-2">
+                        <input className="input-field text-sm w-48" placeholder="Note (optional)"
+                          value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} />
+                        <button onClick={() => handleApproveRequest(dr)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors">
+                          Approve
+                        </button>
+                        <button onClick={() => handleRejectRequest(dr)}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 transition-colors">
+                          Reject
+                        </button>
+                        <button onClick={() => { setReviewingId(null); setReviewNote(''); }}
+                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setReviewingId(dr.id)}
+                        className="px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-medium hover:bg-primary-700 transition-colors">
+                        Review
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Modal>
     </div>
