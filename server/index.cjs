@@ -791,7 +791,7 @@ app.post('/api/tasks', auth(['admin', 'manager']), async (req, res) => {
     if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
     const result = await query(
       `INSERT INTO tasks (title, description, status, priority, assignee_id, created_by, due_date)
-       VALUES ($1, $2, 'backlog', $3, $4, $5, $6) RETURNING *`,
+       VALUES ($1, $2, 'queued', $3, $4, $5, $6) RETURNING *`,
       [title.trim(), description || null, priority || 'medium', assignee_id || null, req.user.id, due_date || null]
     );
     if (assignee_id) {
@@ -874,7 +874,7 @@ app.put('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
 app.put('/api/tasks/:id/status', auth(), async (req, res) => {
   try {
     const { status } = req.body;
-    const valid = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
+    const valid = ['queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
@@ -2338,7 +2338,7 @@ async function init() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        status TEXT DEFAULT 'backlog' CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
+        status TEXT DEFAULT 'queued' CHECK (status IN ('queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done')),
         priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
         assignee_id INTEGER REFERENCES users(id),
         created_by INTEGER REFERENCES users(id),
