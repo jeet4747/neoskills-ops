@@ -110,11 +110,11 @@ app.post('/api/auth/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell },
+      { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell, can_create_batches: !!user.can_create_batches },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, can_sell: !!user.can_sell, can_create_batches: !!user.can_create_batches } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -745,7 +745,9 @@ app.get('/api/batches/:id', auth(), async (req, res) => {
   }
 });
 
-app.post('/api/batches', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.post('/api/batches', auth(), async (req, res) => {
+  const allowed = ['admin', 'manager', 'ops'].includes(req.user.role) || (req.user.role === 'sales' && req.user.can_create_batches);
+  if (!allowed) return res.status(403).json({ error: 'Forbidden' });
   try {
     const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
     if (!name || !name.trim())

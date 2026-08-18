@@ -34,6 +34,7 @@ export default function Batches() {
   const { user } = useAuth();
   const toast = useToast();
   const canManage = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
+  const canCreateBatches = canManage || (user && user.role === 'sales' && user.can_create_batches);
 
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -310,7 +311,7 @@ export default function Batches() {
               <Download size={16} /> Export
             </button>
           )}
-          {canManage && (
+          {canCreateBatches && (
             <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 transition-colors">
               <Plus size={18} /> New Batch
             </button>
@@ -361,7 +362,7 @@ export default function Batches() {
       )}
 
       {!canManage && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card><CardBody>
             <div className="flex items-center gap-4">
               <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><Layers size={20} /></div>
@@ -377,6 +378,16 @@ export default function Batches() {
               <div>
                 <p className="text-xs text-gray-500">Students in Batches</p>
                 <p className="text-xl font-bold text-gray-900">{totalStudents}</p>
+              </div>
+            </div>
+          </CardBody></Card>
+          <Card><CardBody>
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 bg-primary-50 text-primary-600 rounded-xl flex items-center justify-center"><Banknote size={20} /></div>
+              <div>
+                <p className="text-xs text-gray-500">Received from Batches</p>
+                <p className="text-xl font-bold text-emerald-600">{fmt(totalReceived)}</p>
+                <p className="text-xs text-gray-400">of {fmt(totalBusiness)} business</p>
               </div>
             </div>
           </CardBody></Card>
