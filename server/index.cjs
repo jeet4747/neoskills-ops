@@ -793,13 +793,21 @@ app.delete('/api/batches/:id', auth(['admin', 'manager', 'ops']), async (req, re
   }
 });
 
-app.post('/api/batches/:id/members', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.post('/api/batches/:id/members', auth(['admin', 'manager', 'ops', 'sales']), async (req, res) => {
   try {
     const batch = await query('SELECT id FROM batches WHERE id = $1', [req.params.id]);
     if (!batch.rows.length) return res.status(404).json({ error: 'Batch not found' });
     const ids = Array.isArray(req.body.enrollment_ids) ? req.body.enrollment_ids : [];
     const valid = ids.filter((x) => Number.isInteger(x) || /^\d+$/.test(String(x)));
     if (!valid.length) return res.status(400).json({ error: 'Select at least one enrollment' });
+    if (req.user.role === 'sales') {
+      const ownership = await query(
+        `SELECT id FROM enrollments WHERE id = ANY($1) AND sales_user_id = $2`,
+        [valid.map(Number), req.user.id]
+      );
+      if (ownership.rows.length !== valid.length)
+        return res.status(403).json({ error: 'You can only add your own enrollments' });
+    }
     await withTransaction(async (client) => {
       for (const id of valid) {
         await client.query(
@@ -816,8 +824,15 @@ app.post('/api/batches/:id/members', auth(['admin', 'manager', 'ops']), async (r
   }
 });
 
-app.delete('/api/batches/:id/members/:enrollmentId', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.delete('/api/batches/:id/members/:enrollmentId', auth(['admin', 'manager', 'ops', 'sales']), async (req, res) => {
   try {
+    if (req.user.role === 'sales') {
+      const ownership = await query(
+        'SELECT id FROM enrollments WHERE id = $1 AND sales_user_id = $2',
+        [req.params.enrollmentId, req.user.id]
+      );
+      if (!ownership.rows.length) return res.status(403).json({ error: 'You can only remove your own enrollments' });
+    }
     const result = await query(
       'DELETE FROM batch_members WHERE batch_id = $1 AND enrollment_id = $2 RETURNING id',
       [req.params.id, req.params.enrollmentId]
