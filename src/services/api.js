@@ -107,6 +107,14 @@ export const api = {
     update: (id, data) => request(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     updateStatus: (id, status) => request(`/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
     remove: (id) => request(`/tasks/${id}`, { method: 'DELETE' }),
+    comments: (id) => request(`/tasks/${id}/comments`),
+    addComment: (id, body) => request(`/tasks/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+    activities: (id) => request(`/tasks/${id}/activities`),
+    updateLabels: (id, label_ids) => request(`/tasks/${id}/labels`, { method: 'PUT', body: JSON.stringify({ label_ids }) }),
+  },
+  taskLabels: {
+    list: () => request('/task-labels'),
+    create: (data) => request('/task-labels', { method: 'POST', body: JSON.stringify(data) }),
   },
   batches: {
     list: () => request('/batches'),

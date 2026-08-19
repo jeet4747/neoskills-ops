@@ -806,6 +806,10 @@ app.post('/api/tasks', auth(), async (req, res) => {
         );
       }
     }
+    await query(
+      'INSERT INTO task_activities (task_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
+      [result.rows[0].id, req.user.id, 'created', `Created task "${title.trim()}"`]
+    );
     res.status(201).json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -816,7 +820,12 @@ app.get('/api/tasks', auth(), async (req, res) => {
   try {
     const role = req.user.role;
     let sql = `
-      SELECT t.*, u.name AS assignee_name, c.name AS created_by_name
+      SELECT t.*, u.name AS assignee_name, c.name AS created_by_name,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', tl.id, 'name', tl.name, 'color', tl.color))
+           FROM task_task_labels ttl JOIN task_labels tl ON tl.id = ttl.label_id
+           WHERE ttl.task_id = t.id), '[]'
+        ) AS labels
       FROM tasks t
       LEFT JOIN users u ON u.id = t.assignee_id
       LEFT JOIN users c ON c.id = t.created_by
@@ -867,6 +876,10 @@ app.put('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
         }
       }
     }
+    await query(
+      'INSERT INTO task_activities (task_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
+      [req.params.id, req.user.id, 'edited', `Updated task "${result.rows[0].title}"`]
+    );
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -902,6 +915,11 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
         [task.created_by, `"${task.title}" has been moved to In Review by ${req.user.name}.`]
       );
     }
+    const statusLabels = { queued: 'Queued', backlog: 'Backlog', todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done' };
+    await query(
+      'INSERT INTO task_activities (task_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
+      [req.params.id, req.user.id, 'moved', `Moved from "${statusLabels[task.status]}" to "${statusLabels[status]}"`]
+    );
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -913,6 +931,94 @@ app.delete('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
     const result = await query('DELETE FROM tasks WHERE id = $1 RETURNING id', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Task not found' });
     res.json({ message: 'Task deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/task-labels', auth(), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM task_labels ORDER BY name');
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/task-labels', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { name, color } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Label name is required' });
+    const result = await query(
+      'INSERT INTO task_labels (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING *',
+      [name.trim(), color || '#6366f1']
+    );
+    res.status(201).json(result.rows[0] || { name: name.trim(), color: color || '#6366f1' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/tasks/:id/labels', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    const { label_ids } = req.body;
+    if (!Array.isArray(label_ids)) return res.status(400).json({ error: 'label_ids must be an array' });
+    await withTransaction(async (client) => {
+      await client.query('DELETE FROM task_task_labels WHERE task_id = $1', [req.params.id]);
+      for (const lid of label_ids) {
+        await client.query(
+          'INSERT INTO task_task_labels (task_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [req.params.id, lid]
+        );
+      }
+    });
+    res.json({ message: 'Labels updated' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/tasks/:id/comments', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT tc.*, u.name AS user_name
+       FROM task_comments tc JOIN users u ON u.id = tc.user_id
+       WHERE tc.task_id = $1 ORDER BY tc.created_at ASC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/tasks/:id/comments', auth(), async (req, res) => {
+  try {
+    const { body } = req.body;
+    if (!body || !body.trim()) return res.status(400).json({ error: 'Comment is required' });
+    const result = await query(
+      'INSERT INTO task_comments (task_id, user_id, body) VALUES ($1, $2, $3) RETURNING *',
+      [req.params.id, req.user.id, body.trim()]
+    );
+    const full = await query(
+      `SELECT tc.*, u.name AS user_name FROM task_comments tc JOIN users u ON u.id = tc.user_id WHERE tc.id = $1`,
+      [result.rows[0].id]
+    );
+    res.status(201).json(full.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/tasks/:id/activities', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT ta.*, u.name AS user_name
+       FROM task_activities ta JOIN users u ON u.id = ta.user_id
+       WHERE ta.task_id = $1 ORDER BY ta.created_at DESC LIMIT 50`,
+      [req.params.id]
+    );
+    res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2347,6 +2453,32 @@ async function init() {
         due_date DATE,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS task_comments (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS task_labels (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT DEFAULT '#6366f1',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS task_task_labels (
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        label_id INTEGER REFERENCES task_labels(id) ON DELETE CASCADE,
+        PRIMARY KEY (task_id, label_id)
+      );
+      CREATE TABLE IF NOT EXISTS task_activities (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     console.log('Database tables created');
