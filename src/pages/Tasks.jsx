@@ -151,7 +151,7 @@ export default function Tasks() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Kanban</h1>
           <p className="text-sm text-gray-400 mt-0.5">{tasks.length} total tasks</p>
         </div>
         <div className="flex items-center gap-2">

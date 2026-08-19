@@ -20,6 +20,7 @@ export default function Sidebar({ open, onClose }) {
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops'] },
+    { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops'] },
     {
       to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin', 'ops'],
@@ -27,7 +28,6 @@ export default function Sidebar({ open, onClose }) {
     },
     { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/batches', icon: Layers, label: 'Batches', roles: ['sales', 'manager', 'admin', 'ops'] },
-    { to: '/tasks', icon: Kanban, label: 'Tasks', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/receipts', icon: FileText, label: 'Receipts', roles: ['admin', 'manager', 'ops'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin', 'manager', 'ops'] },
     { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
