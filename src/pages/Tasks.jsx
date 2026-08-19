@@ -165,11 +165,9 @@ export default function Tasks() {
               My Tasks
             </button>
           </div>
-          {canManage && (
-            <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 transition-colors">
-              <Plus size={16} /> New Task
-            </button>
-          )}
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 transition-colors">
+            <Plus size={16} /> New Task
+          </button>
         </div>
       </div>
 
@@ -259,15 +257,17 @@ export default function Tasks() {
               value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
-              <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
-                <option value="">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                ))}
-              </select>
-            </div>
+            {canManage && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
+                <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
+                  <option value="">Unassigned</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
               <select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>

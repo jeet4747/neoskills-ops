@@ -785,22 +785,24 @@ app.post('/api/deletion-requests/:id/reject', auth(['admin', 'manager']), async 
   }
 });
 
-app.post('/api/tasks', auth(['admin', 'manager']), async (req, res) => {
+app.post('/api/tasks', auth(), async (req, res) => {
   try {
     const { title, description, assignee_id, priority, due_date } = req.body;
     if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
+    const isSales = req.user.role === 'sales';
+    const finalAssignee = isSales ? req.user.id : (assignee_id || null);
     const result = await query(
       `INSERT INTO tasks (title, description, status, priority, assignee_id, created_by, due_date)
        VALUES ($1, $2, 'queued', $3, $4, $5, $6) RETURNING *`,
-      [title.trim(), description || null, priority || 'medium', assignee_id || null, req.user.id, due_date || null]
+      [title.trim(), description || null, priority || 'medium', finalAssignee, req.user.id, due_date || null]
     );
-    if (assignee_id) {
-      const assignee = await query('SELECT name FROM users WHERE id = $1', [assignee_id]);
+    if (finalAssignee && finalAssignee !== req.user.id) {
+      const assignee = await query('SELECT name FROM users WHERE id = $1', [finalAssignee]);
       if (assignee.rows.length) {
         await query(
           `INSERT INTO notifications (user_id, type, title, message)
            VALUES ($1, 'task_assigned', 'New Task Assigned', $2)`,
-          [assignee_id, `${req.user.name} assigned you a task: ${title.trim()}`]
+          [finalAssignee, `${req.user.name} assigned you a task: ${title.trim()}`]
         );
       }
     }
