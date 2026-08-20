@@ -15,6 +15,7 @@ import Team from './pages/Team';
 import Receipts from './pages/Receipts';
 import Batches from './pages/Batches';
 import Tasks from './pages/Tasks';
+import Broadcast from './pages/Broadcast';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -106,6 +107,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['manager', 'admin']}>
               <Users />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="broadcast"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <Broadcast />
             </ProtectedRoute>
           }
         />

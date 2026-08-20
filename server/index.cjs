@@ -1145,6 +1145,47 @@ app.delete('/api/push/subscribe', auth(), async (req, res) => {
   }
 });
 
+function adminOnly(req, res, next) {
+  if (req.user.email !== 'contact@neoskills.co.in') {
+    return res.status(403).json({ error: 'Only admin can broadcast notifications' });
+  }
+  next();
+}
+
+app.post('/api/push/broadcast', auth(), adminOnly, async (req, res) => {
+  try {
+    const { title, body: msgBody, url } = req.body;
+    if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
+    if (!msgBody || !msgBody.trim()) return res.status(400).json({ error: 'Message body is required' });
+    const subs = await query(`
+      SELECT ps.endpoint, ps.p256dh, ps.auth, ps.user_id
+      FROM push_subscriptions ps
+      JOIN users u ON u.id = ps.user_id
+      WHERE u.status = 'active'
+    `);
+    let sent = 0;
+    let failed = 0;
+    for (const sub of subs.rows) {
+      try {
+        await webPush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify({ title: title.trim(), body: msgBody.trim(), data: { url: url || '/' } })
+        );
+        sent++;
+      } catch (err) {
+        failed++;
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        }
+      }
+    }
+    const uniqueUsers = [...new Set(subs.rows.map(s => s.user_id))].length;
+    res.json({ message: `Broadcast sent`, sent, failed, totalSubscriptions: subs.rows.length, uniqueUsers });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const BATCH_STATS = `
   COALESCE(m.cnt, 0) AS student_count,
   COALESCE(m.total_fee, 0) AS total_fee,

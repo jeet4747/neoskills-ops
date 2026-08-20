@@ -129,6 +129,7 @@ export const api = {
     vapidKey: () => request('/push/vapid-key'),
     subscribe: (data) => request('/push/subscribe', { method: 'POST', body: JSON.stringify(data) }),
     unsubscribe: (data) => request('/push/subscribe', { method: 'DELETE', body: JSON.stringify(data) }),
+    broadcast: (data) => request('/push/broadcast', { method: 'POST', body: JSON.stringify(data) }),
   },
   batches: {
     list: () => request('/batches'),
