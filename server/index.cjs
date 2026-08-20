@@ -2168,6 +2168,82 @@ app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
   }
 });
 
+app.get('/api/targets', auth(), async (req, res) => {
+  try {
+    const { month, year, user_id } = req.query;
+    const m = month || new Date().getMonth() + 1;
+    const y = year || new Date().getFullYear();
+    let sql = `SELECT t.*, u.name as user_name
+               FROM sales_targets t JOIN users u ON u.id = t.user_id
+               WHERE t.month = $1 AND t.year = $2`;
+    const params = [m, y];
+    if (user_id) {
+      sql += ' AND t.user_id = $3';
+      params.push(user_id);
+    } else if (req.user.role === 'sales') {
+      sql += ' AND t.user_id = $3';
+      params.push(req.user.id);
+    }
+    sql += ' ORDER BY u.name';
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/targets', auth(), async (req, res) => {
+  try {
+    const { month, year, target_amount, user_id } = req.body;
+    const m = month || new Date().getMonth() + 1;
+    const y = year || new Date().getFullYear();
+    const target = parseFloat(target_amount);
+    if (!target || target <= 0) return res.status(400).json({ error: 'Target amount must be greater than 0' });
+    const isManager = ['admin', 'manager', 'ops'].includes(req.user.role);
+    const uid = isManager && user_id ? user_id : req.user.id;
+    const result = await query(
+      `INSERT INTO sales_targets (user_id, month, year, target_amount)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, month, year) DO UPDATE SET target_amount = $4
+       RETURNING *`,
+      [uid, m, y, target]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
+  try {
+    await query('DELETE FROM sales_targets WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Target deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/dashboard/hr-overview', auth(), async (req, res) => {
+  try {
+    const isHR = req.user.role === 'hr';
+    if (!isHR) return res.status(403).json({ error: 'HR only' });
+    const [teamRes, tasksRes, enrollmentsRes, recentActivity] = await Promise.all([
+      query(`SELECT id, name, email, role, status, phone, city, created_at FROM users WHERE role IN ('sales','manager','admin','ops','hr') ORDER BY name`),
+      query(`SELECT status, COUNT(*) as count FROM tasks GROUP BY status`),
+      query(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'active') as active, COUNT(*) FILTER (WHERE status = 'completed') as completed FROM enrollments`),
+      query(`SELECT ta.*, u.name as user_name FROM task_activities ta LEFT JOIN users u ON u.id = ta.user_id ORDER BY ta.created_at DESC LIMIT 20`),
+    ]);
+    res.json({
+      team: teamRes.rows,
+      tasks: tasksRes.rows,
+      enrollments: enrollmentsRes.rows[0],
+      recentActivity: recentActivity.rows,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(`
@@ -2596,7 +2672,7 @@ async function init() {
       await query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_payment_mode_check`);
       await query(`ALTER TABLE payments ADD CONSTRAINT payments_payment_mode_check CHECK (payment_mode IN ('upi', 'card', 'neft', 'cash', 'cheque', 'bank_transfer'))`);
       await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
-      await query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('sales', 'manager', 'admin', 'ops'))`);
+      await query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('sales', 'manager', 'admin', 'ops', 'hr'))`);
       await query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check`);
       await query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'pending', 'rejected', 'on_leave', 'inactive'))`);
       await query(`ALTER TABLE enrollments DROP CONSTRAINT IF EXISTS enrollments_status_check`);

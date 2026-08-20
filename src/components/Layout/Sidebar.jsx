@@ -19,7 +19,7 @@ export default function Sidebar({ open, onClose }) {
   }, [location.pathname, user?.role]);
 
   const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops'] },
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops'] },
     {
@@ -30,7 +30,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/batches', icon: Layers, label: 'Batches', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/receipts', icon: FileText, label: 'Receipts', roles: ['admin', 'manager', 'ops'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin', 'manager', 'ops'] },
-    { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
+    { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager', 'hr'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
     { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin', 'ops'] },
   ];
@@ -99,7 +99,7 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Sales Rep' : user?.role === 'manager' ? 'Manager' : user?.role === 'ops' ? 'Operations' : 'Admin'}</p>
+              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Sales Rep' : user?.role === 'manager' ? 'Manager' : user?.role === 'ops' ? 'Operations' : user?.role === 'hr' ? 'Human Resources' : 'Admin'}</p>
             </div>
           </div>
           <button

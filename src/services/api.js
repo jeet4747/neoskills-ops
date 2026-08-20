@@ -49,6 +49,15 @@ export const api = {
     trends: () => request('/dashboard/trends'),
     sourceAnalytics: () => request('/dashboard/source-analytics'),
     pendingCollections: () => request('/dashboard/pending-collections'),
+    hrOverview: () => request('/dashboard/hr-overview'),
+  },
+  targets: {
+    list: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/targets${q ? `?${q}` : ''}`);
+    },
+    set: (data) => request('/targets', { method: 'POST', body: JSON.stringify(data) }),
+    remove: (id) => request(`/targets/${id}`, { method: 'DELETE' }),
   },
   students: {
     list: (search) => request(`/students${search ? `?search=${encodeURIComponent(search)}` : ''}`),
