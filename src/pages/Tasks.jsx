@@ -67,18 +67,18 @@ export default function Tasks() {
       setLoading(true);
       const [taskData, userData, labelData] = await Promise.all([
         api.tasks.list(),
-        canManage ? api.users?.list?.() || Promise.resolve([]) : Promise.resolve([]),
+        api.users?.list?.() || Promise.resolve([]),
         api.taskLabels.list(),
       ]);
       setTasks(taskData);
-      if (canManage && Array.isArray(userData)) setUsers(userData);
+      if (Array.isArray(userData)) setUsers(userData);
       setAllLabels(labelData);
     } catch (e) {
       toast.error('Failed to load tasks');
     } finally {
       setLoading(false);
     }
-  }, [toast, canManage]);
+  }, [toast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -358,15 +358,13 @@ export default function Tasks() {
               value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {canManage && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
-                <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
-                  <option value="">Unassigned</option>
-                  {users.map((u) => (<option key={u.id} value={u.id}>{u.name} ({u.role})</option>))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
+              <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
+                <option value="">{user?.role === 'sales' ? 'Assign to myself' : 'Unassigned'}</option>
+                {users.map((u) => (<option key={u.id} value={u.id}>{u.name} ({u.role})</option>))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
               <select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
@@ -405,15 +403,13 @@ export default function Tasks() {
                 value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {canManage && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
-                  <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {users.map((u) => (<option key={u.id} value={u.id}>{u.name} ({u.role})</option>))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to</label>
+                <select className="input-field" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
+                  <option value="">{user?.role === 'sales' ? 'Assign to myself' : 'Unassigned'}</option>
+                  {users.map((u) => (<option key={u.id} value={u.id}>{u.name} ({u.role})</option>))}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
                 <select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>

@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
+const webPush = require('web-push');
 const { query, withTransaction } = require('./db.cjs');
 const { generateReceipt } = require('./receipt.cjs');
 const { generateInvoice } = require('./invoice.cjs');
@@ -33,6 +34,33 @@ const upload = multer({
     cb(null, true);
   },
 });
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = 'mailto:admin@neoskills.co.in';
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+async function sendPushNotification(userId, title, body, notificationId) {
+  try {
+    if (!VAPID_PUBLIC_KEY) return;
+    const subs = await query('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1', [userId]);
+    for (const sub of subs.rows) {
+      try {
+        await webPush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify({ title, body, data: { url: '/tasks', notificationId } })
+        );
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        }
+      }
+    }
+  } catch (e) { /* silent */ }
+}
 
 function auth(roles = []) {
   return (req, res, next) => {
@@ -649,10 +677,11 @@ app.delete('/api/enrollments/:id', auth(['admin', 'manager']), async (req, res) 
       await client.query('DELETE FROM receipts WHERE enrollment_id = $1', [e.id]);
       await client.query('DELETE FROM gst_invoices WHERE enrollment_id = $1', [e.id]);
       await client.query('DELETE FROM enrollments WHERE id = $1', [e.id]);
-      await client.query(
-        `INSERT INTO notifications (user_id, type, title, message) VALUES ($1, 'enrollment_deleted', 'Enrollment Deleted', $2)`,
+      const notifRes = await client.query(
+        `INSERT INTO notifications (user_id, type, title, message) VALUES ($1, 'enrollment_deleted', 'Enrollment Deleted', $2) RETURNING id`,
         [e.sales_user_id, message]
       );
+      sendPushNotification(e.sales_user_id, 'Enrollment Deleted', message, notifRes.rows[0].id);
     });
 
     res.json({ message: 'Enrollment deleted' });
@@ -687,12 +716,13 @@ app.post('/api/enrollments/:id/request-deletion', auth(), async (req, res) => {
     );
     const managers = await query(`SELECT id FROM users WHERE role IN ('admin', 'manager') AND status = 'active'`);
     for (const m of managers.rows) {
-      await query(
+      const notifRes = await query(
         `INSERT INTO notifications (user_id, type, title, message)
          VALUES ($1, 'deletion_request', 'Enrollment Deletion Request',
-                 $2)`,
+                 $2) RETURNING id`,
         [m.id, `${req.user.name} requested deletion of ${e.student_name} — ${e.course_name} (₹${Number(e.total_amount).toLocaleString()}). Reason: ${reason.trim()}`]
       );
+      sendPushNotification(m.id, 'Enrollment Deletion Request', `${req.user.name} requested deletion of ${e.student_name} — ${e.course_name}`, notifRes.rows[0].id);
     }
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -744,12 +774,13 @@ app.post('/api/deletion-requests/:id/approve', auth(['admin', 'manager']), async
         [req.user.id, review_note || null, dr.id]
       );
     });
-    await query(
+    const notifRes = await query(
       `INSERT INTO notifications (user_id, type, title, message)
        VALUES ($1, 'deletion_approved', 'Deletion Request Approved',
-               $2)`,
+               $2) RETURNING id`,
       [dr.requested_by, `Your deletion request for ${dr.student_name} — ${dr.course_name} (₹${Number(dr.total_amount).toLocaleString()}) has been approved by ${req.user.name}.`]
     );
+    sendPushNotification(dr.requested_by, 'Deletion Request Approved', `Your deletion request for ${dr.student_name} has been approved.`, notifRes.rows[0].id);
     res.json({ message: 'Enrollment deleted' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -773,12 +804,13 @@ app.post('/api/deletion-requests/:id/reject', auth(['admin', 'manager']), async 
       `UPDATE enrollment_deletion_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2 WHERE id = $3`,
       [req.user.id, review_note || null, dr.id]
     );
-    await query(
+    const notifRes = await query(
       `INSERT INTO notifications (user_id, type, title, message)
        VALUES ($1, 'deletion_rejected', 'Deletion Request Rejected',
-               $2)`,
+               $2) RETURNING id`,
       [dr.requested_by, `Your deletion request for ${dr.student_name} — ${dr.course_name} (₹${Number(dr.total_amount).toLocaleString()}) has been rejected by ${req.user.name}.${review_note ? ' Note: ' + review_note : ''}`]
     );
+    sendPushNotification(dr.requested_by, 'Deletion Request Rejected', `Your deletion request for ${dr.student_name} has been rejected.`, notifRes.rows[0].id);
     res.json({ message: 'Request rejected' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -790,20 +822,23 @@ app.post('/api/tasks', auth(), async (req, res) => {
     const { title, description, assignee_id, priority, due_date } = req.body;
     if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
     const isSales = req.user.role === 'sales';
-    const finalAssignee = isSales ? req.user.id : (assignee_id || null);
+    let finalAssignee = isSales ? (assignee_id ? parseInt(assignee_id) : req.user.id) : (assignee_id || null);
+    const assignedToOther = finalAssignee && finalAssignee !== req.user.id;
+    const initialStatus = assignedToOther ? 'todo' : 'queued';
     const result = await query(
       `INSERT INTO tasks (title, description, status, priority, assignee_id, created_by, due_date)
-       VALUES ($1, $2, 'queued', $3, $4, $5, $6) RETURNING *`,
-      [title.trim(), description || null, priority || 'medium', finalAssignee, req.user.id, due_date || null]
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title.trim(), description || null, initialStatus, priority || 'medium', finalAssignee, req.user.id, due_date || null]
     );
     if (finalAssignee && finalAssignee !== req.user.id) {
       const assignee = await query('SELECT name FROM users WHERE id = $1', [finalAssignee]);
       if (assignee.rows.length) {
-        await query(
+        const notifResult = await query(
           `INSERT INTO notifications (user_id, type, title, message)
-           VALUES ($1, 'task_assigned', 'New Task Assigned', $2)`,
+           VALUES ($1, 'task_assigned', 'New Task Assigned', $2) RETURNING id`,
           [finalAssignee, `${req.user.name} assigned you a task: ${title.trim()}`]
         );
+        sendPushNotification(finalAssignee, 'New Task Assigned', `${req.user.name} assigned you: ${title.trim()}`, notifResult.rows[0].id);
       }
     }
     await query(
@@ -832,7 +867,7 @@ app.get('/api/tasks', auth(), async (req, res) => {
     `;
     const params = [];
     if (role === 'sales') {
-      sql += ' WHERE t.assignee_id = $1';
+      sql += ' WHERE (t.assignee_id = $1 OR t.created_by = $1)';
       params.push(req.user.id);
     } else if (role === 'ops') {
       sql += ' WHERE (t.assignee_id = $1 OR t.created_by = $1)';
@@ -846,34 +881,43 @@ app.get('/api/tasks', auth(), async (req, res) => {
   }
 });
 
-app.put('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
+app.put('/api/tasks/:id', auth(), async (req, res) => {
   try {
-    const existing = await query('SELECT id FROM tasks WHERE id = $1', [req.params.id]);
+    const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
+    const task = existing.rows[0];
+    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
+    if (!isManager && task.created_by !== req.user.id && task.assignee_id !== req.user.id)
+      return res.status(403).json({ error: 'Not authorized to edit this task' });
     const { title, description, assignee_id, priority, due_date } = req.body;
+    const newAssignee = assignee_id ? parseInt(assignee_id) : (assignee_id === null || assignee_id === '' ? null : task.assignee_id);
+    const assigneeChanged = newAssignee !== task.assignee_id;
+    const reassignedToOther = assigneeChanged && newAssignee && newAssignee !== req.user.id;
+    let newStatus = task.status;
+    if (reassignedToOther && task.status === 'queued') {
+      newStatus = 'todo';
+    }
     const result = await query(
       `UPDATE tasks SET
          title = COALESCE($1, title),
          description = COALESCE($2, description),
          assignee_id = $3,
-         priority = COALESCE($4, priority),
-         due_date = $5,
+         status = $4,
+         priority = COALESCE($5, priority),
+         due_date = $6,
          updated_at = NOW()
-       WHERE id = $6 RETURNING *`,
-      [title || null, description !== undefined ? description : null, assignee_id || null, priority || null, due_date || null, req.params.id]
+       WHERE id = $7 RETURNING *`,
+      [title || null, description !== undefined ? description : null, newAssignee, newStatus, priority || null, due_date || null, req.params.id]
     );
-    if (assignee_id) {
-      const existing = await query('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id]);
-      const oldAssignee = existing.rows[0]?.assignee_id;
-      if (oldAssignee !== assignee_id) {
-        const assignee = await query('SELECT name FROM users WHERE id = $1', [assignee_id]);
-        if (assignee.rows.length) {
-          await query(
-            `INSERT INTO notifications (user_id, type, title, message)
-             VALUES ($1, 'task_assigned', 'Task Assigned', $2)`,
-            [assignee_id, `${req.user.name} assigned you a task: ${result.rows[0].title}`]
-          );
-        }
+    if (assigneeChanged && newAssignee && newAssignee !== req.user.id) {
+      const assignee = await query('SELECT name FROM users WHERE id = $1', [newAssignee]);
+      if (assignee.rows.length) {
+        const notifResult = await query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES ($1, 'task_assigned', 'Task Assigned', $2) RETURNING id`,
+          [newAssignee, `${req.user.name} assigned you a task: ${result.rows[0].title}`]
+        );
+        sendPushNotification(newAssignee, 'Task Assigned', `${req.user.name} assigned you: ${result.rows[0].title}`, notifResult.rows[0].id);
       }
     }
     await query(
@@ -902,18 +946,20 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
       [status, req.params.id]
     );
     if (status === 'done' && task.assignee_id && task.assignee_id !== req.user.id) {
-      await query(
+      const notifRes = await query(
         `INSERT INTO notifications (user_id, type, title, message)
-         VALUES ($1, 'task_completed', 'Task Completed', $2)`,
+         VALUES ($1, 'task_completed', 'Task Completed', $2) RETURNING id`,
         [task.assignee_id, `"${task.title}" has been marked as done by ${req.user.name}.`]
       );
+      sendPushNotification(task.assignee_id, 'Task Completed', `"${task.title}" marked as done.`, notifRes.rows[0].id);
     }
     if (status === 'in_review' && task.created_by && task.created_by !== req.user.id) {
-      await query(
+      const notifRes = await query(
         `INSERT INTO notifications (user_id, type, title, message)
-         VALUES ($1, 'task_in_review', 'Task In Review', $2)`,
+         VALUES ($1, 'task_in_review', 'Task In Review', $2) RETURNING id`,
         [task.created_by, `"${task.title}" has been moved to In Review by ${req.user.name}.`]
       );
+      sendPushNotification(task.created_by, 'Task In Review', `"${task.title}" moved to In Review.`, notifRes.rows[0].id);
     }
     const statusLabels = { queued: 'Queued', backlog: 'Backlog', todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done' };
     await query(
@@ -926,10 +972,15 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
   }
 });
 
-app.delete('/api/tasks/:id', auth(['admin', 'manager']), async (req, res) => {
+app.delete('/api/tasks/:id', auth(), async (req, res) => {
   try {
-    const result = await query('DELETE FROM tasks WHERE id = $1 RETURNING id', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ error: 'Task not found' });
+    const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
+    const task = existing.rows[0];
+    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
+    if (!isManager && task.created_by !== req.user.id)
+      return res.status(403).json({ error: 'Not authorized to delete this task' });
+    await query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
     res.json({ message: 'Task deleted' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -959,7 +1010,7 @@ app.post('/api/task-labels', auth(['admin', 'manager']), async (req, res) => {
   }
 });
 
-app.put('/api/tasks/:id/labels', auth(['admin', 'manager']), async (req, res) => {
+app.put('/api/tasks/:id/labels', auth(), async (req, res) => {
   try {
     const { label_ids } = req.body;
     if (!Array.isArray(label_ids)) return res.status(400).json({ error: 'label_ids must be an array' });
@@ -1043,6 +1094,40 @@ app.post('/api/notifications/read', auth(), async (req, res) => {
   try {
     await query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.user.id]);
     res.json({ message: 'Marked as read' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/push/vapid-key', auth(), (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY || '' });
+});
+
+app.post('/api/push/subscribe', auth(), async (req, res) => {
+  try {
+    const { endpoint, p256dh, auth: subAuth } = req.body;
+    if (!endpoint) return res.status(400).json({ error: 'Endpoint required' });
+    await query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = $1, p256dh = $3, auth = $4`,
+      [req.user.id, endpoint, p256dh, subAuth]
+    );
+    res.json({ message: 'Subscribed' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/push/subscribe', auth(), async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (endpoint) {
+      await query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [endpoint, req.user.id]);
+    } else {
+      await query('DELETE FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
+    }
+    res.json({ message: 'Unsubscribed' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2478,6 +2563,14 @@ async function init() {
         user_id INTEGER REFERENCES users(id),
         action TEXT NOT NULL,
         details TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);

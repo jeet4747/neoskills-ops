@@ -43,7 +43,7 @@ export default function Sidebar({ open, onClose }) {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />
       )}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 gradient-primary transform transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto ${
+        className={`fixed top-0 left-0 bottom-0 z-50 w-64 gradient-primary transform transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto overflow-hidden flex flex-col ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -64,7 +64,7 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
 
-        <nav className="p-3 space-y-0.5 mt-2">
+        <nav className="p-3 space-y-0.5 mt-2 overflow-y-auto flex-1">
           {items.map((item) => (
             <NavLink
               key={item.to}
@@ -92,7 +92,7 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
+        <div className="shrink-0 p-4 border-t border-white/10">
           <div className="flex items-center gap-3 mb-3 px-2">
             <div className="w-9 h-9 bg-accent-500 rounded-xl flex items-center justify-center text-primary-900 text-sm font-bold">
               {user?.name?.charAt(0).toUpperCase()}
