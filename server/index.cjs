@@ -1206,7 +1206,7 @@ app.get('/api/batches/:id', auth(), async (req, res) => {
 });
 
 app.post('/api/batches', auth(), async (req, res) => {
-  const allowed = ['admin', 'manager', 'ops'].includes(req.user.role) || (req.user.role === 'sales' && req.user.can_create_batches);
+  const allowed = ['admin', 'manager', 'ops'].includes(req.user.role) || req.user.can_create_batches;
   if (!allowed) return res.status(403).json({ error: 'Forbidden' });
   try {
     const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
