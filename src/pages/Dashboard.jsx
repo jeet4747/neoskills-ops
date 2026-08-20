@@ -35,9 +35,11 @@ export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isHR = user?.role === 'hr';
+  const canSell = user?.can_sell;
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
   const isAdmin = user?.role === 'admin';
-  const isSales = user?.role === 'sales';
+  const isSales = user?.role === 'sales' || (isHR && canSell);
+  const showHRPanel = isHR && !canSell;
 
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -74,7 +76,7 @@ export default function Dashboard() {
   async function load() {
     setLoading(true);
     try {
-      if (isHR) {
+      if (showHRPanel) {
         const ov = await api.dashboard.hrOverview();
         setHrData(ov);
         setLoading(false);
@@ -85,20 +87,23 @@ export default function Dashboard() {
       const m = now.getMonth() + 1;
       const y = now.getFullYear();
 
-      const [s, t, tr, src, rec, tgt] = await Promise.all([
+      const promises = [
         api.dashboard.summary({ month: selectedMonth }),
         isManager ? api.dashboard.team() : Promise.resolve([]),
         api.dashboard.trends(),
         isManager ? api.dashboard.sourceAnalytics() : Promise.resolve([]),
         isSales ? api.enrollments.list({}) : Promise.resolve([]),
         api.targets.list({ month: m, year: y }),
-      ]);
+      ];
+      if (isHR && canSell) promises.push(api.dashboard.hrOverview());
+      const [s, t, tr, src, rec, tgt, hrOv] = await Promise.all(promises);
       setSummary(s);
       setTeam(t);
       setTrends(tr.reverse());
       setSources(src);
       setRecent(rec);
       setTargets(tgt);
+      if (hrOv) setHrData(hrOv);
       if (isSales) {
         const mine = tgt.find((t) => t.user_id === user.id);
         setMyTarget(mine || null);
@@ -147,7 +152,7 @@ export default function Dashboard() {
     );
   }
 
-  if (isHR && hrData) return <HRDashboard hrData={hrData} user={user} />;
+  if (showHRPanel && hrData) return <HRDashboard hrData={hrData} user={user} />;
 
   const totalNominations = isSales
     ? (summary?.total_enrollments || 0)
@@ -491,6 +496,42 @@ export default function Dashboard() {
           </div>
         </div>
       </Modal>
+
+      {isHR && canSell && hrData && (
+        <div className="space-y-6">
+          <div className="border-t pt-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Team Overview</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+              <GradientStatsCard icon={Users} label="Total Team" value={hrData.team?.length || 0} color="primary" />
+              <GradientStatsCard icon={ListChecks} label="Open Tasks" value={(hrData.tasks?.find(t => t.status === 'todo') ? parseInt(hrData.tasks.find(t => t.status === 'todo').count) : 0) + (hrData.tasks?.find(t => t.status === 'in_progress') ? parseInt(hrData.tasks.find(t => t.status === 'in_progress').count) : 0)} color="blue" />
+              <GradientStatsCard icon={Target} label="Completed Tasks" value={hrData.tasks?.find(t => t.status === 'done') ? parseInt(hrData.tasks.find(t => t.status === 'done').count) : 0} color="emerald" />
+              <GradientStatsCard icon={FileText} label="Total Enrollments" value={hrData.enrollments?.total || 0} color="amber" />
+            </div>
+          </div>
+          <Card>
+            <CardHeader><h3 className="font-semibold text-gray-900">Team Roster</h3></CardHeader>
+            <CardBody className="p-0">
+              <div className="max-h-64 overflow-y-auto">
+                {hrData.team?.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 px-5 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                    <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
+                      {m.name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
+                      <p className="text-xs text-gray-400">{m.email}</p>
+                    </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
+                      m.status === 'active' ? 'bg-emerald-50 text-emerald-600' : m.status === 'on_leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                    }`}>{m.status}</span>
+                    <span className="text-xs text-gray-400 capitalize">{m.role}</span>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

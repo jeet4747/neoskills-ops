@@ -495,8 +495,9 @@ app.get('/api/enrollments', auth(), async (req, res) => {
     `;
     let params = [];
     const conditions = [];
+    const isSeller = role === 'sales' || (role === 'hr' && req.user.can_sell);
 
-    if (role === 'sales') {
+    if (isSeller) {
       conditions.push(`e.sales_user_id = $${params.length + 1}`);
       params.push(req.user.id);
     } else if (role === 'ops') {
@@ -2013,10 +2014,11 @@ app.get('/api/gst-invoices/:id/pdf', auth(['admin', 'manager', 'ops']), async (r
 app.get('/api/dashboard/summary', auth(), async (req, res) => {
   try {
     const role = req.user.role;
+    const isSeller = role === 'sales' || (role === 'hr' && req.user.can_sell);
     let userFilter = '';
     let enrollFilter = '';
     let params = [];
-    if (role === 'sales') {
+    if (isSeller) {
       userFilter = 'AND p.sales_user_id = $1';
       enrollFilter = 'AND e.sales_user_id = $1';
       params.push(req.user.id);
@@ -2177,10 +2179,11 @@ app.get('/api/targets', auth(), async (req, res) => {
                FROM sales_targets t JOIN users u ON u.id = t.user_id
                WHERE t.month = $1 AND t.year = $2`;
     const params = [m, y];
+    const isSeller = req.user.role === 'sales' || (req.user.role === 'hr' && req.user.can_sell);
     if (user_id) {
       sql += ' AND t.user_id = $3';
       params.push(user_id);
-    } else if (req.user.role === 'sales') {
+    } else if (isSeller) {
       sql += ' AND t.user_id = $3';
       params.push(req.user.id);
     }
