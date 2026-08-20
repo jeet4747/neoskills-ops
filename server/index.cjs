@@ -198,6 +198,17 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   }
 });
 
+app.get('/api/users/list', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT id, name, role FROM users WHERE status = 'active' ORDER BY name"
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/users', auth(['admin']), async (req, res) => {
   try {
     const { name, email, password, role = 'sales', status = 'active', phone, city } = req.body;

@@ -67,7 +67,7 @@ export default function Tasks() {
       setLoading(true);
       const [taskData, userData, labelData] = await Promise.all([
         api.tasks.list(),
-        api.users?.list?.() || Promise.resolve([]),
+        api.users?.listSimple?.() || Promise.resolve([]),
         api.taskLabels.list(),
       ]);
       setTasks(taskData);
@@ -248,7 +248,7 @@ export default function Tasks() {
           <option value="high">High</option>
           <option value="urgent">Urgent</option>
         </select>
-        {canManage && users.length > 0 && (
+        {users.length > 0 && (
           <select className="input-field py-2 text-sm w-40" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
             <option value="">All Assignees</option>
             {users.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
