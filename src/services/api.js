@@ -116,6 +116,11 @@ export const api = {
     list: () => request('/task-labels'),
     create: (data) => request('/task-labels', { method: 'POST', body: JSON.stringify(data) }),
   },
+  push: {
+    vapidKey: () => request('/push/vapid-key'),
+    subscribe: (data) => request('/push/subscribe', { method: 'POST', body: JSON.stringify(data) }),
+    unsubscribe: (data) => request('/push/subscribe', { method: 'DELETE', body: JSON.stringify(data) }),
+  },
   batches: {
     list: () => request('/batches'),
     get: (id) => request(`/batches/${id}`),

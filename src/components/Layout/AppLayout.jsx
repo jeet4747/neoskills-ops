@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Menu, Trophy } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationsBell from './NotificationsBell';
+import PushPrompt from './PushPrompt';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,6 +38,7 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+      <PushPrompt />
     </div>
   );
 }
