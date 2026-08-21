@@ -22,6 +22,15 @@ function timeAgo(dateStr) {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
+function fmtINR(n) {
+  const num = Number(n || 0);
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)}L`;
+  return `${sign}₹${abs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
 const STATUS_COLORS = {
   queued: 'bg-gray-100 text-gray-600',
   backlog: 'bg-red-50 text-red-600',
@@ -188,8 +197,8 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <GradientStatsCard icon={DollarSign} label="Payment Received" value={`₹${(summary?.total_revenue || 0).toLocaleString()}`} color="primary" />
-        <GradientStatsCard icon={Clock} label="Pending Collection" value={`₹${(summary?.total_pending || 0).toLocaleString()}`} color="amber" onClick={openPendingCollections} />
+        <GradientStatsCard icon={DollarSign} label="Payment Received" value={fmtINR(summary?.total_revenue || 0)} color="primary" />
+        <GradientStatsCard icon={Clock} label="Pending Collection" value={fmtINR(summary?.total_pending || 0)} color="amber" onClick={openPendingCollections} />
         <GradientStatsCard icon={Users} label="Payment Pending Candidates" value={summary?.active_enrollments || 0} color="emerald" onClick={openPendingCollections} />
         {isManager ? (
           isAdmin ? (
@@ -294,8 +303,8 @@ export default function Dashboard() {
                 <LineChart data={trends}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="month" tickFormatter={(v) => { if (!v) return ''; const d = new Date(v); return MONTH_LABELS[d.getMonth()]; }} fontSize={12} />
-                  <YAxis fontSize={12} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString()}`, 'Revenue']} labelFormatter={(l) => { if (!l) return ''; const d = new Date(l); return MONTH_LABELS[d.getMonth()] + ' ' + d.getFullYear(); }} />
+                  <YAxis fontSize={12} tickFormatter={(v) => fmtINR(v)} />
+                  <Tooltip formatter={(v) => [fmtINR(v), 'Revenue']} labelFormatter={(l) => { if (!l) return ''; const d = new Date(l); return MONTH_LABELS[d.getMonth()] + ' ' + d.getFullYear(); }} />
                   <Line type="monotone" dataKey="revenue" stroke="#003B7A" strokeWidth={2.5} dot={{ r: 4, fill: '#003B7A' }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -352,8 +361,8 @@ export default function Dashboard() {
                         <p className="text-xs text-gray-400 truncate">{en.course_name}{en.batch_name ? ` · ${en.batch_name}` : ''}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold text-emerald-600">₹{Number(en.paid_amount || 0).toLocaleString()}</p>
-                        <p className="text-xs text-amber-500">₹{Number(en.pending_amount || 0).toLocaleString()} pending</p>
+                        <p className="text-sm font-semibold text-emerald-600">{fmtINR(en.paid_amount || 0)}</p>
+                        <p className="text-xs text-amber-500">{fmtINR(en.pending_amount || 0)} pending</p>
                       </div>
                     </div>
                   ))}
@@ -404,8 +413,8 @@ export default function Dashboard() {
                       <tr key={person.id} onClick={() => navigate(`/salesperson/${person.id}`)} className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
                         <td className="px-5 py-3.5 font-medium text-gray-900 hover:text-primary-600 transition-colors">{person.name}</td>
                         <td className="px-5 py-3.5 text-gray-600">{person.deals_closed}</td>
-                        <td className="px-5 py-3.5">₹{Number(person.revenue).toLocaleString()}</td>
-                        <td className="px-5 py-3.5 text-amber-600 font-medium">₹{Number(person.pending).toLocaleString()}</td>
+                        <td className="px-5 py-3.5">{fmtINR(person.revenue)}</td>
+                        <td className="px-5 py-3.5 text-amber-600 font-medium">{fmtINR(person.pending)}</td>
                       </tr>
                     ))}
                     {!team.length && <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-400 text-sm">No data for this period</td></tr>}
@@ -432,7 +441,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             <p className="text-sm text-gray-500">
               {pendingList.length} enrollment{pendingList.length !== 1 ? 's' : ''} with pending balance of{' '}
-              <strong className="text-amber-600">₹{pendingList.reduce((s, r) => s + Number(r.pending_amount || 0), 0).toLocaleString()}</strong>
+              <strong className="text-amber-600">{fmtINR(pendingList.reduce((s, r) => s + Number(r.pending_amount || 0), 0))}</strong>
             </p>
             <div className="overflow-x-auto -mx-1 px-1">
               <table className="w-full text-sm min-w-[560px]">
@@ -470,9 +479,9 @@ export default function Dashboard() {
                         {r.batch_name && <p className="text-xs text-gray-400 truncate">Batch: {r.batch_name}</p>}
                       </td>
                       <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{r.salesperson_name || '-'}</td>
-                      <td className="px-3 py-3 text-right whitespace-nowrap">₹{Number(r.total_amount).toLocaleString()}</td>
-                      <td className="px-3 py-3 text-right text-emerald-600 font-medium whitespace-nowrap">₹{Number(r.paid_amount).toLocaleString()}</td>
-                      <td className="px-3 py-3 text-right text-amber-600 font-bold whitespace-nowrap">₹{Number(r.pending_amount).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-right whitespace-nowrap">{fmtINR(r.total_amount)}</td>
+                      <td className="px-3 py-3 text-right text-emerald-600 font-medium whitespace-nowrap">{fmtINR(r.paid_amount)}</td>
+                      <td className="px-3 py-3 text-right text-amber-600 font-bold whitespace-nowrap">{fmtINR(r.pending_amount)}</td>
                     </tr>
                   ))}
                 </tbody>
