@@ -54,7 +54,7 @@ export default function Batches() {
   const { user } = useAuth();
   const toast = useToast();
   const canManage = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
-  const canCreateBatches = canManage || (user && user.can_create_batches);
+  const canCreateBatches = true;
 
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
