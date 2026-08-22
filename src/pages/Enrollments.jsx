@@ -8,6 +8,15 @@ import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { PAYMENT_MODES, CATEGORIES } from '../config/constants';
+
+function fmtINR(n) {
+  const num = Number(n || 0);
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)}L`;
+  return `${sign}₹${abs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
 import { compressImage } from '../utils/imageCompress';
 
 const CATEGORY_DEAL_MAP = {
@@ -312,16 +321,22 @@ export default function Enrollments() {
       </div>
     )},
     { key: 'category', label: 'Category', render: (r) => r.category || <span className="capitalize">{r.deal_type}</span> },
+    { key: 'salesperson_name', label: 'Sales POC', render: (r) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0">{(r.salesperson_name || '?').charAt(0).toUpperCase()}</span>
+        <span className="text-gray-700 font-medium text-xs">{r.salesperson_name || '-'}</span>
+      </span>
+    )},
     { key: 'course_name', label: 'Module' },
-    { key: 'training_fee', label: 'Training Fee', render: (r) => `₹${Number(r.training_fee || 0).toLocaleString()}` },
-    { key: 'exam_fee', label: 'Exam Fee', render: (r) => `₹${Number(r.exam_fee || 0).toLocaleString()}` },
-    { key: 'total_amount', label: 'Total', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
+    { key: 'training_fee', label: 'Training Fee', render: (r) => fmtINR(r.training_fee || 0) },
+    { key: 'exam_fee', label: 'Exam Fee', render: (r) => fmtINR(r.exam_fee || 0) },
+    { key: 'total_amount', label: 'Total', render: (r) => <span className="font-semibold text-gray-900">{fmtINR(r.total_amount)}</span> },
     { key: 'paid_amount', label: 'Received', render: (r) => (
-      <span className="font-medium text-emerald-600">₹{Number(r.paid_amount || 0).toLocaleString()}</span>
+      <span className="font-medium text-emerald-600">{fmtINR(r.paid_amount || 0)}</span>
     )},
     { key: 'pending_amount', label: 'Pending', render: (r) => (
       <span className={`font-medium ${Number(r.pending_amount) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-        ₹{Number(r.pending_amount || 0).toLocaleString()}
+        {fmtINR(r.pending_amount || 0)}
       </span>
     )},
     { key: 'bank_account_name', label: 'Bank', render: (r) => (
@@ -514,8 +529,7 @@ export default function Enrollments() {
         </div>
       ) : (
         <Card><CardBody className="p-0">
-          <Table columns={columns} data={filteredEnrollments} />
-          {!filteredEnrollments.length && (
+          {!filteredEnrollments.length ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <GraduationCap size={28} className="text-gray-300" />
@@ -524,6 +538,80 @@ export default function Enrollments() {
               <p className="text-xs text-gray-400 mb-4">{search ? 'Try a different name, phone or module' : 'Create your first enrollment to get started'}</p>
               {!search && <button onClick={() => setShowAdd(true)} className="btn-primary text-sm">Add Enrollment</button>}
             </div>
+          ) : (
+            <>
+              {/* Desktop table */}
+              <div className="hidden lg:block">
+                <Table columns={columns} data={filteredEnrollments} />
+              </div>
+
+              {/* Mobile cards */}
+              <div className="lg:hidden divide-y divide-gray-50">
+                {filteredEnrollments.map((r) => (
+                  <div key={r.id} className="p-4 space-y-2.5">
+                    {/* Row 1: Name + Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 bg-primary-100 rounded-xl flex items-center justify-center text-primary-700 font-bold text-sm shrink-0">
+                          {(r.student_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{r.student_name}</p>
+                          <p className="text-[11px] text-gray-400">{r.student_phone || r.student_email || ''}</p>
+                        </div>
+                      </div>
+                      <Badge status={r.status === 'waiting_approval' ? 'waiting' : r.status === 'active' ? 'pending' : r.status}>
+                        {r.status === 'waiting_approval' ? 'Approval Pending' : r.status === 'active' ? 'Payment Pending' : 'Completed'}
+                      </Badge>
+                    </div>
+
+                    {/* Row 2: Module + Category */}
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      {r.category || <span className="capitalize">{r.deal_type}</span>}
+                      <span className="text-gray-300">·</span>
+                      <span>{r.course_name}</span>
+                    </div>
+
+                    {/* Row 3: Sales POC */}
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-gray-400">POC:</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-5 h-5 bg-primary-100 text-primary-700 rounded flex items-center justify-center text-[9px] font-bold">{(r.salesperson_name || '?').charAt(0).toUpperCase()}</span>
+                        <span className="font-medium text-gray-700">{r.salesperson_name || '-'}</span>
+                      </span>
+                    </div>
+
+                    {/* Row 4: Amounts */}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-gray-400">Total:</span>
+                      <span className="font-semibold text-gray-900">{fmtINR(r.total_amount)}</span>
+                      <span className="text-emerald-600 font-medium">{fmtINR(r.paid_amount || 0)} recv</span>
+                      {Number(r.pending_amount) > 0 && <span className="text-amber-600 font-medium">{fmtINR(r.pending_amount)} pend</span>}
+                    </div>
+
+                    {/* Row 5: Actions */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button onClick={(ev) => { ev.stopPropagation(); openEdit(r); }}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors" title="Edit">
+                        <Pencil size={14} />
+                      </button>
+                      {Number(r.pending_amount) > 0 && (
+                        <button onClick={(ev) => { ev.stopPropagation(); openPay(r); }}
+                          className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Record payment">
+                          <Banknote size={14} />
+                        </button>
+                      )}
+                      {isOps && (
+                        <button onClick={(ev) => { ev.stopPropagation(); handleDownloadReceipt(r); }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Download receipt">
+                          <FileDown size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardBody></Card>
       )}

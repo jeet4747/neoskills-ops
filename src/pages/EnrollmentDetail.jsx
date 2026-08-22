@@ -10,6 +10,15 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { getReceiptUrls } from '../utils/receipts';
 
+function fmtINR(n) {
+  const num = Number(n || 0);
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)}L`;
+  return `${sign}₹${abs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
 export default function EnrollmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -131,10 +140,10 @@ export default function EnrollmentDetail() {
   }
 
   const paymentColumns = [
-    { key: 'amount_paid', label: 'Amount', render: (r) => `₹${Number(r.amount_paid).toLocaleString()}` },
+    { key: 'amount_paid', label: 'Amount', render: (r) => fmtINR(r.amount_paid) },
     { key: 'pending_amount', label: 'Pending', render: (r) => (
       <span className={Number(r.pending_amount) > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}>
-        ₹{Number(r.pending_amount).toLocaleString()}
+        {fmtINR(r.pending_amount)}
       </span>
     )},
     { key: 'payment_mode', label: 'Mode', render: (r) => <span className="capitalize">{r.payment_mode}</span> },
@@ -237,19 +246,19 @@ export default function EnrollmentDetail() {
         <Card>
           <CardBody>
             <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Total Fee</p>
-            <p className="text-base sm:text-xl font-bold text-gray-900 mt-0.5 break-words">₹{Number(enrollment.total_amount).toLocaleString()}</p>
+            <p className="text-base sm:text-xl font-bold text-gray-900 mt-0.5 break-words">{fmtINR(enrollment.total_amount)}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Paid</p>
-            <p className="text-base sm:text-xl font-bold text-emerald-600 mt-0.5 break-words">₹{totalPaid.toLocaleString()}</p>
+            <p className="text-base sm:text-xl font-bold text-emerald-600 mt-0.5 break-words">{fmtINR(totalPaid)}</p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">Pending</p>
-            <p className="text-base sm:text-xl font-bold text-amber-600 mt-0.5 break-words">₹{totalPending.toLocaleString()}</p>
+            <p className="text-base sm:text-xl font-bold text-amber-600 mt-0.5 break-words">{fmtINR(totalPending)}</p>
           </CardBody>
         </Card>
         <Card>
@@ -273,7 +282,7 @@ export default function EnrollmentDetail() {
       </Card>
 
       <Modal open={!!viewPayment} onClose={() => setViewPayment(null)}
-        title={viewPayment ? `Payment Receipt — ₹${Number(viewPayment.amount_paid).toLocaleString()}` : ''} size="xl">
+        title={viewPayment ? `Payment Receipt — ${fmtINR(viewPayment.amount_paid)}` : ''} size="xl">
         {viewPayment && (
           <div className="grid grid-cols-2 gap-3">
             {getReceiptUrls(viewPayment).map((u, i) => (
