@@ -836,7 +836,7 @@ app.post('/api/tasks', auth(), async (req, res) => {
     const isSales = req.user.role === 'sales';
     let finalAssignee = isSales ? (assignee_id ? parseInt(assignee_id) : req.user.id) : (assignee_id || null);
     const assignedToOther = finalAssignee && finalAssignee !== req.user.id;
-    const initialStatus = assignedToOther ? 'todo' : 'queued';
+    const initialStatus = 'todo';
     const result = await query(
       `INSERT INTO tasks (title, description, status, priority, assignee_id, created_by, due_date)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
@@ -906,9 +906,6 @@ app.put('/api/tasks/:id', auth(), async (req, res) => {
     const assigneeChanged = newAssignee !== task.assignee_id;
     const reassignedToOther = assigneeChanged && newAssignee && newAssignee !== req.user.id;
     let newStatus = task.status;
-    if (reassignedToOther && task.status === 'queued') {
-      newStatus = 'todo';
-    }
     const result = await query(
       `UPDATE tasks SET
          title = COALESCE($1, title),
@@ -945,7 +942,7 @@ app.put('/api/tasks/:id', auth(), async (req, res) => {
 app.put('/api/tasks/:id/status', auth(), async (req, res) => {
   try {
     const { status } = req.body;
-    const valid = ['queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done'];
+    const valid = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
@@ -973,7 +970,7 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
       );
       sendPushNotification(task.created_by, 'Task In Review', `"${task.title}" moved to In Review.`, notifRes.rows[0].id);
     }
-    const statusLabels = { queued: 'Queued', backlog: 'Backlog', todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done' };
+    const statusLabels = { backlog: 'Backlog', todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done' };
     await query(
       'INSERT INTO task_activities (task_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
       [req.params.id, req.user.id, 'moved', `Moved from "${statusLabels[task.status]}" to "${statusLabels[status]}"`]
@@ -2662,7 +2659,7 @@ async function init() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        status TEXT DEFAULT 'queued' CHECK (status IN ('queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done')),
+        status TEXT DEFAULT 'todo' CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
         priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
         assignee_id INTEGER REFERENCES users(id),
         created_by INTEGER REFERENCES users(id),
@@ -2724,9 +2721,10 @@ async function init() {
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
-      await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'queued'`);
+      await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'todo'`);
       await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
-      await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
+      await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
+      await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

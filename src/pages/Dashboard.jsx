@@ -32,7 +32,6 @@ function fmtINR(n) {
 }
 
 const STATUS_COLORS = {
-  queued: 'bg-gray-100 text-gray-600',
   backlog: 'bg-red-50 text-red-600',
   todo: 'bg-blue-50 text-blue-600',
   in_progress: 'bg-amber-50 text-amber-600',
@@ -578,7 +577,7 @@ function HRDashboard({ hrData, user }) {
           <CardHeader><h3 className="font-semibold text-gray-900">Task Board Overview</h3></CardHeader>
           <CardBody>
             <div className="space-y-3">
-              {['queued', 'backlog', 'todo', 'in_progress', 'in_review', 'done'].map((s) => (
+              {['backlog', 'todo', 'in_progress', 'in_review', 'done'].map((s) => (
                 <div key={s} className="flex items-center gap-3">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium min-w-[90px] ${STATUS_COLORS[s]}`}>
                     {s.replace('_', ' ')}
