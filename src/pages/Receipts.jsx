@@ -369,6 +369,7 @@ export default function Receipts() {
               <Table
                 columns={[
                   { key: 'id', label: 'ID' },
+                  { key: 'bank_account_name', label: 'Bank', render: (r) => <span className={`text-xs ${r.bank_account_name ? 'text-gray-700 font-medium' : 'text-gray-300'}`}>{r.bank_account_name || '—'}</span> },
                   { key: 'student_name', label: 'Customer', render: (r) => <div><p className="font-medium">{r.student_name}</p><p className="text-xs text-gray-400">{r.student_phone}</p></div> },
                   { key: 'course_name', label: 'Course', render: (r) => <span className="text-sm">{r.course_name}</span> },
                   { key: 'total_amount', label: 'Total', render: (r) => `₹${Number(r.total_amount).toLocaleString()}` },
