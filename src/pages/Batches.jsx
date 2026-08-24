@@ -316,16 +316,12 @@ export default function Batches() {
                   <button onClick={() => openDetail(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors border-r border-gray-100">
                     <Eye size={15} /> View
                   </button>
-                  {canManage && (
-                    <>
-                      <button onClick={() => openEdit(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border-r border-gray-100">
-                        <Pencil size={15} /> Edit
-                      </button>
-                      <button onClick={() => handleDelete(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
-                        <Trash2 size={15} /> Delete
-                      </button>
-                    </>
-                  )}
+                  <button onClick={() => openEdit(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border-r border-gray-100">
+                    <Pencil size={15} /> Edit
+                  </button>
+                  <button onClick={() => handleDelete(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 size={15} /> Delete
+                  </button>
                 </div>
               </div>
             );

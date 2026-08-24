@@ -1262,7 +1262,7 @@ app.post('/api/batches', auth(), async (req, res) => {
   }
 });
 
-app.put('/api/batches/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.put('/api/batches/:id', auth(), async (req, res) => {
   try {
     const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
     const existing = await query('SELECT id FROM batches WHERE id = $1', [req.params.id]);
