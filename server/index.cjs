@@ -397,7 +397,7 @@ app.post('/api/enrollments', auth(), async (req, res) => {
 app.post('/api/enrollments/combined', auth(), async (req, res) => {
   try {
     const { student_name, student_email, student_phone, course_name, category, deal_type,
-            training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link,
+            training_fee, exam_fee, total_amount, training_month, support_included, source, batch_name, telecrm_link,
             amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
 
     if (!student_name || !course_name)
@@ -430,9 +430,9 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
       }
 
       const enroll = await client.query(
-        `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-        [student.id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name, telecrm_link || null]
+        `INSERT INTO enrollments (student_id, sales_user_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link, training_month)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+        [student.id, req.user.id, course_name, deal_type || 'bundle', category, training_fee || 0, exam_fee || 0, total_amount, !!support_included, source, batch_name, telecrm_link || null, training_month || null]
       );
       const enrollment = enroll.rows[0];
 
@@ -623,7 +623,7 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
     if (!isManager && enroll.sales_user_id !== req.user.id)
       return res.status(403).json({ error: 'You can only edit your own enrollments' });
 
-    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, support_included, source, batch_name, telecrm_link } = req.body;
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, training_month, support_included, source, batch_name, telecrm_link } = req.body;
 
     const newTotal = total_amount !== undefined
       ? parseFloat(total_amount)
@@ -633,8 +633,8 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
       `UPDATE enrollments SET
          course_name = $1, deal_type = $2, category = $3,
          training_fee = $4, exam_fee = $5, total_amount = $6,
-         support_included = $7, source = $8, batch_name = $9, telecrm_link = $10
-       WHERE id = $11 RETURNING *`,
+         support_included = $7, source = $8, batch_name = $9, telecrm_link = $10, training_month = $11
+       WHERE id = $12 RETURNING *`,
       [
         course_name || enroll.course_name,
         deal_type || enroll.deal_type,
@@ -646,6 +646,7 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
         source !== undefined ? source : enroll.source,
         batch_name !== undefined ? batch_name : enroll.batch_name,
         telecrm_link !== undefined ? telecrm_link : enroll.telecrm_link,
+        training_month !== undefined ? training_month : enroll.training_month,
         req.params.id,
       ]
     );
@@ -2725,6 +2726,7 @@ async function init() {
       await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
       await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
       await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
+      await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

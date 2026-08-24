@@ -44,6 +44,7 @@ export default function Enrollments() {
     category: 'Training',
     course_name: '',
     training_fee: '', exam_fee: '',
+    training_month: new Date().toISOString().slice(0, 7),
     support_included: false,
     payment_account: '', payment_mode: 'upi',
     payment_received: '', transaction_id: '',
@@ -159,6 +160,7 @@ export default function Enrollments() {
         training_fee: trainingFee,
         exam_fee: examFee,
         total_amount: total,
+        training_month: form.training_month || null,
         support_included: form.support_included,
         telecrm_link: form.telecrm_link.trim(),
         amount_paid: received,
@@ -186,7 +188,8 @@ export default function Enrollments() {
     setForm({
       candidate_name: '', email: '', phone: '', telecrm_link: '',
       category: 'Training', course_name: '',
-      training_fee: '', exam_fee: '', support_included: false,
+      training_fee: '', exam_fee: '', training_month: new Date().toISOString().slice(0, 7),
+      support_included: false,
       payment_account: '', payment_mode: 'upi',
       payment_received: '', transaction_id: '',
       payment_date: new Date().toISOString().slice(0, 10),
@@ -207,6 +210,7 @@ export default function Enrollments() {
       course_name: enrollment.course_name,
       training_fee: enrollment.training_fee || '',
       exam_fee: enrollment.exam_fee || '',
+      training_month: enrollment.training_month || '',
       support_included: !!enrollment.support_included,
       source: enrollment.source || 'Website',
       batch_name: enrollment.batch_name || '',
@@ -328,6 +332,12 @@ export default function Enrollments() {
       </span>
     )},
     { key: 'course_name', label: 'Module' },
+    { key: 'training_month', label: 'Training Month', render: (r) => {
+      if (!r.training_month) return <span className="text-gray-300">—</span>;
+      const [y, m] = r.training_month.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return <span className="text-xs font-medium text-gray-700">{months[parseInt(m, 10) - 1]} {y}</span>;
+    }},
     { key: 'training_fee', label: 'Training Fee', render: (r) => fmtINR(r.training_fee || 0) },
     { key: 'exam_fee', label: 'Exam Fee', render: (r) => fmtINR(r.exam_fee || 0) },
     { key: 'total_amount', label: 'Total', render: (r) => <span className="font-semibold text-gray-900">{fmtINR(r.total_amount)}</span> },
@@ -565,11 +575,17 @@ export default function Enrollments() {
                       </Badge>
                     </div>
 
-                    {/* Row 2: Module + Category */}
+                    {/* Row 2: Module + Category + Training Month */}
                     <div className="flex items-center gap-3 text-xs text-gray-500">
                       {r.category || <span className="capitalize">{r.deal_type}</span>}
                       <span className="text-gray-300">·</span>
                       <span>{r.course_name}</span>
+                      {r.training_month && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          <span className="text-primary-600 font-medium">{(() => { const [y, m] = r.training_month.split('-'); const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${months[parseInt(m, 10) - 1]} ${y}`; })()}</span>
+                        </>
+                      )}
                     </div>
 
                     {/* Row 3: Sales POC */}
@@ -677,6 +693,13 @@ export default function Enrollments() {
                   value={form.course_name} placeholder="Type the module / course name"
                   onChange={(e) => { setForm({ ...form, course_name: e.target.value }); setErrors({}); }} />
                 {errors.course_name && <p className="text-xs text-red-500 mt-1">{errors.course_name}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Training Month *</label>
+                <input type="month" className={`input-field ${errors.training_month ? 'border-red-300' : ''}`}
+                  value={form.training_month}
+                  onChange={(e) => { setForm({ ...form, training_month: e.target.value }); setErrors({}); }} />
+                {errors.training_month && <p className="text-xs text-red-500 mt-1">{errors.training_month}</p>}
               </div>
             </div>
 
@@ -858,7 +881,7 @@ export default function Enrollments() {
 
             <section>
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Enrollment Details</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
                   <select className="input-field" value={editForm.category}
@@ -870,6 +893,11 @@ export default function Enrollments() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Module</label>
                   <input type="text" className="input-field" value={editForm.course_name}
                     onChange={(e) => setEditForm({ ...editForm, course_name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Training Month</label>
+                  <input type="month" className="input-field" value={editForm.training_month || ''}
+                    onChange={(e) => setEditForm({ ...editForm, training_month: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
