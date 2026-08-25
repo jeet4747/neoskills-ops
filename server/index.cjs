@@ -1378,8 +1378,8 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
           [sessionIds]
         ),
         query(
-          `SELECT se.session_id, se.enrollment_id, se.user_id, e.name AS enrollment_name,
-                  e.module, u.name AS user_name
+          `SELECT se.session_id, se.enrollment_id, se.user_id, e.course_name AS enrollment_name,
+                  e.batch_name AS module, u.name AS user_name
            FROM session_enrollments se
            JOIN enrollments e ON e.id = se.enrollment_id
            JOIN users u ON u.id = se.user_id
@@ -1412,9 +1412,9 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
 app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
   try {
     const result = await query(
-      `SELECT e.id, e.name, e.module FROM enrollments e
-       WHERE e.status IN ('active','approved') AND e.assigned_to = $1
-       ORDER BY e.name`,
+      `SELECT e.id, e.course_name, e.batch_name FROM enrollments e
+       WHERE e.status IN ('active') AND e.sales_user_id = $1
+       ORDER BY e.course_name`,
       [req.user.id]
     );
     res.json(result.rows);

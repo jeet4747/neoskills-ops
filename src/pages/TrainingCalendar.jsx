@@ -176,7 +176,7 @@ export default function TrainingCalendar() {
     if (addedIds.includes(e.id)) return false;
     if (!enrollSearch) return true;
     const q = enrollSearch.toLowerCase();
-    return e.name?.toLowerCase().includes(q) || e.module?.toLowerCase().includes(q);
+    return e.course_name?.toLowerCase().includes(q) || e.batch_name?.toLowerCase().includes(q);
   });
 
   return (
@@ -465,8 +465,8 @@ export default function TrainingCalendar() {
                           <button key={e.id} onClick={() => addCNFEnrollment(e.id)}
                             className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
                             <div className="min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{e.name}</p>
-                              <p className="text-[10px] text-gray-400">{e.module || 'No module'}</p>
+                              <p className="text-xs font-medium text-gray-900 truncate">{e.course_name}</p>
+                              <p className="text-[10px] text-gray-400">{e.batch_name || 'No batch'}</p>
                             </div>
                             <Plus size={14} className="text-blue-500 shrink-0" />
                           </button>
