@@ -68,7 +68,8 @@ export default function TrainingCalendar() {
       setBatches(batchesData);
     } catch (e) { toast.error('Failed to load calendar'); }
     finally { setLoading(false); }
-  }, [month, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
 
   useEffect(() => { load(); }, [load]);
 
