@@ -227,4 +227,11 @@ export const api = {
       URL.revokeObjectURL(url);
     },
   },
+  calendar: {
+    list: (month) => request(`/training-calendar${month ? `?month=${month}` : ''}`),
+    create: (data) => request('/training-calendar', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/training-calendar/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id) => request(`/training-calendar/${id}`, { method: 'DELETE' }),
+    saveNominations: (id, nominations) => request(`/training-calendar/${id}/nominations`, { method: 'PUT', body: JSON.stringify({ nominations }) }),
+  },
 };

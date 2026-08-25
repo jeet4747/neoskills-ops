@@ -15,6 +15,7 @@ import Team from './pages/Team';
 import Receipts from './pages/Receipts';
 import Batches from './pages/Batches';
 import Tasks from './pages/Tasks';
+import TrainingCalendar from './pages/TrainingCalendar';
 import Broadcast from './pages/Broadcast';
 import AppLayout from './components/Layout/AppLayout';
 
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="payments" element={<Payments />} />
         <Route path="batches" element={<Batches />} />
         <Route path="tasks" element={<Tasks />} />
+        <Route path="training-calendar" element={<TrainingCalendar />} />
         <Route
           path="receipts"
           element={

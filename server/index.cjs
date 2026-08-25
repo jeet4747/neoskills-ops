@@ -1343,6 +1343,119 @@ app.delete('/api/batches/:id/members/:enrollmentId', auth(['admin', 'manager', '
   }
 });
 
+// ── Training Calendar ──
+app.get('/api/training-calendar', auth(), async (req, res) => {
+  try {
+    const { month } = req.query;
+    let dateFilter = '';
+    const params = [];
+    if (month) {
+      params.push(month + '-01');
+      params.push(month + '-31');
+      dateFilter = `AND ts.session_date BETWEEN $1 AND $2`;
+    }
+    const sessions = await query(
+      `SELECT ts.*,
+        COALESCE((SELECT COUNT(*) FROM batch_members bm WHERE bm.batch_id = ts.batch_id), 0) AS confirmed_count,
+        u.name AS created_by_name
+       FROM training_sessions ts
+       LEFT JOIN users u ON u.id = ts.created_by
+       WHERE 1=1 ${dateFilter}
+       ORDER BY ts.session_date ASC, ts.created_at ASC`,
+      params
+    );
+    const sessionIds = sessions.rows.map((s) => s.id);
+    let nominations = { rows: [] };
+    if (sessionIds.length) {
+      nominations = await query(
+        `SELECT sn.session_id, sn.user_id, sn.tentative_count, u.name AS user_name
+         FROM session_nominations sn
+         JOIN users u ON u.id = sn.user_id
+         WHERE sn.session_id = ANY($1) AND sn.tentative_count > 0`,
+        [sessionIds]
+      );
+    }
+    const nomMap = {};
+    for (const n of nominations.rows) {
+      if (!nomMap[n.session_id]) nomMap[n.session_id] = [];
+      nomMap[n.session_id].push({ user_id: n.user_id, user_name: n.user_name, tentative_count: n.tentative_count });
+    }
+    const result = sessions.rows.map((s) => ({
+      ...s,
+      nominations: nomMap[s.id] || [],
+      total_tentative: (nomMap[s.id] || []).reduce((sum, n) => sum + n.tentative_count, 0),
+    }));
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/training-calendar', auth(), async (req, res) => {
+  try {
+    const { session_date, course_name, timing, batch_id } = req.body;
+    if (!session_date || !course_name || !course_name.trim())
+      return res.status(400).json({ error: 'Date and course name are required' });
+    const result = await query(
+      `INSERT INTO training_sessions (session_date, course_name, timing, batch_id, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [session_date, course_name.trim(), timing || null, batch_id || null, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/training-calendar/:id', auth(), async (req, res) => {
+  try {
+    const { session_date, course_name, timing, batch_id } = req.body;
+    const result = await query(
+      `UPDATE training_sessions SET
+        session_date = COALESCE($1, session_date),
+        course_name = COALESCE($2, course_name),
+        timing = $3,
+        batch_id = $4,
+        updated_at = NOW()
+       WHERE id = $5 RETURNING *`,
+      [session_date, course_name, timing || null, batch_id || null, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Session not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/training-calendar/:id', auth(), async (req, res) => {
+  try {
+    const result = await query('DELETE FROM training_sessions WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Session not found' });
+    res.json({ message: 'Deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/training-calendar/:id/nominations', auth(), async (req, res) => {
+  try {
+    const { nominations } = req.body;
+    if (!Array.isArray(nominations))
+      return res.status(400).json({ error: 'nominations array required' });
+    const session = await query('SELECT id FROM training_sessions WHERE id = $1', [req.params.id]);
+    if (!session.rows.length) return res.status(404).json({ error: 'Session not found' });
+    for (const nom of nominations) {
+      if (nom.user_id && nom.tentative_count >= 0) {
+        await query(
+          `INSERT INTO session_nominations (session_id, user_id, tentative_count)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (session_id, user_id) DO UPDATE SET tentative_count = $3, updated_at = NOW()`,
+          [req.params.id, nom.user_id, nom.tentative_count]
+        );
+      }
+    }
+    const updated = await query(
+      `SELECT sn.session_id, sn.user_id, sn.tentative_count, u.name AS user_name
+       FROM session_nominations sn JOIN users u ON u.id = sn.user_id
+       WHERE sn.session_id = $1 AND sn.tentative_count > 0`,
+      [req.params.id]
+    );
+    res.json(updated.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/bank-accounts', auth(), async (req, res) => {
   try {
     const result = await query('SELECT * FROM bank_accounts WHERE is_active = true ORDER BY bank_name');
@@ -2701,6 +2814,25 @@ async function init() {
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS training_sessions (
+        id SERIAL PRIMARY KEY,
+        session_date DATE NOT NULL,
+        course_name TEXT NOT NULL,
+        timing TEXT,
+        batch_id INTEGER REFERENCES batches(id) ON DELETE SET NULL,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS session_nominations (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES training_sessions(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        tentative_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (session_id, user_id)
       );
     `);
     console.log('Database tables created');
