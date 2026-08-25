@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Search } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -39,6 +39,7 @@ export default function TrainingCalendar() {
   const toast = useToast();
   const [sessions, setSessions] = useState([]);
   const [users, setUsers] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(currentMonth());
   const [showForm, setShowForm] = useState(false);
@@ -47,17 +48,23 @@ export default function TrainingCalendar() {
   const [saving, setSaving] = useState(false);
   const [editingCell, setEditingCell] = useState(null);
   const [cellValue, setCellValue] = useState('');
+  const [nomType, setNomType] = useState('tnt');
+  const [myEnrollments, setMyEnrollments] = useState([]);
+  const [enrollSearch, setEnrollSearch] = useState('');
+  const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [sessionsData, usersData] = await Promise.all([
+      const [sessionsData, usersData, batchesData] = await Promise.all([
         api.calendar.list(month),
         api.users.listSimple(),
+        api.batches.list(),
       ]);
       setSessions(sessionsData);
       setUsers(usersData.filter((u) => u.role === 'sales' || u.can_sell));
+      setBatches(batchesData);
     } catch (e) { toast.error('Failed to load calendar'); }
     finally { setLoading(false); }
   }, [month, toast]);
@@ -104,12 +111,24 @@ export default function TrainingCalendar() {
     } catch (e) { toast.error(e.message); }
   }
 
-  function startEditCell(sessionId, userId, currentVal) {
+  async function startEditCell(sessionId, userId) {
     setEditingCell({ sessionId, userId });
-    setCellValue(String(currentVal || ''));
+    setCellValue('');
+    setNomType('tnt');
+    setEnrollSearch('');
+    setSessionEnrollments([]);
+    try {
+      const [myEnrolls, currentSession] = await Promise.all([
+        api.calendar.myEnrollments(),
+        api.calendar.list(month),
+      ]);
+      setMyEnrollments(myEnrolls);
+      const sess = currentSession.find((s) => s.id === sessionId);
+      setSessionEnrollments(sess?.confirmed_enrollments || []);
+    } catch (e) { /* ignore */ }
   }
 
-  async function saveCell() {
+  async function saveTNT() {
     if (!editingCell) return;
     const val = parseInt(cellValue) || 0;
     const session = sessions.find((s) => s.id === editingCell.sessionId);
@@ -125,6 +144,26 @@ export default function TrainingCalendar() {
     } catch (e) { toast.error(e.message); }
   }
 
+  async function addCNFEnrollment(enrollmentId) {
+    try {
+      await api.calendar.addEnrollment(editingCell.sessionId, enrollmentId);
+      const sess = await api.calendar.list(month);
+      const s = sess.find((x) => x.id === editingCell.sessionId);
+      setSessionEnrollments(s?.confirmed_enrollments || []);
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  async function removeCNFEnrollment(enrollmentId) {
+    try {
+      await api.calendar.removeEnrollment(editingCell.sessionId, enrollmentId);
+      const sess = await api.calendar.list(month);
+      const s = sess.find((x) => x.id === editingCell.sessionId);
+      setSessionEnrollments(s?.confirmed_enrollments || []);
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+
   function getNom(session, userId) {
     const n = (session.nominations || []).find((x) => x.user_id === userId);
     return n ? n.tentative_count : 0;
@@ -132,13 +171,21 @@ export default function TrainingCalendar() {
 
   const totalBySession = (s) => (s.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
 
+  const filteredEnrollments = myEnrollments.filter((e) => {
+    const addedIds = sessionEnrollments.map((se) => se.enrollment_id);
+    if (addedIds.includes(e.id)) return false;
+    if (!enrollSearch) return true;
+    const q = enrollSearch.toLowerCase();
+    return e.name?.toLowerCase().includes(q) || e.module?.toLowerCase().includes(q);
+  });
+
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Training Calendar</h1>
-          <p className="text-sm text-gray-500">Plan upcoming sessions and track nominations</p>
+          <p className="text-sm text-gray-500">Plan sessions, track TNT/CNF nominations</p>
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-2 shadow-sm">
           <Plus size={16} /> New Session
@@ -182,6 +229,7 @@ export default function TrainingCalendar() {
                     <tr className="border-b border-gray-100 bg-gray-50/50">
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Date</th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Module / Timing</th>
+                      <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Batch</th>
                       <th className="text-center px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">CNF</th>
                       <th className="text-center px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">TNT</th>
                       {users.map((u) => (
@@ -208,6 +256,15 @@ export default function TrainingCalendar() {
                           <p className="text-sm font-medium text-gray-900">{s.course_name}</p>
                           {s.timing && <p className="text-xs text-gray-400">{s.timing}</p>}
                         </td>
+                        <td className="px-3 py-3">
+                          {s.batch_name ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-50 text-primary-700 text-xs font-medium rounded-md">
+                              <LinkIcon size={10} /> {s.batch_name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
                         <td className="px-3 py-3 text-center">
                           <span className="text-sm font-bold text-blue-600">{s.confirmed_count || 0}</span>
                         </td>
@@ -223,13 +280,13 @@ export default function TrainingCalendar() {
                                 <div className="flex items-center justify-center gap-1">
                                   <input type="number" min="0" value={cellValue}
                                     onChange={(e) => setCellValue(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') saveCell(); if (e.key === 'Escape') setEditingCell(null); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') saveTNT(); if (e.key === 'Escape') setEditingCell(null); }}
                                     className="w-12 h-7 text-center text-sm border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     autoFocus />
-                                  <button onClick={saveCell} className="p-0.5 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={14} /></button>
+                                  <button onClick={saveTNT} className="p-0.5 text-emerald-600 hover:bg-emerald-50 rounded"><Check size={14} /></button>
                                 </div>
                               ) : (
-                                <button onClick={() => startEditCell(s.id, u.id, val)}
+                                <button onClick={() => startEditCell(s.id, u.id)}
                                   className={`w-10 h-7 rounded-lg text-sm font-medium transition-colors ${val > 0 ? 'bg-primary-50 text-primary-700 hover:bg-primary-100' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-500'}`}>
                                   {val || '—'}
                                 </button>
@@ -255,7 +312,6 @@ export default function TrainingCalendar() {
           <div className="lg:hidden space-y-3">
             {sessions.map((s) => (
               <div key={s.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {/* Card Header */}
                 <div className="px-4 pt-4 pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -271,6 +327,11 @@ export default function TrainingCalendar() {
                       <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
                     </div>
                   </div>
+                  {s.batch_name && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-50 text-primary-700 text-[10px] font-medium rounded-md mt-2">
+                      <LinkIcon size={9} /> {s.batch_name}
+                    </span>
+                  )}
                   <div className="flex items-center gap-4 mt-3">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-gray-400 uppercase font-semibold">CNF</span>
@@ -282,15 +343,13 @@ export default function TrainingCalendar() {
                     </div>
                   </div>
                 </div>
-
-                {/* Salesperson Grid */}
                 <div className="border-t border-gray-50 px-4 py-3">
                   <div className="grid grid-cols-3 gap-2">
                     {users.map((u) => {
                       const isEditing = editingCell?.sessionId === s.id && editingCell?.userId === u.id;
                       const val = getNom(s, u.id);
                       return (
-                        <button key={u.id} onClick={() => startEditCell(s.id, u.id, val)}
+                        <button key={u.id} onClick={() => startEditCell(s.id, u.id)}
                           className="flex items-center gap-1.5 p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
                           <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">{u.name?.charAt(0).toUpperCase()}</span>
                           <div className="min-w-0 flex-1">
@@ -308,11 +367,11 @@ export default function TrainingCalendar() {
         </>
       )}
 
-      {/* Mobile Edit Modal */}
-      <Modal open={!!editingCell} onClose={() => setEditingCell(null)} title="Update Count" size="sm">
+      {/* Mobile/Edit Modal with TNT/CNF toggle */}
+      <Modal open={!!editingCell} onClose={() => setEditingCell(null)} title="Update Nomination" size="sm">
         {editingCell && (() => {
           const session = sessions.find((s) => s.id === editingCell.sessionId);
-          const user = users.find((u) => u.id === editingCell.userId);
+          const userObj = users.find((u) => u.id === editingCell.userId);
           return (
             <div className="space-y-4">
               <div className="text-center">
@@ -321,23 +380,105 @@ export default function TrainingCalendar() {
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-primary-100 text-primary-700 rounded-2xl flex items-center justify-center text-lg font-bold mx-auto mb-2">
-                  {user?.name?.charAt(0).toUpperCase()}
+                  {userObj?.name?.charAt(0).toUpperCase()}
                 </div>
-                <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                <p className="text-sm font-semibold text-gray-900">{userObj?.name}</p>
               </div>
-              <div className="flex items-center justify-center gap-3">
-                <button onClick={() => setCellValue(String(Math.max(0, parseInt(cellValue) - 1)))}
-                  className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-200">−</button>
-                <input type="number" min="0" value={cellValue}
-                  onChange={(e) => setCellValue(e.target.value)}
-                  className="w-20 h-12 text-center text-2xl font-bold border-2 border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                <button onClick={() => setCellValue(String(parseInt(cellValue) + 1))}
-                  className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center text-lg font-bold text-primary-700 hover:bg-primary-200">+</button>
+
+              {/* TNT / CNF Toggle */}
+              <div className="flex bg-gray-100 rounded-xl p-1">
+                <button
+                  onClick={() => setNomType('tnt')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${nomType === 'tnt' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  TNT (Tentative)
+                </button>
+                <button
+                  onClick={() => setNomType('cnf')}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${nomType === 'cnf' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  CNF (Confirmed)
+                </button>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setEditingCell(null)} className="btn-secondary flex-1">Cancel</button>
-                <button onClick={saveCell} className="btn-primary flex-1">Save</button>
-              </div>
+
+              {nomType === 'tnt' ? (
+                /* TNT: number input */
+                <>
+                  <div className="flex items-center justify-center gap-3">
+                    <button onClick={() => setCellValue(String(Math.max(0, parseInt(cellValue) - 1)))}
+                      className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-200">−</button>
+                    <input type="number" min="0" value={cellValue}
+                      onChange={(e) => setCellValue(e.target.value)}
+                      className="w-20 h-12 text-center text-2xl font-bold border-2 border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    <button onClick={() => setCellValue(String(parseInt(cellValue) + 1))}
+                      className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-lg font-bold text-amber-700 hover:bg-amber-200">+</button>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={() => setEditingCell(null)} className="btn-secondary flex-1">Cancel</button>
+                    <button onClick={saveTNT} className="btn-primary flex-1">Save</button>
+                  </div>
+                </>
+              ) : (
+                /* CNF: enrollment picker */
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input value={enrollSearch} onChange={(e) => setEnrollSearch(e.target.value)}
+                      placeholder="Search enrollments..."
+                      className="input-field pl-8 text-sm" />
+                  </div>
+
+                  {/* Already added */}
+                  {sessionEnrollments.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase font-semibold text-blue-600 mb-1.5">Confirmed ({sessionEnrollments.length})</p>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {sessionEnrollments.filter((se) => se.user_id === editingCell.userId).map((se) => (
+                          <div key={se.enrollment_id} className="flex items-center justify-between p-2 bg-blue-50 rounded-xl">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">{se.enrollment_name}</p>
+                              <p className="text-[10px] text-gray-400">{se.module || 'No module'}</p>
+                            </div>
+                            <button onClick={() => removeCNFEnrollment(se.enrollment_id)}
+                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {sessionEnrollments.filter((se) => se.user_id !== editingCell.userId).length > 0 && (
+                          <p className="text-[10px] text-gray-400 mt-1">Other POCs' enrollments hidden</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Available to add */}
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold text-gray-400 mb-1.5">
+                      {sessionEnrollments.length > 0 ? 'Add More' : 'Select Enrollments'}
+                    </p>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {filteredEnrollments.length === 0 ? (
+                        <p className="text-xs text-gray-400 py-2 text-center">
+                          {myEnrollments.length === 0 ? 'No active enrollments assigned to you' : 'No matching enrollments'}
+                        </p>
+                      ) : (
+                        filteredEnrollments.map((e) => (
+                          <button key={e.id} onClick={() => addCNFEnrollment(e.id)}
+                            className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">{e.name}</p>
+                              <p className="text-[10px] text-gray-400">{e.module || 'No module'}</p>
+                            </div>
+                            <Plus size={14} className="text-blue-500 shrink-0" />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <button onClick={() => setEditingCell(null)} className="btn-primary w-full">Done</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -361,9 +502,13 @@ export default function TrainingCalendar() {
               placeholder="e.g. 4PM TO 7.30PM" className="input-field" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Link to Batch (optional)</label>
-            <input type="number" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })}
-              placeholder="Batch ID" className="input-field" />
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Link to Batch</label>
+            <select value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })} className="input-field">
+              <option value="">— No batch linked —</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2 pt-2">
             <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>

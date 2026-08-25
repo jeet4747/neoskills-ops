@@ -233,5 +233,8 @@ export const api = {
     update: (id, data) => request(`/training-calendar/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id) => request(`/training-calendar/${id}`, { method: 'DELETE' }),
     saveNominations: (id, nominations) => request(`/training-calendar/${id}/nominations`, { method: 'PUT', body: JSON.stringify({ nominations }) }),
+    myEnrollments: () => request('/training-calendar/my-enrollments'),
+    addEnrollment: (sessionId, enrollmentId) => request(`/training-calendar/${sessionId}/enrollments`, { method: 'POST', body: JSON.stringify({ enrollment_id: enrollmentId }) }),
+    removeEnrollment: (sessionId, enrollmentId) => request(`/training-calendar/${sessionId}/enrollments/${enrollmentId}`, { method: 'DELETE' }),
   },
 };

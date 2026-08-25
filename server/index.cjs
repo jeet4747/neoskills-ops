@@ -1356,9 +1356,10 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     }
     const sessions = await query(
       `SELECT ts.*,
-        COALESCE((SELECT COUNT(*) FROM batch_members bm WHERE bm.batch_id = ts.batch_id), 0) AS confirmed_count,
+        b.name AS batch_name,
         u.name AS created_by_name
        FROM training_sessions ts
+       LEFT JOIN batches b ON b.id = ts.batch_id
        LEFT JOIN users u ON u.id = ts.created_by
        WHERE 1=1 ${dateFilter}
        ORDER BY ts.session_date ASC, ts.created_at ASC`,
@@ -1366,26 +1367,57 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     );
     const sessionIds = sessions.rows.map((s) => s.id);
     let nominations = { rows: [] };
+    let enrollments = { rows: [] };
     if (sessionIds.length) {
-      nominations = await query(
-        `SELECT sn.session_id, sn.user_id, sn.tentative_count, u.name AS user_name
-         FROM session_nominations sn
-         JOIN users u ON u.id = sn.user_id
-         WHERE sn.session_id = ANY($1) AND sn.tentative_count > 0`,
-        [sessionIds]
-      );
+      [nominations, enrollments] = await Promise.all([
+        query(
+          `SELECT sn.session_id, sn.user_id, sn.tentative_count, u.name AS user_name
+           FROM session_nominations sn
+           JOIN users u ON u.id = sn.user_id
+           WHERE sn.session_id = ANY($1) AND sn.tentative_count > 0`,
+          [sessionIds]
+        ),
+        query(
+          `SELECT se.session_id, se.enrollment_id, se.user_id, e.name AS enrollment_name,
+                  e.module, u.name AS user_name
+           FROM session_enrollments se
+           JOIN enrollments e ON e.id = se.enrollment_id
+           JOIN users u ON u.id = se.user_id
+           WHERE se.session_id = ANY($1)`,
+          [sessionIds]
+        )
+      ]);
     }
     const nomMap = {};
     for (const n of nominations.rows) {
       if (!nomMap[n.session_id]) nomMap[n.session_id] = [];
       nomMap[n.session_id].push({ user_id: n.user_id, user_name: n.user_name, tentative_count: n.tentative_count });
     }
+    const enrollMap = {};
+    for (const e of enrollments.rows) {
+      if (!enrollMap[e.session_id]) enrollMap[e.session_id] = [];
+      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name });
+    }
     const result = sessions.rows.map((s) => ({
       ...s,
       nominations: nomMap[s.id] || [],
       total_tentative: (nomMap[s.id] || []).reduce((sum, n) => sum + n.tentative_count, 0),
+      confirmed_enrollments: enrollMap[s.id] || [],
+      confirmed_count: (enrollMap[s.id] || []).length,
     }));
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT e.id, e.name, e.module FROM enrollments e
+       WHERE e.status IN ('active','approved') AND e.assigned_to = $1
+       ORDER BY e.name`,
+      [req.user.id]
+    );
+    res.json(result.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1453,6 +1485,32 @@ app.put('/api/training-calendar/:id/nominations', auth(), async (req, res) => {
       [req.params.id]
     );
     res.json(updated.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/training-calendar/:id/enrollments', auth(), async (req, res) => {
+  try {
+    const { enrollment_id } = req.body;
+    if (!enrollment_id) return res.status(400).json({ error: 'enrollment_id required' });
+    const session = await query('SELECT id FROM training_sessions WHERE id = $1', [req.params.id]);
+    if (!session.rows.length) return res.status(404).json({ error: 'Session not found' });
+    await query(
+      `INSERT INTO session_enrollments (session_id, enrollment_id, user_id) VALUES ($1, $2, $3)
+       ON CONFLICT (session_id, enrollment_id) DO NOTHING`,
+      [req.params.id, enrollment_id, req.user.id]
+    );
+    res.json({ message: 'Added' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/training-calendar/:sessionId/enrollments/:enrollmentId', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      'DELETE FROM session_enrollments WHERE session_id = $1 AND enrollment_id = $2 RETURNING id',
+      [req.params.sessionId, req.params.enrollmentId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ message: 'Removed' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2833,6 +2891,14 @@ async function init() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (session_id, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS session_enrollments (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES training_sessions(id) ON DELETE CASCADE,
+        enrollment_id INTEGER REFERENCES enrollments(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (session_id, enrollment_id)
       );
     `);
     console.log('Database tables created');
