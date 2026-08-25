@@ -1282,7 +1282,7 @@ app.put('/api/batches/:id', auth(), async (req, res) => {
   }
 });
 
-app.delete('/api/batches/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.delete('/api/batches/:id', auth(), async (req, res) => {
   try {
     const result = await query('DELETE FROM batches WHERE id = $1 RETURNING id', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Batch not found' });
@@ -2722,10 +2722,10 @@ async function init() {
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
+      await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
       await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'todo'`);
       await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
       await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
-      await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
