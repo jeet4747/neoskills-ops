@@ -290,11 +290,13 @@ export default function Batches() {
                         <Badge status={b.status}>{b.status === 'completed' ? 'Completed' : 'Active'}</Badge>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-50">
-                        <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Students</p>
-                          <p className="text-sm font-bold text-gray-900 flex items-center gap-1"><Users size={13} className="text-gray-400" /> {b.student_count || 0}</p>
-                        </div>
+                      <div className={`grid gap-3 mt-3 pt-3 border-t border-gray-50 ${canManage ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                        {canManage && (
+                          <div>
+                            <p className="text-[10px] text-gray-400 uppercase">Students</p>
+                            <p className="text-sm font-bold text-gray-900 flex items-center gap-1"><Users size={13} className="text-gray-400" /> {b.student_count || 0}</p>
+                          </div>
+                        )}
                         <div>
                           <p className="text-[10px] text-gray-400 uppercase">Received</p>
                           <p className="text-sm font-bold text-emerald-600">{fmt(b.received)}</p>
