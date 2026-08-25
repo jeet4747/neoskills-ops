@@ -1350,8 +1350,10 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     let dateFilter = '';
     const params = [];
     if (month) {
-      params.push(month + '-01');
-      params.push(month + '-31');
+      const [y, m] = month.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      params.push(`${month}-01`);
+      params.push(`${month}-${String(lastDay).padStart(2, '0')}`);
       dateFilter = `AND ts.session_date BETWEEN $1 AND $2`;
     }
     const sessions = await query(
