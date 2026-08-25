@@ -285,6 +285,8 @@ export default function TrainingCalendar() {
                         {users.map((u) => {
                           const isEditing = editingCell?.sessionId === s.id && editingCell?.userId === u.id;
                           const val = getNom(s, u.id);
+                          const cnfCount = (s.confirmed_enrollments || []).filter((ce) => ce.user_id === u.id).length;
+                          const hasAny = val > 0 || cnfCount > 0;
                           return (
                             <td key={u.id} className="px-3 py-3 text-center">
                               {isEditing ? (
@@ -298,8 +300,10 @@ export default function TrainingCalendar() {
                                 </div>
                               ) : (
                                 <button onClick={() => startEditCell(s.id, u.id)}
-                                  className={`w-10 h-7 rounded-lg text-sm font-medium transition-colors ${val > 0 ? 'bg-primary-50 text-primary-700 hover:bg-primary-100' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-500'}`}>
-                                  {val || '—'}
+                                  className={`inline-flex items-center gap-0.5 h-7 px-1.5 rounded-lg text-[11px] font-medium transition-colors ${hasAny ? 'bg-primary-50 text-primary-700 hover:bg-primary-100' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-500'}`}>
+                                  {val > 0 && <span className="text-[9px] text-amber-600 font-bold">T{val}</span>}
+                                  {cnfCount > 0 && <span className="text-[9px] text-blue-600 font-bold">C{cnfCount}</span>}
+                                  {!hasAny && '—'}
                                 </button>
                               )}
                             </td>
@@ -401,13 +405,24 @@ export default function TrainingCalendar() {
                     {users.map((u) => {
                       const isEditing = editingCell?.sessionId === s.id && editingCell?.userId === u.id;
                       const val = getNom(s, u.id);
+                      const isCNF = (s.confirmed_enrollments || []).some((ce) => ce.user_id === u.id);
+                      const cnfCount = (s.confirmed_enrollments || []).filter((ce) => ce.user_id === u.id).length;
+                      const totalVal = val + cnfCount;
                       return (
                         <button key={u.id} onClick={() => startEditCell(s.id, u.id)}
                           className="flex items-center gap-1.5 p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
                           <span className="w-6 h-6 bg-primary-100 text-primary-700 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">{u.name?.charAt(0).toUpperCase()}</span>
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] text-gray-500 truncate">{u.name?.split(' ')[0]}</p>
-                            <p className={`text-xs font-bold ${val > 0 ? 'text-primary-700' : 'text-gray-300'}`}>{val || '—'}</p>
+                            <div className="flex items-center gap-1">
+                              {val > 0 && (
+                                <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">T{val}</span>
+                              )}
+                              {cnfCount > 0 && (
+                                <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-100 text-blue-700">C{cnfCount}</span>
+                              )}
+                              {totalVal === 0 && <span className="text-xs text-gray-300">—</span>}
+                            </div>
                           </div>
                         </button>
                       );
