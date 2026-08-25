@@ -434,8 +434,8 @@ export default function TrainingCalendar() {
                         {sessionEnrollments.filter((se) => se.user_id === editingCell.userId).map((se) => (
                           <div key={se.enrollment_id} className="flex items-center justify-between p-2 bg-blue-50 rounded-xl">
                             <div className="min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{se.enrollment_name}</p>
-                              <p className="text-[10px] text-gray-400">{se.module || 'No module'}</p>
+                              <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
+                              <p className="text-[10px] text-gray-400">{se.enrollment_name}</p>
                             </div>
                             <button onClick={() => removeCNFEnrollment(se.enrollment_id)}
                               className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0">
@@ -465,8 +465,8 @@ export default function TrainingCalendar() {
                           <button key={e.id} onClick={() => addCNFEnrollment(e.id)}
                             className="w-full flex items-center justify-between p-2 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
                             <div className="min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{e.course_name}</p>
-                              <p className="text-[10px] text-gray-400">{e.batch_name || 'No batch'}</p>
+                              <p className="text-xs font-medium text-gray-900 truncate">{e.student_name || 'Unknown'}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{e.course_name}</p>
                             </div>
                             <Plus size={14} className="text-blue-500 shrink-0" />
                           </button>

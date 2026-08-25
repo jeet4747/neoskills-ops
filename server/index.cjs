@@ -1379,10 +1379,11 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
         ),
         query(
           `SELECT se.session_id, se.enrollment_id, se.user_id, e.course_name AS enrollment_name,
-                  e.batch_name AS module, u.name AS user_name
+                  e.batch_name AS module, u.name AS user_name, s.name AS student_name
            FROM session_enrollments se
            JOIN enrollments e ON e.id = se.enrollment_id
            JOIN users u ON u.id = se.user_id
+           LEFT JOIN students s ON s.id = e.student_id
            WHERE se.session_id = ANY($1)`,
           [sessionIds]
         )
@@ -1412,8 +1413,10 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
 app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
   try {
     const result = await query(
-      `SELECT e.id, e.course_name, e.batch_name FROM enrollments e
-       WHERE e.status IN ('active') AND e.sales_user_id = $1
+      `SELECT e.id, e.course_name, e.batch_name, s.name AS student_name, s.phone AS student_phone
+       FROM enrollments e
+       LEFT JOIN students s ON s.id = e.student_id
+       WHERE e.status = 'active' AND e.sales_user_id = $1
        ORDER BY e.course_name`,
       [req.user.id]
     );
