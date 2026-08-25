@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Search } from 'lucide-react';
+import { Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -53,6 +53,7 @@ export default function TrainingCalendar() {
   const [enrollSearch, setEnrollSearch] = useState('');
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
+  const [expandedCNF, setExpandedCNF] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -245,6 +246,7 @@ export default function TrainingCalendar() {
                   </thead>
                   <tbody>
                     {sessions.map((s) => (
+                      <>
                       <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -265,8 +267,17 @@ export default function TrainingCalendar() {
                             <span className="text-xs text-gray-300">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="text-sm font-bold text-blue-600">{s.confirmed_count || 0}</span>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={() => setExpandedCNF(expandedCNF === s.id ? null : s.id)}
+                            className="flex flex-col items-center gap-0.5 mx-auto">
+                            <span className="text-sm font-bold text-blue-600">{s.confirmed_count || 0}</span>
+                            {(s.confirmed_enrollments || []).length > 0 && (
+                              expandedCNF === s.id
+                                ? <ChevronUp size={10} className="text-blue-400" />
+                                : <ChevronDown size={10} className="text-blue-400" />
+                            )}
+                          </button>
                         </td>
                         <td className="px-3 py-3 text-center">
                           <span className="text-sm font-bold text-amber-600">{totalBySession(s)}</span>
@@ -301,6 +312,25 @@ export default function TrainingCalendar() {
                           </div>
                         </td>
                       </tr>
+                      {expandedCNF === s.id && (s.confirmed_enrollments || []).length > 0 && (
+                        <tr key={s.id + '-cnf'}>
+                          <td colSpan={6 + users.length} className="px-4 py-2 bg-blue-50/50">
+                            <div className="flex flex-wrap gap-2">
+                              {(s.confirmed_enrollments || []).map((ce, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-xs">
+                                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0">
+                                    {ce.user_name?.charAt(0).toUpperCase()}
+                                  </span>
+                                  <span className="font-medium text-gray-900">{ce.student_name || ce.enrollment_name}</span>
+                                  <span className="text-gray-400">·</span>
+                                  <span className="text-blue-600">{ce.user_name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </>
                     ))}
                   </tbody>
                 </table>
@@ -333,15 +363,38 @@ export default function TrainingCalendar() {
                     </span>
                   )}
                   <div className="flex items-center gap-4 mt-3">
-                    <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setExpandedCNF(expandedCNF === `mob-${s.id}` ? null : `mob-${s.id}`)}
+                      className="flex items-center gap-1.5">
                       <span className="text-[10px] text-gray-400 uppercase font-semibold">CNF</span>
                       <span className="text-sm font-bold text-blue-600">{s.confirmed_count || 0}</span>
-                    </div>
+                      {(s.confirmed_enrollments || []).length > 0 && (
+                        expandedCNF === `mob-${s.id}`
+                          ? <ChevronUp size={10} className="text-blue-400" />
+                          : <ChevronDown size={10} className="text-blue-400" />
+                      )}
+                    </button>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-gray-400 uppercase font-semibold">TNT</span>
                       <span className="text-sm font-bold text-amber-600">{totalBySession(s)}</span>
                     </div>
                   </div>
+                  {expandedCNF === `mob-${s.id}` && (s.confirmed_enrollments || []).length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {(s.confirmed_enrollments || []).map((ce, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-1.5 bg-blue-50 rounded-lg">
+                          <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0">
+                            {ce.user_name?.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-xs font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</span>
+                          <span className="text-[10px] text-blue-600 shrink-0">by {ce.user_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {expandedCNF === `mob-${s.id}` && (s.confirmed_enrollments || []).length === 0 && (
+                    <p className="mt-2 text-xs text-gray-400 text-center">No confirmed enrollments</p>
+                  )}
                 </div>
                 <div className="border-t border-gray-50 px-4 py-3">
                   <div className="grid grid-cols-3 gap-2">

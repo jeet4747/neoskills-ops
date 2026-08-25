@@ -1397,7 +1397,7 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     const enrollMap = {};
     for (const e of enrollments.rows) {
       if (!enrollMap[e.session_id]) enrollMap[e.session_id] = [];
-      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name });
+      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name });
     }
     const result = sessions.rows.map((s) => ({
       ...s,
