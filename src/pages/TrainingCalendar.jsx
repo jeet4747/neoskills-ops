@@ -58,6 +58,9 @@ function parseTimingToMinutes(t) {
   if (ampm === 'AM' && h === 12) h = 0;
   return h * 60 + m;
 }
+function getStatusVariant(s) {
+  return STATUSES.find((st) => st.value === s)?.variant || 'pending';
+}
 
 export default function TrainingCalendar() {
   const toast = useToast();
