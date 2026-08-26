@@ -260,10 +260,11 @@ export default function TrainingCalendar() {
                 <div className="px-5 py-4">
                   <div className="flex items-center gap-4">
                     {/* Date */}
-                    <div className="shrink-0 w-14 text-center">
-                      <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
-                      <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
-                    </div>
+                      <div className="shrink-0 w-14 text-center">
+                        <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
+                        <p className="text-[9px] text-gray-300">{new Date(s.session_date).getFullYear()}</p>
+                      </div>
 
                     <div className="w-px h-12 bg-gray-100 shrink-0" />
 
