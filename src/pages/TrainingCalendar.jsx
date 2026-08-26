@@ -98,6 +98,8 @@ export default function TrainingCalendar() {
   });
 
   const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
+  const totalReceived = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0), 0);
+  const totalPending = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0), 0);
 
   const topSession = [...sessions].sort((a, b) => (b.confirmed_count || 0) - (a.confirmed_count || 0))[0];
 
@@ -218,6 +220,14 @@ export default function TrainingCalendar() {
                 <span className="text-xs text-gray-400">Candidates</span>
                 <span className="text-sm font-bold text-blue-600">{totalCandidates}</span>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Received</span>
+                <span className="text-sm font-bold text-emerald-600">₹{totalReceived.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Pending</span>
+                <span className="text-sm font-bold text-amber-600">₹{totalPending.toLocaleString('en-IN')}</span>
+              </div>
             </div>
           </div>
         </CardBody>
@@ -245,6 +255,8 @@ export default function TrainingCalendar() {
             const st = getStatusVariant(s.status);
             const isExpanded = !collapsedRows.has(s.id);
             const isTop = topSession && topSession.id === s.id && count > 0;
+            const received = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0);
+            const pending = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0);
 
             return (
               <Card key={s.id}>
@@ -285,10 +297,24 @@ export default function TrainingCalendar() {
                         </div>
                       </div>
 
-                      {/* Candidate Count */}
-                      <div className="text-center shrink-0">
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Enrolled</p>
-                        <p className="text-base font-bold text-blue-600">{count}</p>
+                      {/* Candidates + Amounts */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Candidates</p>
+                          <p className="text-base font-bold text-blue-600">{count}</p>
+                        </div>
+                        {received > 0 && (
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Received</p>
+                            <p className="text-xs font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</p>
+                          </div>
+                        )}
+                        {pending > 0 && (
+                          <div className="text-center">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Pending</p>
+                            <p className="text-xs font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Status */}
@@ -297,11 +323,10 @@ export default function TrainingCalendar() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-0.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button onClick={() => openCandidates(s)}
-                          className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="Manage Candidates">
-                          <GraduationCap size={14} />
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
+                          <Plus size={12} /> Add
                         </button>
                         <button onClick={() => setCollapsedRows((prev) => {
                           const next = new Set(prev);
