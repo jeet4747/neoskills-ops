@@ -269,7 +269,15 @@ export default function TrainingCalendar() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                        {received > 0 && (
+                          <span className="text-sm font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</span>
+                        )}
+                        {pending > 0 && (
+                          <span className="text-sm font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         {s.batch_name && (
                           <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
@@ -280,12 +288,6 @@ export default function TrainingCalendar() {
                           <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
                             <Clock size={10} /> {s.timing}
                           </span>
-                        )}
-                        {received > 0 && (
-                          <span className="text-[11px] font-semibold text-emerald-600">₹{received.toLocaleString('en-IN')} received</span>
-                        )}
-                        {pending > 0 && (
-                          <span className="text-[11px] font-semibold text-amber-600">₹{pending.toLocaleString('en-IN')} pending</span>
                         )}
                       </div>
                     </div>
