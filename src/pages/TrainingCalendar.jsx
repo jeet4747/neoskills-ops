@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
+  Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight, Eye,
   Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap,
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -256,91 +256,84 @@ export default function TrainingCalendar() {
 
             return (
               <Card key={s.id}>
-                {/* Main Row */}
-                <div className="px-5 py-4">
-                  <div className="flex items-center gap-4">
-                    {/* Date */}
-                      <div className="shrink-0 w-14 text-center">
-                        <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
-                        <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
-                        <p className="text-[9px] text-gray-300">{new Date(s.session_date).getFullYear()}</p>
-                      </div>
-
-                    <div className="w-px h-12 bg-gray-100 shrink-0" />
-
-                    {/* Info */}
+                <div className="px-4 py-3">
+                  {/* Row 1: Date + Course + Status */}
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 w-11 text-center bg-gray-50 rounded-xl py-1.5 px-1">
+                      <p className="text-lg font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
+                      <p className="text-[8px] text-gray-400 font-medium uppercase leading-tight">{MONTHS[new Date(s.session_date).getMonth()]}</p>
+                      <p className="text-[7px] text-gray-300 leading-tight">{new Date(s.session_date).getFullYear()}</p>
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
-                        {received > 0 && (
-                          <span className="text-sm font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</span>
-                        )}
-                        {pending > 0 && (
-                          <span className="text-sm font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</span>
-                        )}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">{s.course_name}</p>
+                        <Badge status={st} className="text-[9px] shrink-0">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {s.batch_name && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-                            <GraduationCap size={10} /> {s.batch_name}
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+                            <GraduationCap size={9} />{s.batch_name}
                           </span>
                         )}
                         {s.timing && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                            <Clock size={10} /> {s.timing}
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-400">
+                            <Clock size={9} />{s.timing}
                           </span>
                         )}
                       </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {received > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{received.toLocaleString('en-IN')} received</span>
+                        )}
+                        {pending > 0 && (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{pending.toLocaleString('en-IN')} pending</span>
+                        )}
+                      </div>
                     </div>
+                  </div>
 
-                    {/* Status */}
-                    <div className="shrink-0">
-                      <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => setViewSession(isOpen ? null : s.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        View ({count})
-                      </button>
-                      <button onClick={() => openAddCandidate(s)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
-                        <Plus size={12} /> Add
-                      </button>
-                      <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                  {/* Row 2: Action buttons */}
+                  <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-gray-50">
+                    <button onClick={() => setViewSession(isOpen ? null : s.id)}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
+                      <Eye size={12} /> View ({count})
+                    </button>
+                    <button onClick={() => openAddCandidate(s)}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-xl transition-colors">
+                      <Plus size={12} /> Add
+                    </button>
+                    <button onClick={() => openEdit(s)} className="p-2 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => setDeleting(s)} className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
 
                 {/* Expanded: Candidate List */}
                 {isOpen && (
-                  <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+                  <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
                     {(s.confirmed_enrollments || []).length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {(s.confirmed_enrollments || []).map((ce, idx) => (
-                          <div key={idx} className="flex items-center gap-3 py-2 px-3 bg-white rounded-xl border border-gray-100">
-                            <span className="w-6 h-6 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                          <div key={idx} className="flex items-center gap-2 py-2 px-2.5 bg-white rounded-xl border border-gray-100">
+                            <span className="w-5 h-5 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0">
                               {idx + 1}
                             </span>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                              <p className="text-[12px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
+                              <div className="flex items-center gap-1.5 text-[9px] text-gray-400 mt-0.5 flex-wrap">
                                 {ce.poc_name && <span>POC: {ce.poc_name}</span>}
-                                {ce.student_phone && <span>{ce.student_phone}</span>}
+                                {ce.student_phone && <span>· {ce.student_phone}</span>}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
                               {ce.paid_amount > 0 && (
-                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
+                                <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
                               )}
                               {ce.pending_amount > 0 && (
-                                <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
+                                <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
                               )}
                             </div>
                           </div>
