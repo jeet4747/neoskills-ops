@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight,
-  Link as LinkIcon, Search, ChevronDown, ChevronUp, Users, Zap, BookOpen,
+  Link as LinkIcon, Search, ChevronDown, ChevronUp, Users, Zap, Video, User,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -22,29 +22,24 @@ function getMonthLabel(m) {
   const [y, mo] = m.split('-');
   return `${MONTHS[parseInt(mo, 10) - 1]} ${y}`;
 }
-
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
-
 function prevMonth(m) {
   const d = new Date(m + '-01');
   d.setMonth(d.getMonth() - 1);
   return d.toISOString().slice(0, 7);
 }
-
 function nextMonth(m) {
   const d = new Date(m + '-01');
   d.setMonth(d.getMonth() + 1);
   return d.toISOString().slice(0, 7);
 }
-
 function fmtDate(d) {
   if (!d) return '';
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 }
-
 function getSeatColor(cnf, tnt) {
   const total = cnf + tnt;
   if (total > 10) return 'border-l-emerald-500';
@@ -52,15 +47,6 @@ function getSeatColor(cnf, tnt) {
   if (total > 0) return 'border-l-red-400';
   return 'border-l-gray-200';
 }
-
-function getSeatBadge(cnf, tnt) {
-  const total = cnf + tnt;
-  if (total > 10) return { text: 'text-emerald-700', bg: 'bg-emerald-50' };
-  if (total >= 5) return { text: 'text-amber-700', bg: 'bg-amber-50' };
-  if (total > 0) return { text: 'text-red-600', bg: 'bg-red-50' };
-  return { text: 'text-gray-400', bg: 'bg-gray-50' };
-}
-
 function getStatusVariant(s) {
   return STATUSES.find((st) => st.value === s)?.variant || 'pending';
 }
@@ -84,7 +70,7 @@ export default function TrainingCalendar() {
   const [enrollSearch, setEnrollSearch] = useState('');
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
-  const [expandedCNF, setExpandedCNF] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -112,7 +98,6 @@ export default function TrainingCalendar() {
     setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', batch_id: '', status: 'in_future' });
     setShowForm(true);
   }
-
   function openEdit(s) {
     setEditing(s);
     setForm({
@@ -124,7 +109,6 @@ export default function TrainingCalendar() {
     });
     setShowForm(true);
   }
-
   async function handleSave() {
     if (!form.session_date || !form.course_name.trim()) { toast.error('Date and course name required'); return; }
     try {
@@ -138,7 +122,6 @@ export default function TrainingCalendar() {
     } catch (e) { toast.error(e.message); }
     finally { setSaving(false); }
   }
-
   async function handleDelete(s) {
     try {
       setDeleting(null);
@@ -147,14 +130,12 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-
   async function handleStatusChange(s, newStatus) {
     try {
       await api.calendar.update(s.id, { status: newStatus });
       load();
     } catch (e) { toast.error(e.message); }
   }
-
   async function startEditCell(sessionId, userId) {
     setEditingCell({ sessionId, userId });
     setCellValue('');
@@ -171,7 +152,6 @@ export default function TrainingCalendar() {
       setSessionEnrollments(sess?.confirmed_enrollments || []);
     } catch (e) { /* ignore */ }
   }
-
   async function saveTNT() {
     if (!editingCell) return;
     const val = parseInt(cellValue) || 0;
@@ -187,7 +167,6 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-
   async function addCNFEnrollment(enrollmentId) {
     try {
       await api.calendar.addEnrollment(editingCell.sessionId, enrollmentId);
@@ -197,7 +176,6 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-
   async function removeCNFEnrollment(enrollmentId) {
     try {
       await api.calendar.removeEnrollment(editingCell.sessionId, enrollmentId);
@@ -207,14 +185,11 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-
   function getNom(session, userId) {
     const n = (session.nominations || []).find((x) => x.user_id === userId);
     return n ? n.tentative_count : 0;
   }
-
   const totalBySession = (s) => (s.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
-
   const filteredEnrollments = myEnrollments.filter((e) => {
     const addedIds = sessionEnrollments.map((se) => se.enrollment_id);
     if (addedIds.includes(e.id)) return false;
@@ -236,7 +211,7 @@ export default function TrainingCalendar() {
         </button>
       </div>
 
-      {/* Stats + Month Nav */}
+      {/* Month Nav + Stats */}
       <Card>
         <CardBody className="py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -253,26 +228,21 @@ export default function TrainingCalendar() {
                   <ChevronRight size={18} className="text-gray-500" />
                 </button>
                 {month !== currentMonth() && (
-                  <button onClick={() => setMonth(currentMonth())} className="text-xs text-primary-600 font-medium hover:underline ml-1">
-                    Today
-                  </button>
+                  <button onClick={() => setMonth(currentMonth())} className="text-xs text-primary-600 font-medium hover:underline ml-1">Today</button>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-5">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-xs text-gray-500">Sessions</span>
+                <span className="text-xs text-gray-400">Sessions</span>
                 <span className="text-sm font-bold text-gray-900">{sessions.length}</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-400" />
-                <span className="text-xs text-gray-500">CNF</span>
+                <span className="text-xs text-gray-400">CNF</span>
                 <span className="text-sm font-bold text-blue-600">{totalCNF}</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-amber-400" />
-                <span className="text-xs text-gray-500">TNT</span>
+                <span className="text-xs text-gray-400">TNT</span>
                 <span className="text-sm font-bold text-amber-600">{totalTNT}</span>
               </div>
             </div>
@@ -280,17 +250,16 @@ export default function TrainingCalendar() {
         </CardBody>
       </Card>
 
-      {/* Seat Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
-        <span className="font-medium">Seats:</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-l-2 border-l-red-400 bg-red-50" /> Low (&lt;5)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-l-2 border-l-amber-400 bg-amber-50" /> Medium (5-10)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-l-2 border-l-emerald-500 bg-emerald-50" /> High (&gt;10)</span>
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-red-400 bg-red-50/50" /> Low (&lt;5)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-amber-400 bg-amber-50/50" /> Medium (5-10)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-emerald-500 bg-emerald-50/50" /> High (&gt;10)</span>
       </div>
 
       {loading ? (
         <div className="space-y-3">
-          {[1,2,3,4].map((i) => <div key={i} className="h-16 skeleton w-full rounded-xl" />)}
+          {[1,2,3,4].map((i) => <div key={i} className="h-14 skeleton w-full rounded-xl" />)}
         </div>
       ) : sessions.length === 0 ? (
         <Card>
@@ -299,195 +268,104 @@ export default function TrainingCalendar() {
               <Calendar size={24} className="text-gray-300" />
             </div>
             <p className="text-gray-500 text-sm mb-1">No sessions planned for {getMonthLabel(month)}</p>
-            <p className="text-gray-400 text-xs mb-4">Create a session to start tracking nominations</p>
+            <p className="text-gray-400 text-xs mb-4">Create a session to start tracking</p>
             <button onClick={openCreate} className="btn-primary text-sm">Create Session</button>
           </CardBody>
         </Card>
       ) : (
-        <>
-          {/* Desktop Table */}
-          <div className="hidden lg:block">
-            <Card>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left px-5 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Date</th>
-                      <th className="text-left px-5 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Module / Batch</th>
-                      <th className="text-left px-4 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Timing</th>
-                      {users.map((u) => (
-                        <th key={u.id} className="text-center px-2 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                          <div className="flex flex-col items-center">
-                            <span className="w-7 h-7 bg-primary-50 text-primary-600 rounded-lg flex items-center justify-center text-[10px] font-bold mb-0.5">{u.name?.charAt(0).toUpperCase()}</span>
-                            <span className="text-[10px] truncate w-full text-center">{u.name?.split(' ')[0]}</span>
-                          </div>
-                        </th>
-                      ))}
-                      <th className="text-center px-3 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">CNF</th>
-                      <th className="text-center px-3 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">TNT</th>
-                      <th className="text-center px-3 py-3.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3.5 w-16"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {sessions.map((s) => {
-                      const cnf = s.confirmed_count || 0;
-                      const tnt = totalBySession(s);
-                      const borderC = getSeatColor(cnf, tnt);
-                      const st = getStatusVariant(s.status);
-                      return (
-                        <tr key={s.id} className={`border-l-3 ${borderC} hover:bg-gray-50/50 transition-colors`}>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <Calendar size={14} className="text-gray-300 shrink-0" />
-                              <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{fmtDate(s.session_date)}</span>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <p className="text-sm font-semibold text-gray-900">{s.course_name}</p>
-                            {s.batch_name && (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
-                                <LinkIcon size={9} /> {s.batch_name}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-gray-500">{s.timing || '—'}</td>
-                          {users.map((u) => {
-                            const val = getNom(s, u.id);
-                            const isEditing = editingCell?.sessionId === s.id && editingCell?.userId === u.id;
-                            return (
-                              <td key={u.id} className="px-2 py-3.5 text-center">
-                                {isEditing ? (
-                                  <div className="flex items-center justify-center gap-0.5">
-                                    <input type="number" min="0" value={cellValue}
-                                      onChange={(e) => setCellValue(e.target.value)}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') saveTNT(); if (e.key === 'Escape') setEditingCell(null); }}
-                                      className="w-10 h-7 text-center text-xs border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                                      autoFocus />
-                                    <button onClick={saveTNT} className="p-0.5 text-emerald-600 hover:bg-emerald-50 rounded-md"><Check size={12} /></button>
-                                  </div>
-                                ) : (
-                                  <button onClick={() => startEditCell(s.id, u.id)}
-                                    className={`inline-flex items-center justify-center h-7 min-w-[28px] px-1.5 rounded-lg text-[11px] font-medium transition-all ${val > 0 ? 'bg-primary-50 text-primary-700 hover:bg-primary-100 cursor-pointer' : 'text-gray-200 hover:bg-gray-100 hover:text-gray-400 cursor-pointer'}`}>
-                                    {val > 0 ? val : '—'}
-                                  </button>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-3.5 text-center">
-                            <button onClick={() => setExpandedCNF(expandedCNF === s.id ? null : s.id)}
-                              className="inline-flex items-center gap-0.5 text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors">
-                              {cnf}
-                              {cnf > 0 && (expandedCNF === s.id ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
-                            </button>
-                          </td>
-                          <td className="px-3 py-3.5 text-center">
-                            <span className="text-sm font-bold text-amber-600">{tnt}</span>
-                          </td>
-                          <td className="px-3 py-3.5 text-center">
-                            <Badge status={st}>{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-0.5 justify-end">
-                              <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"><Pencil size={13} /></button>
-                              <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={13} /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
+        <div className="space-y-2">
+          {sessions.map((s) => {
+            const cnf = s.confirmed_count || 0;
+            const tnt = totalBySession(s);
+            const borderC = getSeatColor(cnf, tnt);
+            const st = getStatusVariant(s.status);
+            const isExpanded = expandedRow === s.id;
+            const hasNominations = (s.nominations || []).length > 0 || (s.confirmed_enrollments || []).length > 0;
 
-          {/* Mobile Cards */}
-          <div className="lg:hidden space-y-3">
-            {sessions.map((s) => {
-              const cnf = s.confirmed_count || 0;
-              const tnt = totalBySession(s);
-              const total = cnf + tnt;
-              const st = getStatusVariant(s.status);
-              const sc = getSeatBadge(cnf, tnt);
-              return (
-                <Card key={s.id}>
-                  <div className={`border-l-3 ${getSeatColor(cnf, tnt)}`}>
-                    <CardBody className="py-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[11px] text-gray-400 font-medium">{fmtDate(s.session_date)}</span>
-                            {s.timing && (
-                              <>
-                                <span className="text-gray-200">·</span>
-                                <span className="text-[11px] text-gray-400">{s.timing}</span>
-                              </>
-                            )}
-                          </div>
-                          <h3 className="text-sm font-bold text-gray-900 leading-tight">{s.course_name}</h3>
+            return (
+              <Card key={s.id}>
+                <div className={`border-l-3 ${borderC} rounded-2xl`}>
+                  {/* Main Row */}
+                  <div className="px-5 py-4">
+                    <div className="flex items-center gap-4">
+                      {/* Date */}
+                      <div className="shrink-0 w-20">
+                        <p className="text-sm font-bold text-gray-900">{new Date(s.session_date).getDate()}</p>
+                        <p className="text-[11px] text-gray-400">{MONTHS[new Date(s.session_date).getMonth()]}</p>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="w-px h-10 bg-gray-100 shrink-0" />
+
+                      {/* Module + Batch */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
                           {s.batch_name && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 mt-1">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
                               <LinkIcon size={9} /> {s.batch_name}
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"><Pencil size={14} /></button>
-                          <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                          {s.timing && (
+                            <span className="text-[11px] text-gray-300">{s.timing}</span>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 mt-3">
-                        <button onClick={() => setExpandedCNF(expandedCNF === `mob-${s.id}` ? null : `mob-${s.id}`)}
-                          className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
-                          <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">CNF</span>
-                          <span className={`text-sm font-bold ${cnf > 0 ? 'text-blue-600' : 'text-gray-300'}`}>{cnf}</span>
-                          {cnf > 0 && (
-                            expandedCNF === `mob-${s.id}` ? <ChevronUp size={10} className="text-gray-300" /> : <ChevronDown size={10} className="text-gray-300" />
-                          )}
-                        </button>
-                        <div className="w-px h-3 bg-gray-200" />
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">TNT</span>
-                          <span className={`text-sm font-bold ${tnt > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{tnt}</span>
+                      {/* CNF + TNT */}
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">CNF</p>
+                          <p className="text-base font-bold text-blue-600">{cnf}</p>
                         </div>
-                        <div className="w-px h-3 bg-gray-200" />
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">TNT</p>
+                          <p className="text-base font-bold text-amber-600">{tnt}</p>
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div className="shrink-0">
                         <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
                       </div>
 
-                      {expandedCNF === `mob-${s.id}` && (s.confirmed_enrollments || []).length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-                          {(s.confirmed_enrollments || []).map((ce, idx) => (
-                            <div key={idx} className="flex items-center gap-2 py-1">
-                              <span className="w-6 h-6 bg-blue-50 text-blue-600 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">
-                                {ce.user_name?.charAt(0).toUpperCase()}
-                              </span>
-                              <span className="text-xs font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</span>
-                              <span className="text-[10px] text-gray-400 shrink-0 ml-auto">by {ce.user_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardBody>
+                      {/* Actions */}
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {hasNominations && (
+                          <button onClick={() => setExpandedRow(isExpanded ? null : s.id)}
+                            className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                          </button>
+                        )}
+                        <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-                    <div className="border-t border-gray-100 px-4 py-3">
-                      <div className="grid grid-cols-3 gap-2">
+                  {/* Expanded: Salesperson Nomination Grid */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/30">
+                      <p className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider mb-3">Nominations</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {users.map((u) => {
                           const val = getNom(s, u.id);
                           const cnfUser = (s.confirmed_enrollments || []).filter((ce) => ce.user_id === u.id).length;
                           return (
                             <button key={u.id} onClick={() => startEditCell(s.id, u.id)}
-                              className="flex items-center gap-1.5 p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
-                              <span className="w-6 h-6 bg-primary-50 text-primary-600 rounded-lg flex items-center justify-center text-[9px] font-bold shrink-0">
+                              className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-gray-100 hover:border-primary-200 hover:shadow-sm transition-all text-left">
+                              <span className="w-8 h-8 bg-primary-50 text-primary-600 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0">
                                 {u.name?.charAt(0).toUpperCase()}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="text-[10px] text-gray-400 truncate">{u.name?.split(' ')[0]}</p>
-                                <div className="flex items-center gap-0.5">
-                                  {val > 0 && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-md bg-amber-50 text-amber-700">T{val}</span>}
-                                  {cnfUser > 0 && <span className="text-[9px] font-semibold px-1 py-0.5 rounded-md bg-blue-50 text-blue-600">C{cnfUser}</span>}
+                                <p className="text-[11px] text-gray-500 truncate font-medium">{u.name?.split(' ')[0]}</p>
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {val > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700">T{val}</span>}
+                                  {cnfUser > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600">C{cnfUser}</span>}
                                   {val === 0 && cnfUser === 0 && <span className="text-[10px] text-gray-300">—</span>}
                                 </div>
                               </div>
@@ -495,13 +373,30 @@ export default function TrainingCalendar() {
                           );
                         })}
                       </div>
+
+                      {/* CNF Details */}
+                      {(s.confirmed_enrollments || []).length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Confirmed Enrollments</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(s.confirmed_enrollments || []).map((ce, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg text-[11px]">
+                                <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center text-[8px] font-bold">{ce.user_name?.charAt(0).toUpperCase()}</span>
+                                <span className="font-medium text-gray-900">{ce.student_name || ce.enrollment_name}</span>
+                                <span className="text-gray-300">·</span>
+                                <span className="text-blue-500">{ce.user_name}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
       {/* Nomination Modal */}
@@ -515,13 +410,11 @@ export default function TrainingCalendar() {
                 <p className="text-sm font-medium text-gray-900">{session?.course_name}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{fmtDate(session?.session_date)}</p>
               </div>
-              <div className="flex items-center justify-center">
+              <div className="flex items-center justify-center gap-3">
                 <div className="w-11 h-11 bg-primary-50 text-primary-600 rounded-xl flex items-center justify-center text-lg font-bold">
                   {userObj?.name?.charAt(0).toUpperCase()}
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm font-semibold text-gray-900">{userObj?.name}</p>
-                </div>
+                <p className="text-sm font-semibold text-gray-900">{userObj?.name}</p>
               </div>
 
               <div className="flex bg-gray-100 rounded-xl p-1">
@@ -559,7 +452,6 @@ export default function TrainingCalendar() {
                       placeholder="Search student or course..."
                       className="input-field pl-8 text-sm" />
                   </div>
-
                   {sessionEnrollments.length > 0 && (
                     <div>
                       <p className="text-[10px] uppercase font-semibold text-blue-600 mb-2 tracking-wider">Confirmed ({sessionEnrollments.length})</p>
@@ -579,7 +471,6 @@ export default function TrainingCalendar() {
                       </div>
                     </div>
                   )}
-
                   <div>
                     <p className="text-[10px] uppercase font-semibold text-gray-400 mb-2 tracking-wider">
                       {sessionEnrollments.length > 0 ? 'Add More' : 'Select Enrollments'}
