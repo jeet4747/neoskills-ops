@@ -77,7 +77,7 @@ export default function App() {
           }
         />
         <Route path="payments" element={<Payments />} />
-        <Route path="batches" element={<Batches />} />
+        <Route path="batches" element={<Navigate to="/training-calendar" replace />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="training-calendar" element={<TrainingCalendar />} />
         <Route
