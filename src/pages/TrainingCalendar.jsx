@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight,
-  Search, ChevronDown, ChevronUp, Users, Zap, Video, User,
-  IndianRupee, AlertTriangle, Clock, GraduationCap,
+  Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
+  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, AlertTriangle,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -49,33 +47,30 @@ function fmtDate(d) {
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 }
-function getSeatColor(cnf, tnt) {
-  const total = cnf + tnt;
-  if (total > 10) return 'border-l-emerald-500';
-  if (total >= 5) return 'border-l-amber-400';
-  if (total > 0) return 'border-l-red-400';
-  return 'border-l-gray-200';
-}
-function getStatusVariant(s) {
-  return STATUSES.find((st) => st.value === s)?.variant || 'pending';
+function parseTimingToMinutes(t) {
+  if (!t) return 999;
+  const match = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return 999;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const ampm = match[3].toUpperCase();
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
 }
 
 export default function TrainingCalendar() {
-  const { user } = useAuth();
   const toast = useToast();
   const [sessions, setSessions] = useState([]);
-  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(currentMonth());
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', timingCustom: '', status: 'in_future' });
   const [saving, setSaving] = useState(false);
-  const [editingCell, setEditingCell] = useState(null);
-  const [cellValue, setCellValue] = useState('');
-  const [nomType, setNomType] = useState('tnt');
-  const [myEnrollments, setMyEnrollments] = useState([]);
+  const [editingSession, setEditingSession] = useState(null);
   const [enrollSearch, setEnrollSearch] = useState('');
+  const [allEnrollments, setAllEnrollments] = useState([]);
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
   const [collapsedRows, setCollapsedRows] = useState(new Set());
@@ -84,34 +79,13 @@ export default function TrainingCalendar() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [sessionsData, usersData] = await Promise.all([
-        api.calendar.list(month),
-        api.users.listSimple(),
-      ]);
-      setSessions(sessionsData);
-      setUsers(usersData.filter((u) => u.role === 'sales' || u.can_sell));
+      const data = await api.calendar.list(month);
+      setSessions(data);
     } catch (e) { toast.error('Failed to load calendar'); }
     finally { setLoading(false); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
   useEffect(() => { load(); }, [load]);
-
-  const isManager = user?.role === 'admin' || user?.role === 'manager';
-  const totalCNF = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
-  const totalTNT = sessions.reduce((s, x) => s + (x.nominations || []).reduce((a, n) => a + n.tentative_count, 0), 0);
-
-  function parseTimingToMinutes(t) {
-    if (!t) return 999;
-    const match = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return 999;
-    let h = parseInt(match[1], 10);
-    const m = parseInt(match[2], 10);
-    const ampm = match[3].toUpperCase();
-    if (ampm === 'PM' && h !== 12) h += 12;
-    if (ampm === 'AM' && h === 12) h = 0;
-    return h * 60 + m;
-  }
 
   const sortedSessions = [...sessions].sort((a, b) => {
     const dA = a.session_date || '';
@@ -120,11 +94,9 @@ export default function TrainingCalendar() {
     return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
   });
 
-  const topBatch = [...sessions].sort((a, b) => {
-    const tA = (a.confirmed_count || 0) + (a.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
-    const tB = (b.confirmed_count || 0) + (b.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
-    return tB - tA;
-  })[0];
+  const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
+
+  const topSession = [...sessions].sort((a, b) => (b.confirmed_count || 0) - (a.confirmed_count || 0))[0];
 
   function openCreate() {
     setEditing(null);
@@ -165,67 +137,34 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-  async function handleStatusChange(s, newStatus) {
-    try {
-      await api.calendar.update(s.id, { status: newStatus });
-      load();
-    } catch (e) { toast.error(e.message); }
-  }
-  async function startEditCell(sessionId, userId) {
-    setEditingCell({ sessionId, userId });
-    setCellValue('');
-    setNomType('tnt');
+  async function openCandidates(session) {
+    setEditingSession(session);
     setEnrollSearch('');
-    setSessionEnrollments([]);
+    setSessionEnrollments(session.confirmed_enrollments || []);
     try {
-      const [myEnrolls, currentSession] = await Promise.all([
-        api.calendar.myEnrollments(),
-        api.calendar.list(month),
-      ]);
-      setMyEnrollments(myEnrolls);
-      const sess = currentSession.find((s) => s.id === sessionId);
-      setSessionEnrollments(sess?.confirmed_enrollments || []);
+      const enrollments = await api.calendar.myEnrollments();
+      setAllEnrollments(enrollments);
     } catch (e) { /* ignore */ }
   }
-  async function saveTNT() {
-    if (!editingCell) return;
-    const val = parseInt(cellValue) || 0;
-    const session = sessions.find((s) => s.id === editingCell.sessionId);
-    const noms = users.map((u) => {
-      if (u.id === editingCell.userId) return { user_id: u.id, tentative_count: val };
-      const existing = (session?.nominations || []).find((n) => n.user_id === u.id);
-      return { user_id: u.id, tentative_count: existing ? existing.tentative_count : 0 };
-    });
+  async function addEnrollment(enrollmentId) {
     try {
-      await api.calendar.saveNominations(editingCell.sessionId, noms);
-      setEditingCell(null);
-      load();
-    } catch (e) { toast.error(e.message); }
-  }
-  async function addCNFEnrollment(enrollmentId) {
-    try {
-      await api.calendar.addEnrollment(editingCell.sessionId, enrollmentId);
+      await api.calendar.addEnrollment(editingSession.id, enrollmentId);
       const sess = await api.calendar.list(month);
-      const s = sess.find((x) => x.id === editingCell.sessionId);
+      const s = sess.find((x) => x.id === editingSession.id);
       setSessionEnrollments(s?.confirmed_enrollments || []);
       load();
     } catch (e) { toast.error(e.message); }
   }
-  async function removeCNFEnrollment(enrollmentId) {
+  async function removeEnrollment(enrollmentId) {
     try {
-      await api.calendar.removeEnrollment(editingCell.sessionId, enrollmentId);
+      await api.calendar.removeEnrollment(editingSession.id, enrollmentId);
       const sess = await api.calendar.list(month);
-      const s = sess.find((x) => x.id === editingCell.sessionId);
+      const s = sess.find((x) => x.id === editingSession.id);
       setSessionEnrollments(s?.confirmed_enrollments || []);
       load();
     } catch (e) { toast.error(e.message); }
   }
-  function getNom(session, userId) {
-    const n = (session.nominations || []).find((x) => x.user_id === userId);
-    return n ? n.tentative_count : 0;
-  }
-  const totalBySession = (s) => (s.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
-  const filteredEnrollments = myEnrollments.filter((e) => {
+  const filteredEnrollments = allEnrollments.filter((e) => {
     const addedIds = sessionEnrollments.map((se) => se.enrollment_id);
     if (addedIds.includes(e.id)) return false;
     if (!enrollSearch) return true;
@@ -239,7 +178,7 @@ export default function TrainingCalendar() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Training Calendar</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Plan sessions, manage batches, track nominations</p>
+          <p className="text-sm text-gray-500 mt-0.5">Plan sessions, manage batches, track candidates</p>
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-2 shadow-sm">
           <Plus size={16} /> New Session
@@ -273,24 +212,13 @@ export default function TrainingCalendar() {
                 <span className="text-sm font-bold text-gray-900">{sessions.length}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">CNF</span>
-                <span className="text-sm font-bold text-blue-600">{totalCNF}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">TNT</span>
-                <span className="text-sm font-bold text-amber-600">{totalTNT}</span>
+                <span className="text-xs text-gray-400">Candidates</span>
+                <span className="text-sm font-bold text-blue-600">{totalCandidates}</span>
               </div>
             </div>
           </div>
         </CardBody>
       </Card>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-400">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-red-400 bg-red-50/50" /> Low (&lt;5)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-amber-400 bg-amber-50/50" /> Medium (5-10)</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm border-l-2 border-l-emerald-500 bg-emerald-50/50" /> High (&gt;10)</span>
-      </div>
 
       {loading ? (
         <div className="space-y-3">
@@ -310,17 +238,14 @@ export default function TrainingCalendar() {
       ) : (
         <div className="space-y-2">
           {sortedSessions.map((s) => {
-            const cnf = s.confirmed_count || 0;
-            const tnt = totalBySession(s);
-            const total = cnf + tnt;
-            const borderC = getSeatColor(cnf, tnt);
+            const count = s.confirmed_count || 0;
             const st = getStatusVariant(s.status);
             const isExpanded = !collapsedRows.has(s.id);
-            const isTop = topBatch && topBatch.id === s.id && total > 0;
+            const isTop = topSession && topSession.id === s.id && count > 0;
 
             return (
               <Card key={s.id}>
-                <div className={`border-l-3 ${borderC} rounded-2xl ${isTop ? 'ring-2 ring-emerald-200 bg-emerald-50/30' : ''}`}>
+                <div className={`rounded-2xl ${isTop ? 'ring-2 ring-emerald-200 bg-emerald-50/30' : ''}`}>
                   {/* Main Row */}
                   <div className="px-5 py-4">
                     <div className="flex items-center gap-4">
@@ -330,10 +255,9 @@ export default function TrainingCalendar() {
                         <p className="text-[11px] text-gray-400">{MONTHS[new Date(s.session_date).getMonth()]}</p>
                       </div>
 
-                      {/* Divider */}
                       <div className="w-px h-10 bg-gray-100 shrink-0" />
 
-                      {/* Module + Batch */}
+                      {/* Module + Batch + Timing */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
@@ -358,16 +282,10 @@ export default function TrainingCalendar() {
                         </div>
                       </div>
 
-                      {/* CNF + TNT */}
-                      <div className="flex items-center gap-4 shrink-0">
-                        <div className="text-center">
-                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">CNF</p>
-                          <p className="text-base font-bold text-blue-600">{cnf}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">TNT</p>
-                          <p className="text-base font-bold text-amber-600">{tnt}</p>
-                        </div>
+                      {/* Candidate Count */}
+                      <div className="text-center shrink-0">
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Enrolled</p>
+                        <p className="text-base font-bold text-blue-600">{count}</p>
                       </div>
 
                       {/* Status */}
@@ -377,6 +295,11 @@ export default function TrainingCalendar() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-0.5 shrink-0">
+                        <button onClick={() => openCandidates(s)}
+                          className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                          title="Manage Candidates">
+                          <GraduationCap size={14} />
+                        </button>
                         <button onClick={() => setCollapsedRows((prev) => {
                           const next = new Set(prev);
                           if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
@@ -395,36 +318,12 @@ export default function TrainingCalendar() {
                     </div>
                   </div>
 
-                  {/* Expanded: Salesperson Nomination Grid */}
+                  {/* Expanded: Candidate List */}
                   {isExpanded && (
                     <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/30">
-                      <p className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider mb-3">Nominations</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                        {users.map((u) => {
-                          const val = getNom(s, u.id);
-                          const cnfUser = (s.confirmed_enrollments || []).filter((ce) => ce.user_id === u.id).length;
-                          return (
-                            <button key={u.id} onClick={() => startEditCell(s.id, u.id)}
-                              className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-gray-100 hover:border-primary-200 hover:shadow-sm transition-all text-left">
-                              <span className="w-8 h-8 bg-primary-50 text-primary-600 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0">
-                                {u.name?.charAt(0).toUpperCase()}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[11px] text-gray-500 truncate font-medium">{u.name?.split(' ')[0]}</p>
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  {val > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700">T{val}</span>}
-                                  {cnfUser > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-600">C{cnfUser}</span>}
-                                  {val === 0 && cnfUser === 0 && <span className="text-[10px] text-gray-300">—</span>}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Pending Collections Summary */}
+                      {/* Pending Collections */}
                       {(s.pending_collections_count || 0) > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
+                        <div className="mb-3 pb-3 border-b border-gray-100">
                           <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle size={12} className="text-amber-500" />
                             <p className="text-[10px] uppercase font-semibold text-amber-600 tracking-wider">
@@ -441,8 +340,7 @@ export default function TrainingCalendar() {
                                   <span className="w-5 h-5 bg-amber-100 text-amber-700 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
                                   <span className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</span>
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <span className="text-[10px] text-gray-500">POC: {ce.poc_name || ce.user_name}</span>
+                                <div className="flex items-center gap-2 shrink-0">
                                   {ce.pending_amount > 0 && (
                                     <span className="text-[10px] font-bold text-amber-700">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} pending</span>
                                   )}
@@ -456,10 +354,10 @@ export default function TrainingCalendar() {
                         </div>
                       )}
 
-                      {/* Confirmed Candidates List */}
-                      {(s.confirmed_enrollments || []).length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Confirmed Candidates ({(s.confirmed_enrollments || []).length})</p>
+                      {/* Confirmed Candidates */}
+                      {(s.confirmed_enrollments || []).length > 0 ? (
+                        <div>
+                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Candidates ({(s.confirmed_enrollments || []).length})</p>
                           <div className="space-y-1.5">
                             {(s.confirmed_enrollments || []).map((ce, idx) => (
                               <div key={idx} className="flex items-center justify-between p-2.5 bg-blue-50/70 rounded-xl">
@@ -467,11 +365,7 @@ export default function TrainingCalendar() {
                                   <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
                                   <div className="min-w-0">
                                     <p className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                                    <div className="flex items-center gap-2 text-[9px] text-gray-400">
-                                      <span>{ce.enrollment_name}</span>
-                                      <span>·</span>
-                                      <span className="text-blue-500 font-medium">POC: {ce.poc_name || ce.user_name}</span>
-                                    </div>
+                                    <p className="text-[9px] text-gray-400">{ce.enrollment_name}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -486,6 +380,8 @@ export default function TrainingCalendar() {
                             ))}
                           </div>
                         </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 py-3 text-center">No candidates added yet. Click the graduation cap icon to add.</p>
                       )}
                     </div>
                   )}
@@ -496,107 +392,68 @@ export default function TrainingCalendar() {
         </div>
       )}
 
-      {/* Nomination Modal */}
-      <Modal open={!!editingCell} onClose={() => setEditingCell(null)} title="Update Nomination" size="sm">
-        {editingCell && (() => {
-          const session = sessions.find((s) => s.id === editingCell.sessionId);
-          const userObj = users.find((u) => u.id === editingCell.userId);
-          return (
-            <div className="space-y-5">
-              <div className="text-center">
-                <p className="text-sm font-medium text-gray-900">{session?.course_name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{fmtDate(session?.session_date)}</p>
-              </div>
-              <div className="flex items-center justify-center gap-3">
-                <div className="w-11 h-11 bg-primary-50 text-primary-600 rounded-xl flex items-center justify-center text-lg font-bold">
-                  {userObj?.name?.charAt(0).toUpperCase()}
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{userObj?.name}</p>
-              </div>
+      {/* Add/Remove Candidates Modal */}
+      <Modal open={!!editingSession} onClose={() => setEditingSession(null)}
+        title={editingSession ? `Candidates — ${editingSession.course_name}` : 'Candidates'} size="sm">
+        {editingSession && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-400 text-center">{fmtDate(editingSession.session_date)} {editingSession.timing ? `· ${editingSession.timing}` : ''}</p>
 
-              <div className="flex bg-gray-100 rounded-xl p-1">
-                <button onClick={() => setNomType('tnt')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${nomType === 'tnt' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  TNT (Tentative)
-                </button>
-                <button onClick={() => setNomType('cnf')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${nomType === 'cnf' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  CNF (Confirmed)
-                </button>
-              </div>
-
-              {nomType === 'tnt' ? (
-                <>
-                  <div className="flex items-center justify-center gap-4">
-                    <button onClick={() => setCellValue(String(Math.max(0, parseInt(cellValue) - 1)))}
-                      className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-lg font-bold text-gray-500 hover:bg-gray-200 transition-colors">−</button>
-                    <input type="number" min="0" value={cellValue}
-                      onChange={(e) => setCellValue(e.target.value)}
-                      className="w-20 h-12 text-center text-2xl font-bold border-2 border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400" />
-                    <button onClick={() => setCellValue(String(parseInt(cellValue) + 1))}
-                      className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-lg font-bold text-amber-600 hover:bg-amber-100 transition-colors">+</button>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setEditingCell(null)} className="btn-secondary flex-1">Cancel</button>
-                    <button onClick={saveTNT} className="btn-primary flex-1">Save</button>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input value={enrollSearch} onChange={(e) => setEnrollSearch(e.target.value)}
-                      placeholder="Search student or course..."
-                      className="input-field pl-8 text-sm" />
-                  </div>
-                  {sessionEnrollments.length > 0 && (
-                    <div>
-                      <p className="text-[10px] uppercase font-semibold text-blue-600 mb-2 tracking-wider">Confirmed ({sessionEnrollments.length})</p>
-                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                        {(isManager ? sessionEnrollments : sessionEnrollments.filter((se) => se.user_id === editingCell.userId)).map((se) => (
-                          <div key={se.enrollment_id} className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
-                              <p className="text-[10px] text-gray-400">{se.enrollment_name} · POC: {se.poc_name || se.user_name}</p>
-                            </div>
-                            <button onClick={() => removeCNFEnrollment(se.enrollment_id)}
-                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0 transition-colors">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
+            {/* Currently Added */}
+            {sessionEnrollments.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase font-semibold text-blue-600 mb-2 tracking-wider">In Batch ({sessionEnrollments.length})</p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {sessionEnrollments.map((se) => (
+                    <div key={se.enrollment_id} className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
+                        <p className="text-[10px] text-gray-400">{se.enrollment_name}</p>
                       </div>
+                      <button onClick={() => removeEnrollment(se.enrollment_id)}
+                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0 transition-colors">
+                        <X size={14} />
+                      </button>
                     </div>
-                  )}
-                  <div>
-                    <p className="text-[10px] uppercase font-semibold text-gray-400 mb-2 tracking-wider">
-                      {sessionEnrollments.length > 0 ? 'Add More' : 'Select Enrollments'}
-                    </p>
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                      {filteredEnrollments.length === 0 ? (
-                        <p className="text-xs text-gray-400 py-3 text-center">
-                          {myEnrollments.length === 0 ? 'No active enrollments assigned to you' : 'No matching enrollments'}
-                        </p>
-                      ) : (
-                        filteredEnrollments.map((e) => (
-                          <button key={e.id} onClick={() => addCNFEnrollment(e.id)}
-                            className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{e.student_name || 'Unknown'}</p>
-                              <p className="text-[10px] text-gray-400 truncate">{e.course_name} {e.poc_name ? `· POC: ${e.poc_name}` : ''}</p>
-                            </div>
-                            <Plus size={14} className="text-blue-500 shrink-0" />
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                  <button onClick={() => setEditingCell(null)} className="btn-primary w-full">Done</button>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Available to Add */}
+            <div>
+              <p className="text-[10px] uppercase font-semibold text-gray-400 mb-2 tracking-wider">
+                {sessionEnrollments.length > 0 ? 'Add More' : 'Select Candidates'}
+              </p>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input value={enrollSearch} onChange={(e) => setEnrollSearch(e.target.value)}
+                  placeholder="Search student or course..."
+                  className="input-field pl-8 text-sm" />
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {filteredEnrollments.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-3 text-center">
+                    {allEnrollments.length === 0 ? 'No active enrollments found' : 'No matching enrollments'}
+                  </p>
+                ) : (
+                  filteredEnrollments.map((e) => (
+                    <button key={e.id} onClick={() => addEnrollment(e.id)}
+                      className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-900 truncate">{e.student_name || 'Unknown'}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{e.course_name}</p>
+                      </div>
+                      <Plus size={14} className="text-blue-500 shrink-0" />
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
-          );
-        })()}
+
+            <button onClick={() => setEditingSession(null)} className="btn-primary w-full">Done</button>
+          </div>
+        )}
       </Modal>
 
       {/* Create/Edit Session */}
@@ -658,27 +515,25 @@ export default function TrainingCalendar() {
         {selectedBatch && (() => {
           const bName = selectedBatch.batch_name;
           const batchSessions = sessions.filter((s) => s.batch_name === bName);
-          const allEnrollments = batchSessions.flatMap((s) => s.confirmed_enrollments || []);
-          const uniqueEnrollments = [...new Map(allEnrollments.map((e) => [e.enrollment_id, e])).values()];
-          const allNoms = batchSessions.flatMap((s) => s.nominations || []);
+          const allCand = batchSessions.flatMap((s) => s.confirmed_enrollments || []);
+          const uniqueCand = [...new Map(allCand.map((e) => [e.enrollment_id, e])).values()];
           return (
             <div className="space-y-4">
               <div className="flex items-center gap-4 text-xs">
                 <span className="text-gray-500">Sessions: <strong className="text-gray-900">{batchSessions.length}</strong></span>
-                <span className="text-gray-500">Confirmed: <strong className="text-blue-600">{uniqueEnrollments.length}</strong></span>
-                <span className="text-gray-500">Tentative: <strong className="text-amber-600">{allNoms.reduce((s, n) => s + n.tentative_count, 0)}</strong></span>
+                <span className="text-gray-500">Candidates: <strong className="text-blue-600">{uniqueCand.length}</strong></span>
               </div>
-              {uniqueEnrollments.length === 0 ? (
-                <p className="text-sm text-gray-400 py-6 text-center">No confirmed candidates in this batch yet</p>
+              {uniqueCand.length === 0 ? (
+                <p className="text-sm text-gray-400 py-6 text-center">No candidates in this batch yet</p>
               ) : (
                 <div className="space-y-1.5 max-h-80 overflow-y-auto">
-                  {uniqueEnrollments.map((ce, idx) => (
+                  {uniqueCand.map((ce, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 bg-blue-50/70 rounded-xl">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="w-7 h-7 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                          <p className="text-[10px] text-gray-400">POC: {ce.poc_name || ce.user_name}</p>
+                          <p className="text-[10px] text-gray-400">{ce.enrollment_name}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
