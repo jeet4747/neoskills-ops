@@ -70,7 +70,7 @@ export default function TrainingCalendar() {
   const [enrollSearch, setEnrollSearch] = useState('');
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
-  const [expandedRow, setExpandedRow] = useState(null);
+  const [collapsedRows, setCollapsedRows] = useState(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -279,8 +279,7 @@ export default function TrainingCalendar() {
             const tnt = totalBySession(s);
             const borderC = getSeatColor(cnf, tnt);
             const st = getStatusVariant(s.status);
-            const isExpanded = expandedRow === s.id;
-            const hasNominations = (s.nominations || []).length > 0 || (s.confirmed_enrollments || []).length > 0;
+            const isExpanded = !collapsedRows.has(s.id);
 
             return (
               <Card key={s.id}>
@@ -331,12 +330,14 @@ export default function TrainingCalendar() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-0.5 shrink-0">
-                        {hasNominations && (
-                          <button onClick={() => setExpandedRow(isExpanded ? null : s.id)}
-                            className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                          </button>
-                        )}
+                        <button onClick={() => setCollapsedRows((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                          return next;
+                        })}
+                          className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
                         <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
                           <Pencil size={14} />
                         </button>
