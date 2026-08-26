@@ -1381,7 +1381,12 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
         ),
         query(
           `SELECT se.session_id, se.enrollment_id, se.user_id, e.course_name AS enrollment_name,
-                  e.batch_name AS module, u.name AS user_name, s.name AS student_name
+                  e.batch_name AS module, e.training_fee, e.sales_user_id,
+                  u.name AS user_name, s.name AS student_name,
+                  COALESCE((SELECT SUM(p.amount_paid) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS paid_amount,
+                  COALESCE((SELECT SUM(p.pending_amount) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS pending_amount,
+                  CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'pending_approval') THEN true ELSE false END AS has_pending_payment,
+                  (SELECT u2.name FROM users u2 WHERE u2.id = e.sales_user_id) AS poc_name
            FROM session_enrollments se
            JOIN enrollments e ON e.id = se.enrollment_id
            JOIN users u ON u.id = se.user_id
@@ -1399,29 +1404,52 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     const enrollMap = {};
     for (const e of enrollments.rows) {
       if (!enrollMap[e.session_id]) enrollMap[e.session_id] = [];
-      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name });
+      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name, training_fee: e.training_fee, paid_amount: e.paid_amount, pending_amount: e.pending_amount, has_pending_payment: e.has_pending_payment, poc_name: e.poc_name, sales_user_id: e.sales_user_id });
     }
-    const result = sessions.rows.map((s) => ({
-      ...s,
-      nominations: nomMap[s.id] || [],
-      total_tentative: (nomMap[s.id] || []).reduce((sum, n) => sum + n.tentative_count, 0),
-      confirmed_enrollments: enrollMap[s.id] || [],
-      confirmed_count: (enrollMap[s.id] || []).length,
-    }));
+    const result = sessions.rows.map((s) => {
+      const enrollments = enrollMap[s.id] || [];
+      const pendingEnrollments = enrollments.filter((e) => e.pending_amount > 0 || e.has_pending_payment);
+      const totalPending = enrollments.reduce((sum, e) => sum + (parseFloat(e.pending_amount) || 0), 0);
+      return {
+        ...s,
+        nominations: nomMap[s.id] || [],
+        total_tentative: (nomMap[s.id] || []).reduce((sum, n) => sum + n.tentative_count, 0),
+        confirmed_enrollments: enrollments,
+        confirmed_count: enrollments.length,
+        pending_collections_count: pendingEnrollments.length,
+        pending_collections_total: totalPending,
+      };
+    });
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
   try {
-    const result = await query(
-      `SELECT e.id, e.course_name, e.batch_name, s.name AS student_name, s.phone AS student_phone
-       FROM enrollments e
-       LEFT JOIN students s ON s.id = e.student_id
-       WHERE e.status = 'active' AND e.sales_user_id = $1
-       ORDER BY e.course_name`,
-      [req.user.id]
-    );
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'manager';
+    let result;
+    if (isAdmin) {
+      result = await query(
+        `SELECT e.id, e.course_name, e.batch_name, e.sales_user_id, s.name AS student_name, s.phone AS student_phone,
+                u.name AS poc_name
+         FROM enrollments e
+         LEFT JOIN students s ON s.id = e.student_id
+         LEFT JOIN users u ON u.id = e.sales_user_id
+         WHERE e.status = 'active'
+         ORDER BY e.course_name`
+      );
+    } else {
+      result = await query(
+        `SELECT e.id, e.course_name, e.batch_name, e.sales_user_id, s.name AS student_name, s.phone AS student_phone,
+                u.name AS poc_name
+         FROM enrollments e
+         LEFT JOIN students s ON s.id = e.student_id
+         LEFT JOIN users u ON u.id = e.sales_user_id
+         WHERE e.status = 'active' AND e.sales_user_id = $1
+         ORDER BY e.course_name`,
+        [req.user.id]
+      );
+    }
     res.json(result.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1500,6 +1528,14 @@ app.post('/api/training-calendar/:id/enrollments', auth(), async (req, res) => {
     if (!enrollment_id) return res.status(400).json({ error: 'enrollment_id required' });
     const session = await query('SELECT id FROM training_sessions WHERE id = $1', [req.params.id]);
     if (!session.rows.length) return res.status(404).json({ error: 'Session not found' });
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'manager';
+    if (!isAdmin) {
+      const enrollCheck = await query('SELECT sales_user_id FROM enrollments WHERE id = $1', [enrollment_id]);
+      if (!enrollCheck.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+      if (enrollCheck.rows[0].sales_user_id !== req.user.id) {
+        return res.status(403).json({ error: 'You can only add your own enrollments' });
+      }
+    }
     await query(
       `INSERT INTO session_enrollments (session_id, enrollment_id, user_id) VALUES ($1, $2, $3)
        ON CONFLICT (session_id, enrollment_id) DO NOTHING`,
@@ -1511,6 +1547,14 @@ app.post('/api/training-calendar/:id/enrollments', auth(), async (req, res) => {
 
 app.delete('/api/training-calendar/:sessionId/enrollments/:enrollmentId', auth(), async (req, res) => {
   try {
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'manager';
+    if (!isAdmin) {
+      const enrollCheck = await query('SELECT sales_user_id FROM enrollments WHERE id = $1', [req.params.enrollmentId]);
+      if (!enrollCheck.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
+      if (enrollCheck.rows[0].sales_user_id !== req.user.id) {
+        return res.status(403).json({ error: 'You can only remove your own enrollments' });
+      }
+    }
     const result = await query(
       'DELETE FROM session_enrollments WHERE session_id = $1 AND enrollment_id = $2 RETURNING id',
       [req.params.sessionId, req.params.enrollmentId]

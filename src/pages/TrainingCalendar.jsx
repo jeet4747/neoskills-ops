@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight,
   Link as LinkIcon, Search, ChevronDown, ChevronUp, Users, Zap, Video, User,
+  IndianRupee, AlertTriangle,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -90,6 +91,7 @@ export default function TrainingCalendar() {
 
   useEffect(() => { load(); }, [load]);
 
+  const isManager = user?.role === 'admin' || user?.role === 'manager';
   const totalCNF = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalTNT = sessions.reduce((s, x) => s + (x.nominations || []).reduce((a, n) => a + n.tentative_count, 0), 0);
 
@@ -375,18 +377,67 @@ export default function TrainingCalendar() {
                         })}
                       </div>
 
-                      {/* CNF Details */}
+                      {/* Pending Collections Summary */}
+                      {(s.pending_collections_count || 0) > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle size={12} className="text-amber-500" />
+                            <p className="text-[10px] uppercase font-semibold text-amber-600 tracking-wider">
+                              Pending Collections ({s.pending_collections_count})
+                            </p>
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                              ₹{(s.pending_collections_total || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {(s.confirmed_enrollments || []).filter((ce) => ce.pending_amount > 0 || ce.has_pending_payment).map((ce, idx) => (
+                              <div key={idx} className="flex items-center justify-between py-1.5 px-2.5 bg-amber-50/70 rounded-lg">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="w-5 h-5 bg-amber-100 text-amber-700 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
+                                  <span className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</span>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <span className="text-[10px] text-gray-500">POC: {ce.poc_name || ce.user_name}</span>
+                                  {ce.pending_amount > 0 && (
+                                    <span className="text-[10px] font-bold text-amber-700">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} pending</span>
+                                  )}
+                                  {ce.has_pending_payment && (
+                                    <span className="text-[9px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Under Review</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Confirmed Candidates List */}
                       {(s.confirmed_enrollments || []).length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Confirmed Enrollments</p>
-                          <div className="flex flex-wrap gap-1.5">
+                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Confirmed Candidates ({(s.confirmed_enrollments || []).length})</p>
+                          <div className="space-y-1.5">
                             {(s.confirmed_enrollments || []).map((ce, idx) => (
-                              <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg text-[11px]">
-                                <span className="w-5 h-5 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center text-[8px] font-bold">{ce.user_name?.charAt(0).toUpperCase()}</span>
-                                <span className="font-medium text-gray-900">{ce.student_name || ce.enrollment_name}</span>
-                                <span className="text-gray-300">·</span>
-                                <span className="text-blue-500">{ce.user_name}</span>
-                              </span>
+                              <div key={idx} className="flex items-center justify-between p-2.5 bg-blue-50/70 rounded-xl">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
+                                    <div className="flex items-center gap-2 text-[9px] text-gray-400">
+                                      <span>{ce.enrollment_name}</span>
+                                      <span>·</span>
+                                      <span className="text-blue-500 font-medium">POC: {ce.poc_name || ce.user_name}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {ce.paid_amount > 0 && (
+                                    <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
+                                  )}
+                                  {ce.pending_amount > 0 && (
+                                    <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
+                                  )}
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -457,11 +508,11 @@ export default function TrainingCalendar() {
                     <div>
                       <p className="text-[10px] uppercase font-semibold text-blue-600 mb-2 tracking-wider">Confirmed ({sessionEnrollments.length})</p>
                       <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                        {sessionEnrollments.filter((se) => se.user_id === editingCell.userId).map((se) => (
+                        {(isManager ? sessionEnrollments : sessionEnrollments.filter((se) => se.user_id === editingCell.userId)).map((se) => (
                           <div key={se.enrollment_id} className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
-                              <p className="text-[10px] text-gray-400">{se.enrollment_name}</p>
+                              <p className="text-[10px] text-gray-400">{se.enrollment_name} · POC: {se.poc_name || se.user_name}</p>
                             </div>
                             <button onClick={() => removeCNFEnrollment(se.enrollment_id)}
                               className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0 transition-colors">
@@ -487,7 +538,7 @@ export default function TrainingCalendar() {
                             className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-gray-900 truncate">{e.student_name || 'Unknown'}</p>
-                              <p className="text-[10px] text-gray-400 truncate">{e.course_name}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{e.course_name} {e.poc_name ? `· POC: ${e.poc_name}` : ''}</p>
                             </div>
                             <Plus size={14} className="text-blue-500 shrink-0" />
                           </button>
