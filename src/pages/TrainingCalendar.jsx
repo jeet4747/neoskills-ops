@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, Check, ChevronLeft, ChevronRight,
-  Link as LinkIcon, Search, ChevronDown, ChevronUp, Users, Zap, Video, User,
-  IndianRupee, AlertTriangle,
+  Search, ChevronDown, ChevronUp, Users, Zap, Video, User,
+  IndianRupee, AlertTriangle, Clock, GraduationCap,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -17,6 +17,14 @@ const STATUSES = [
   { value: 'batch_started', label: 'Batch Started', variant: 'active' },
   { value: 'completed', label: 'Completed', variant: 'completed' },
   { value: 'canceled', label: 'Canceled', variant: 'rejected' },
+];
+const TIMING_SLOTS = [
+  '6:00 AM - 8:00 AM', '7:00 AM - 9:00 AM', '8:00 AM - 10:00 AM',
+  '9:00 AM - 11:00 AM', '10:00 AM - 12:00 PM', '11:00 AM - 1:00 PM',
+  '12:00 PM - 2:00 PM', '1:00 PM - 3:00 PM', '2:00 PM - 4:00 PM',
+  '3:00 PM - 5:00 PM', '4:00 PM - 6:00 PM', '5:00 PM - 7:00 PM',
+  '6:00 PM - 8:00 PM', '7:00 PM - 9:00 PM', '8:00 PM - 10:00 PM',
+  'Custom',
 ];
 
 function getMonthLabel(m) {
@@ -57,12 +65,11 @@ export default function TrainingCalendar() {
   const toast = useToast();
   const [sessions, setSessions] = useState([]);
   const [users, setUsers] = useState([]);
-  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(currentMonth());
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', batch_id: '', status: 'in_future' });
+  const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', timingCustom: '', status: 'in_future' });
   const [saving, setSaving] = useState(false);
   const [editingCell, setEditingCell] = useState(null);
   const [cellValue, setCellValue] = useState('');
@@ -72,18 +79,17 @@ export default function TrainingCalendar() {
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
   const [collapsedRows, setCollapsedRows] = useState(new Set());
+  const [selectedBatch, setSelectedBatch] = useState(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [sessionsData, usersData, batchesData] = await Promise.all([
+      const [sessionsData, usersData] = await Promise.all([
         api.calendar.list(month),
         api.users.listSimple(),
-        api.batches.list(),
       ]);
       setSessions(sessionsData);
       setUsers(usersData.filter((u) => u.role === 'sales' || u.can_sell));
-      setBatches(batchesData);
     } catch (e) { toast.error('Failed to load calendar'); }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,18 +101,44 @@ export default function TrainingCalendar() {
   const totalCNF = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalTNT = sessions.reduce((s, x) => s + (x.nominations || []).reduce((a, n) => a + n.tentative_count, 0), 0);
 
+  function parseTimingToMinutes(t) {
+    if (!t) return 999;
+    const match = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return 999;
+    let h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const ampm = match[3].toUpperCase();
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  const sortedSessions = [...sessions].sort((a, b) => {
+    const dA = a.session_date || '';
+    const dB = b.session_date || '';
+    if (dA !== dB) return dA.localeCompare(dB);
+    return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
+  });
+
+  const topBatch = [...sessions].sort((a, b) => {
+    const tA = (a.confirmed_count || 0) + (a.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
+    const tB = (b.confirmed_count || 0) + (b.nominations || []).reduce((sum, n) => sum + n.tentative_count, 0);
+    return tB - tA;
+  })[0];
+
   function openCreate() {
     setEditing(null);
-    setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', batch_id: '', status: 'in_future' });
+    setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', timingCustom: '', status: 'in_future' });
     setShowForm(true);
   }
   function openEdit(s) {
     setEditing(s);
+    const isCustom = s.timing && !TIMING_SLOTS.includes(s.timing);
     setForm({
       session_date: s.session_date ? s.session_date.slice(0, 10) : '',
       course_name: s.course_name || '',
-      timing: s.timing || '',
-      batch_id: s.batch_id || '',
+      timing: isCustom ? 'Custom' : (s.timing || ''),
+      timingCustom: isCustom ? s.timing : '',
       status: s.status || 'in_future',
     });
     setShowForm(true);
@@ -115,7 +147,8 @@ export default function TrainingCalendar() {
     if (!form.session_date || !form.course_name.trim()) { toast.error('Date and course name required'); return; }
     try {
       setSaving(true);
-      const payload = { ...form, batch_id: form.batch_id ? parseInt(form.batch_id) : null };
+      const timingVal = form.timing === 'Custom' ? form.timingCustom : form.timing;
+      const payload = { ...form, timing: timingVal, batch_id: null };
       if (editing) await api.calendar.update(editing.id, payload);
       else await api.calendar.create(payload);
       toast.success(editing ? 'Session updated' : 'Session created');
@@ -276,16 +309,18 @@ export default function TrainingCalendar() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {sessions.map((s) => {
+          {sortedSessions.map((s) => {
             const cnf = s.confirmed_count || 0;
             const tnt = totalBySession(s);
+            const total = cnf + tnt;
             const borderC = getSeatColor(cnf, tnt);
             const st = getStatusVariant(s.status);
             const isExpanded = !collapsedRows.has(s.id);
+            const isTop = topBatch && topBatch.id === s.id && total > 0;
 
             return (
               <Card key={s.id}>
-                <div className={`border-l-3 ${borderC} rounded-2xl`}>
+                <div className={`border-l-3 ${borderC} rounded-2xl ${isTop ? 'ring-2 ring-emerald-200 bg-emerald-50/30' : ''}`}>
                   {/* Main Row */}
                   <div className="px-5 py-4">
                     <div className="flex items-center gap-4">
@@ -300,15 +335,25 @@ export default function TrainingCalendar() {
 
                       {/* Module + Batch */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {s.batch_name && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                              <LinkIcon size={9} /> {s.batch_name}
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                          {isTop && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+                              <Zap size={9} /> Most Likely
                             </span>
                           )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {s.batch_name && (
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedBatch(s); }}
+                              className="inline-flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 font-medium hover:underline">
+                              <GraduationCap size={9} /> {s.batch_name}
+                            </button>
+                          )}
                           {s.timing && (
-                            <span className="text-[11px] text-gray-300">{s.timing}</span>
+                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                              <Clock size={9} /> {s.timing}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -568,17 +613,16 @@ export default function TrainingCalendar() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Timing</label>
-            <input value={form.timing} onChange={(e) => setForm({ ...form, timing: e.target.value })}
-              placeholder="e.g. 4PM TO 7.30PM" className="input-field" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Link to Batch</label>
-            <select value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })} className="input-field">
-              <option value="">No batch linked</option>
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
+            <select value={form.timing} onChange={(e) => setForm({ ...form, timing: e.target.value })} className="input-field">
+              <option value="">Select timing</option>
+              {TIMING_SLOTS.map((t) => (
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
+            {form.timing === 'Custom' && (
+              <input value={form.timingCustom} onChange={(e) => setForm({ ...form, timingCustom: e.target.value })}
+                placeholder="e.g. 4PM TO 7.30PM" className="input-field mt-2" />
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
@@ -606,6 +650,53 @@ export default function TrainingCalendar() {
             <button onClick={() => handleDelete(deleting)} className="btn-danger flex-1">Delete</button>
           </div>
         </div>
+      </Modal>
+
+      {/* Batch Candidates List */}
+      <Modal open={!!selectedBatch} onClose={() => setSelectedBatch(null)}
+        title={selectedBatch?.batch_name || 'Batch Candidates'} size="md">
+        {selectedBatch && (() => {
+          const bName = selectedBatch.batch_name;
+          const batchSessions = sessions.filter((s) => s.batch_name === bName);
+          const allEnrollments = batchSessions.flatMap((s) => s.confirmed_enrollments || []);
+          const uniqueEnrollments = [...new Map(allEnrollments.map((e) => [e.enrollment_id, e])).values()];
+          const allNoms = batchSessions.flatMap((s) => s.nominations || []);
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 text-xs">
+                <span className="text-gray-500">Sessions: <strong className="text-gray-900">{batchSessions.length}</strong></span>
+                <span className="text-gray-500">Confirmed: <strong className="text-blue-600">{uniqueEnrollments.length}</strong></span>
+                <span className="text-gray-500">Tentative: <strong className="text-amber-600">{allNoms.reduce((s, n) => s + n.tentative_count, 0)}</strong></span>
+              </div>
+              {uniqueEnrollments.length === 0 ? (
+                <p className="text-sm text-gray-400 py-6 text-center">No confirmed candidates in this batch yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                  {uniqueEnrollments.map((ce, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-blue-50/70 rounded-xl">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-7 h-7 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
+                          <p className="text-[10px] text-gray-400">POC: {ce.poc_name || ce.user_name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {ce.paid_amount > 0 && (
+                          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
+                        )}
+                        {ce.pending_amount > 0 && (
+                          <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setSelectedBatch(null)} className="btn-primary w-full">Close</button>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
