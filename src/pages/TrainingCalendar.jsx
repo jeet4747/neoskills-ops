@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
-  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, AlertTriangle,
+  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -71,13 +71,12 @@ export default function TrainingCalendar() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', timingCustom: '', status: 'in_future' });
   const [saving, setSaving] = useState(false);
-  const [editingSession, setEditingSession] = useState(null);
+  const [viewSession, setViewSession] = useState(null);
+  const [addSession, setAddSession] = useState(null);
   const [enrollSearch, setEnrollSearch] = useState('');
   const [allEnrollments, setAllEnrollments] = useState([]);
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
-  const [collapsedRows, setCollapsedRows] = useState(new Set());
-  const [selectedBatch, setSelectedBatch] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,8 +99,6 @@ export default function TrainingCalendar() {
   const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalReceived = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0), 0);
   const totalPending = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0), 0);
-
-  const topSession = [...sessions].sort((a, b) => (b.confirmed_count || 0) - (a.confirmed_count || 0))[0];
 
   function openCreate() {
     setEditing(null);
@@ -142,8 +139,8 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
-  async function openCandidates(session) {
-    setEditingSession(session);
+  async function openAddCandidate(session) {
+    setAddSession(session);
     setEnrollSearch('');
     setSessionEnrollments(session.confirmed_enrollments || []);
     try {
@@ -153,18 +150,18 @@ export default function TrainingCalendar() {
   }
   async function addEnrollment(enrollmentId) {
     try {
-      await api.calendar.addEnrollment(editingSession.id, enrollmentId);
+      await api.calendar.addEnrollment(addSession.id, enrollmentId);
       const sess = await api.calendar.list(month);
-      const s = sess.find((x) => x.id === editingSession.id);
+      const s = sess.find((x) => x.id === addSession.id);
       setSessionEnrollments(s?.confirmed_enrollments || []);
       load();
     } catch (e) { toast.error(e.message); }
   }
   async function removeEnrollment(enrollmentId) {
     try {
-      await api.calendar.removeEnrollment(editingSession.id, enrollmentId);
+      await api.calendar.removeEnrollment(addSession.id, enrollmentId);
       const sess = await api.calendar.list(month);
-      const s = sess.find((x) => x.id === editingSession.id);
+      const s = sess.find((x) => x.id === addSession.id);
       setSessionEnrollments(s?.confirmed_enrollments || []);
       load();
     } catch (e) { toast.error(e.message); }
@@ -249,189 +246,123 @@ export default function TrainingCalendar() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {sortedSessions.map((s) => {
             const count = s.confirmed_count || 0;
             const st = getStatusVariant(s.status);
-            const isExpanded = !collapsedRows.has(s.id);
-            const isTop = topSession && topSession.id === s.id && count > 0;
+            const isOpen = viewSession === s.id;
             const received = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0);
             const pending = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0);
 
             return (
               <Card key={s.id}>
-                <div className={`rounded-2xl ${isTop ? 'ring-2 ring-emerald-200 bg-emerald-50/30' : ''}`}>
-                  {/* Main Row */}
-                  <div className="px-5 py-4">
-                    <div className="flex items-center gap-4">
-                      {/* Date */}
-                      <div className="shrink-0 w-20">
-                        <p className="text-sm font-bold text-gray-900">{new Date(s.session_date).getDate()}</p>
-                        <p className="text-[11px] text-gray-400">{MONTHS[new Date(s.session_date).getMonth()]}</p>
-                      </div>
+                {/* Main Row */}
+                <div className="px-5 py-4">
+                  <div className="flex items-center gap-4">
+                    {/* Date */}
+                    <div className="shrink-0 w-14 text-center">
+                      <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
+                      <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
+                    </div>
 
-                      <div className="w-px h-10 bg-gray-100 shrink-0" />
+                    <div className="w-px h-12 bg-gray-100 shrink-0" />
 
-                      {/* Module + Batch + Timing */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
-                          {isTop && (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
-                              <Zap size={9} /> Most Likely
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {s.batch_name && (
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedBatch(s); }}
-                              className="inline-flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-700 font-medium hover:underline">
-                              <GraduationCap size={9} /> {s.batch_name}
-                            </button>
-                          )}
-                          {s.timing && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                              <Clock size={9} /> {s.timing}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Candidates + Amounts */}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-center">
-                          <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Candidates</p>
-                          <p className="text-base font-bold text-blue-600">{count}</p>
-                        </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {s.batch_name && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                            <GraduationCap size={10} /> {s.batch_name}
+                          </span>
+                        )}
+                        {s.timing && (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                            <Clock size={10} /> {s.timing}
+                          </span>
+                        )}
                         {received > 0 && (
-                          <div className="text-center">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Received</p>
-                            <p className="text-xs font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</p>
-                          </div>
+                          <span className="text-[11px] font-semibold text-emerald-600">₹{received.toLocaleString('en-IN')} received</span>
                         )}
                         {pending > 0 && (
-                          <div className="text-center">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Pending</p>
-                            <p className="text-xs font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</p>
-                          </div>
+                          <span className="text-[11px] font-semibold text-amber-600">₹{pending.toLocaleString('en-IN')} pending</span>
                         )}
                       </div>
+                    </div>
 
-                      {/* Status */}
-                      <div className="shrink-0">
-                        <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
-                      </div>
+                    {/* Status */}
+                    <div className="shrink-0">
+                      <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
+                    </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => openCandidates(s)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
-                          <Plus size={12} /> Add
-                        </button>
-                        <button onClick={() => setCollapsedRows((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                          return next;
-                        })}
-                          className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                        </button>
-                        <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => setViewSession(isOpen ? null : s.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        View ({count})
+                      </button>
+                      <button onClick={() => openAddCandidate(s)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
+                        <Plus size={12} /> Add
+                      </button>
+                      <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-
-                  {/* Expanded: Candidate List */}
-                  {isExpanded && (
-                    <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/30">
-                      {/* Pending Collections */}
-                      {(s.pending_collections_count || 0) > 0 && (
-                        <div className="mb-3 pb-3 border-b border-gray-100">
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle size={12} className="text-amber-500" />
-                            <p className="text-[10px] uppercase font-semibold text-amber-600 tracking-wider">
-                              Pending Collections ({s.pending_collections_count})
-                            </p>
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
-                              ₹{(s.pending_collections_total || 0).toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            {(s.confirmed_enrollments || []).filter((ce) => ce.pending_amount > 0 || ce.has_pending_payment).map((ce, idx) => (
-                              <div key={idx} className="flex items-center justify-between py-1.5 px-2.5 bg-amber-50/70 rounded-lg">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="w-5 h-5 bg-amber-100 text-amber-700 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
-                                  <span className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {ce.pending_amount > 0 && (
-                                    <span className="text-[10px] font-bold text-amber-700">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} pending</span>
-                                  )}
-                                  {ce.has_pending_payment && (
-                                    <span className="text-[9px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Under Review</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Confirmed Candidates */}
-                      {(s.confirmed_enrollments || []).length > 0 ? (
-                        <div>
-                          <p className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider mb-2">Candidates ({(s.confirmed_enrollments || []).length})</p>
-                          <div className="space-y-1.5">
-                            {(s.confirmed_enrollments || []).map((ce, idx) => (
-                              <div key={idx} className="flex items-center justify-between p-2.5 bg-blue-50/70 rounded-xl">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center text-[9px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                                    <p className="text-[9px] text-gray-400">{ce.enrollment_name}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {ce.paid_amount > 0 && (
-                                    <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
-                                  )}
-                                  {ce.pending_amount > 0 && (
-                                    <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-400 py-3 text-center">No candidates added yet. Click the graduation cap icon to add.</p>
-                      )}
-                    </div>
-                  )}
                 </div>
+
+                {/* Expanded: Candidate List */}
+                {isOpen && (
+                  <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+                    {(s.confirmed_enrollments || []).length > 0 ? (
+                      <div className="space-y-2">
+                        {(s.confirmed_enrollments || []).map((ce, idx) => (
+                          <div key={idx} className="flex items-center gap-3 py-2 px-3 bg-white rounded-xl border border-gray-100">
+                            <span className="w-6 h-6 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {idx + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
+                              <p className="text-[10px] text-gray-400">{ce.enrollment_name}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {ce.paid_amount > 0 && (
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
+                              )}
+                              {ce.pending_amount > 0 && (
+                                <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-4 text-center">No candidates added yet</p>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}
         </div>
       )}
 
-      {/* Add/Remove Candidates Modal */}
-      <Modal open={!!editingSession} onClose={() => setEditingSession(null)}
-        title={editingSession ? `Candidates — ${editingSession.course_name}` : 'Candidates'} size="sm">
-        {editingSession && (
+      {/* Add Candidate Modal */}
+      <Modal open={!!addSession} onClose={() => setAddSession(null)}
+        title={addSession ? `Add Candidate — ${addSession.course_name}` : 'Add Candidate'} size="sm">
+        {addSession && (
           <div className="space-y-4">
-            <p className="text-xs text-gray-400 text-center">{fmtDate(editingSession.session_date)} {editingSession.timing ? `· ${editingSession.timing}` : ''}</p>
+            <p className="text-xs text-gray-400 text-center">{fmtDate(addSession.session_date)} {addSession.timing ? `· ${addSession.timing}` : ''}</p>
 
             {/* Currently Added */}
             {sessionEnrollments.length > 0 && (
               <div>
                 <p className="text-[10px] uppercase font-semibold text-blue-600 mb-2 tracking-wider">In Batch ({sessionEnrollments.length})</p>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {sessionEnrollments.map((se) => (
                     <div key={se.enrollment_id} className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
                       <div className="min-w-0">
@@ -448,7 +379,7 @@ export default function TrainingCalendar() {
               </div>
             )}
 
-            {/* Available to Add */}
+            {/* Search + Available */}
             <div>
               <p className="text-[10px] uppercase font-semibold text-gray-400 mb-2 tracking-wider">
                 {sessionEnrollments.length > 0 ? 'Add More' : 'Select Candidates'}
@@ -456,12 +387,12 @@ export default function TrainingCalendar() {
               <div className="relative mb-2">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input value={enrollSearch} onChange={(e) => setEnrollSearch(e.target.value)}
-                  placeholder="Search student or course..."
+                  placeholder="Search by student name or course..."
                   className="input-field pl-8 text-sm" />
               </div>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {filteredEnrollments.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-3 text-center">
+                  <p className="text-xs text-gray-400 py-4 text-center">
                     {allEnrollments.length === 0 ? 'No active enrollments found' : 'No matching enrollments'}
                   </p>
                 ) : (
@@ -479,7 +410,7 @@ export default function TrainingCalendar() {
               </div>
             </div>
 
-            <button onClick={() => setEditingSession(null)} className="btn-primary w-full">Done</button>
+            <button onClick={() => setAddSession(null)} className="btn-primary w-full">Done</button>
           </div>
         )}
       </Modal>
@@ -535,51 +466,6 @@ export default function TrainingCalendar() {
             <button onClick={() => handleDelete(deleting)} className="btn-danger flex-1">Delete</button>
           </div>
         </div>
-      </Modal>
-
-      {/* Batch Candidates List */}
-      <Modal open={!!selectedBatch} onClose={() => setSelectedBatch(null)}
-        title={selectedBatch?.batch_name || 'Batch Candidates'} size="md">
-        {selectedBatch && (() => {
-          const bName = selectedBatch.batch_name;
-          const batchSessions = sessions.filter((s) => s.batch_name === bName);
-          const allCand = batchSessions.flatMap((s) => s.confirmed_enrollments || []);
-          const uniqueCand = [...new Map(allCand.map((e) => [e.enrollment_id, e])).values()];
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-gray-500">Sessions: <strong className="text-gray-900">{batchSessions.length}</strong></span>
-                <span className="text-gray-500">Candidates: <strong className="text-blue-600">{uniqueCand.length}</strong></span>
-              </div>
-              {uniqueCand.length === 0 ? (
-                <p className="text-sm text-gray-400 py-6 text-center">No candidates in this batch yet</p>
-              ) : (
-                <div className="space-y-1.5 max-h-80 overflow-y-auto">
-                  {uniqueCand.map((ce, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-blue-50/70 rounded-xl">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-7 h-7 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0">{ce.student_name?.charAt(0).toUpperCase()}</span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                          <p className="text-[10px] text-gray-400">{ce.enrollment_name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {ce.paid_amount > 0 && (
-                          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
-                        )}
-                        {ce.pending_amount > 0 && (
-                          <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setSelectedBatch(null)} className="btn-primary w-full">Close</button>
-            </div>
-          );
-        })()}
       </Modal>
     </div>
   );
