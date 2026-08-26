@@ -329,7 +329,10 @@ export default function TrainingCalendar() {
                             </span>
                             <div className="flex-1 min-w-0">
                               <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                              <p className="text-[10px] text-gray-400">{ce.enrollment_name}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                                {ce.poc_name && <span>POC: {ce.poc_name}</span>}
+                                {ce.student_phone && <span>{ce.student_phone}</span>}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {ce.paid_amount > 0 && (
@@ -369,7 +372,10 @@ export default function TrainingCalendar() {
                     <div key={se.enrollment_id} className="flex items-center justify-between p-2.5 bg-blue-50 rounded-xl">
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
-                        <p className="text-[10px] text-gray-400">{se.enrollment_name}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                          {se.poc_name && <span>POC: {se.poc_name}</span>}
+                          {se.student_phone && <span>{se.student_phone}</span>}
+                        </div>
                       </div>
                       <button onClick={() => removeEnrollment(se.enrollment_id)}
                         className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0 transition-colors">
@@ -403,7 +409,10 @@ export default function TrainingCalendar() {
                       className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors text-left">
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-gray-900 truncate">{e.student_name || 'Unknown'}</p>
-                        <p className="text-[10px] text-gray-400 truncate">{e.course_name}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                          <span>{e.course_name}</span>
+                          {e.poc_name && <span>· POC: {e.poc_name}</span>}
+                        </div>
                       </div>
                       <Plus size={14} className="text-blue-500 shrink-0" />
                     </button>

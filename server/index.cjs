@@ -1382,7 +1382,7 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
         query(
           `SELECT se.session_id, se.enrollment_id, se.user_id, e.course_name AS enrollment_name,
                   e.batch_name AS module, e.training_fee, e.sales_user_id,
-                  u.name AS user_name, s.name AS student_name,
+                  u.name AS user_name, s.name AS student_name, s.phone AS student_phone,
                   COALESCE((SELECT SUM(p.amount_paid) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS paid_amount,
                   COALESCE((SELECT SUM(p.pending_amount) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS pending_amount,
                   CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'pending_approval') THEN true ELSE false END AS has_pending_payment,
@@ -1404,7 +1404,7 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     const enrollMap = {};
     for (const e of enrollments.rows) {
       if (!enrollMap[e.session_id]) enrollMap[e.session_id] = [];
-      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name, training_fee: e.training_fee, paid_amount: e.paid_amount, pending_amount: e.pending_amount, has_pending_payment: e.has_pending_payment, poc_name: e.poc_name, sales_user_id: e.sales_user_id });
+      enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name, student_phone: e.student_phone, training_fee: e.training_fee, paid_amount: e.paid_amount, pending_amount: e.pending_amount, has_pending_payment: e.has_pending_payment, poc_name: e.poc_name, sales_user_id: e.sales_user_id });
     }
     const result = sessions.rows.map((s) => {
       const enrollments = enrollMap[s.id] || [];
