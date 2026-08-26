@@ -2937,6 +2937,12 @@ async function init() {
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
                    WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);
+      await query(`INSERT INTO training_sessions (session_date, course_name, status, batch_id, created_by)
+                   SELECT COALESCE(b.start_date, CURRENT_DATE), b.name,
+                     CASE WHEN b.status = 'completed' THEN 'completed' ELSE 'in_future' END,
+                     b.id, b.created_by
+                   FROM batches b
+                   WHERE NOT EXISTS (SELECT 1 FROM training_sessions ts WHERE ts.batch_id = b.id)`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);
