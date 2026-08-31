@@ -39,17 +39,29 @@ export default function Team() {
   const [savingId, setSavingId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthOptions, setMonthOptions] = useState([]);
   const [newMember, setNewMember] = useState({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123' });
 
   const isAdmin = me?.role === 'admin';
   const isManager = isAdmin || me?.role === 'manager' || me?.role === 'ops';
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      months.push(d.toISOString().slice(0, 7));
+    }
+    setMonthOptions(months);
+  }, []);
+
+  useEffect(() => { load(); }, [selectedMonth]);
 
   async function load() {
     try {
       setUsers(await api.users.list());
-      if (isManager) api.users.teamAnalytics().then(setAnalytics).catch(() => {});
+      if (isManager) api.users.teamAnalytics({ month: selectedMonth }).then(setAnalytics).catch(() => {});
     } catch (e) { toast.error('Failed to load team'); }
     finally { setLoading(false); }
   }
@@ -111,6 +123,17 @@ export default function Team() {
         <h1 className="text-2xl font-bold text-gray-900">Team</h1>
         <p className="text-sm text-gray-400 mt-0.5">{users.length} members · {stats.active} active{stats.onLeave ? ` · ${stats.onLeave} on leave` : ''}</p>
       </div>
+
+      {isManager && (
+        <div className="flex items-center gap-2">
+          <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+            className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-200 cursor-pointer">
+            {monthOptions.map((m) => (
+              <option key={m} value={m}>{new Date(m + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="flex justify-end -mt-2">

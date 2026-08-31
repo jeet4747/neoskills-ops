@@ -79,6 +79,19 @@ export default function Dashboard() {
     setMonthOptions(months);
   }, []);
 
+  useEffect(() => {
+    const onFocus = () => {
+      const cm = new Date().toISOString().slice(0, 7);
+      setSelectedMonth((m) => (m !== cm ? cm : m));
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, []);
+
   useEffect(() => { load(); }, [selectedMonth]);
 
   async function load() {
@@ -97,7 +110,7 @@ export default function Dashboard() {
 
       const promises = [
         api.dashboard.summary({ month: selectedMonth }),
-        isManager ? api.dashboard.team() : Promise.resolve([]),
+        isManager ? api.dashboard.team({ month: selectedMonth }) : Promise.resolve([]),
         api.dashboard.trends(),
         isManager ? api.dashboard.sourceAnalytics() : Promise.resolve([]),
         isSales ? api.enrollments.list({}) : Promise.resolve([]),

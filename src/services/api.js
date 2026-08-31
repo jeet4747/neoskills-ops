@@ -45,7 +45,10 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return request(`/dashboard/summary${q ? `?${q}` : ''}`);
     },
-    team: () => request('/dashboard/team'),
+    team: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/dashboard/team${q ? `?${q}` : ''}`);
+    },
     trends: () => request('/dashboard/trends'),
     sourceAnalytics: () => request('/dashboard/source-analytics'),
     pendingCollections: () => request('/dashboard/pending-collections'),
@@ -143,9 +146,18 @@ export const api = {
       request(`/batches/${id}/members/${enrollmentId}`, { method: 'DELETE' }),
   },
   reports: {
-    salesperson: () => request('/reports/salesperson'),
-    bankWise: () => request('/reports/bank-wise'),
-    pendingPayments: () => request('/reports/pending-payments'),
+    salesperson: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/reports/salesperson${q ? `?${q}` : ''}`);
+    },
+    bankWise: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/reports/bank-wise${q ? `?${q}` : ''}`);
+    },
+    pendingPayments: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/reports/pending-payments${q ? `?${q}` : ''}`);
+    },
     category: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return request(`/reports/category${q ? `?${q}` : ''}`);
@@ -157,7 +169,10 @@ export const api = {
     getProfile: (id) => request(`/users/${id}/profile`),
     create: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    teamAnalytics: () => request('/team/analytics'),
+    teamAnalytics: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/team/analytics${q ? `?${q}` : ''}`);
+    },
   },
   brands: {
     list: () => request('/brands'),

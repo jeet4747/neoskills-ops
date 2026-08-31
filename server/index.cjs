@@ -254,6 +254,7 @@ app.put('/api/users/:id', auth(['admin']), async (req, res) => {
 
 app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     const result = await query(`
       SELECT
         u.id, u.name, u.email, u.role, u.status, u.can_sell, u.created_at,
@@ -269,16 +270,16 @@ app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, re
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved'
-          AND DATE_TRUNC('month', p.created_at) = DATE_TRUNC('month', NOW())) as month_collected,
+          AND p.collection_month = $1) as month_collected,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
-          AND DATE_TRUNC('month', e.created_at) = DATE_TRUNC('month', NOW())) as month_enrollments,
+          AND e.training_month = $1) as month_enrollments,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
-          AND DATE_TRUNC('month', e.created_at) = DATE_TRUNC('month', NOW())
+          AND e.training_month = $1
           AND e.status = 'completed') as month_completed
       FROM users u
       WHERE (u.role = 'sales' OR u.role = 'manager' OR u.can_sell = true)
       ORDER BY collected DESC, enrollments DESC
-    `);
+    `, [m]);
     const users = result.rows.map((u) => ({
       ...u,
       collected: Number(u.collected) || 0,
@@ -447,9 +448,9 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
 
       const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
       const pay = await client.query(
-        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at, payment_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
+        `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, collection_month, approved_by, approved_at, payment_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, training_month || new Date().toISOString().slice(0, 7), req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
       );
 
       const enrollStatus = payStatus === 'approved' ? (pending <= 0 ? 'completed' : 'active') : 'waiting_approval';
@@ -512,6 +513,11 @@ app.get('/api/enrollments', auth(), async (req, res) => {
     if (req.query.sales_user_id) {
       conditions.push(`e.sales_user_id = $${params.length + 1}`);
       params.push(parseInt(req.query.sales_user_id));
+    }
+
+    if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
+      conditions.push(`e.training_month = $${params.length + 1}`);
+      params.push(req.query.month);
     }
 
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
@@ -1615,11 +1621,11 @@ app.delete('/api/bank-accounts/:id', auth(['admin', 'manager', 'ops']), async (r
 
 app.post('/api/payments', auth(), async (req, res) => {
   try {
-    const { enrollment_id, student_id, amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
+    const { enrollment_id, student_id, amount_paid, payment_mode, payment_date, bank_account_id, transaction_id, collection_month } = req.body;
     if (!enrollment_id || !amount_paid)
       return res.status(400).json({ error: 'enrollment_id and amount_paid required' });
 
-    const enroll = await query('SELECT total_amount FROM enrollments WHERE id = $1', [enrollment_id]);
+    const enroll = await query('SELECT total_amount, training_month FROM enrollments WHERE id = $1', [enrollment_id]);
     if (!enroll.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
 
     const total = parseFloat(enroll.rows[0].total_amount);
@@ -1636,11 +1642,17 @@ app.post('/api/payments', auth(), async (req, res) => {
     }
     const pending = Math.max(0, total - (paidSoFar + paid));
 
+    const cm = /^\d{4}-\d{2}$/.test(collection_month || '')
+      ? collection_month
+      : /^\d{4}-\d{2}$/.test(enroll.rows[0].training_month || '')
+        ? enroll.rows[0].training_month
+        : new Date().toISOString().slice(0, 7);
+
     const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
     const result = await query(
-      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, approved_by, approved_at, payment_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
+      `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, collection_month, approved_by, approved_at, payment_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      [enrollment_id, student_id, req.user.id, paid, pending, payment_mode, bank_account_id, transaction_id, payStatus, cm, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
     );
     await refreshEnrollmentStatus(enrollment_id);
     res.status(201).json(result.rows[0]);
@@ -1681,6 +1693,11 @@ app.get('/api/payments', auth(), async (req, res) => {
       params.push(parseInt(req.query.sales_user_id));
     }
 
+    if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
+      conditions.push(`p.collection_month = $${params.length + 1}`);
+      params.push(req.query.month);
+    }
+
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
     sql += ' ORDER BY p.created_at DESC';
 
@@ -1693,7 +1710,7 @@ app.get('/api/payments', auth(), async (req, res) => {
 
 app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
-    const { amount_paid, payment_mode, payment_date, bank_account_id, transaction_id } = req.body;
+    const { amount_paid, payment_mode, payment_date, bank_account_id, transaction_id, collection_month } = req.body;
     const existing = await query('SELECT * FROM payments WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Payment not found' });
     const payment = existing.rows[0];
@@ -1719,12 +1736,13 @@ app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res)
     const pending = Math.max(0, total - (paidSoFar + amount));
 
     const result = await query(
-      `UPDATE payments SET amount_paid = $1, pending_amount = $2, payment_mode = $3, payment_date = $4, bank_account_id = $5, transaction_id = $6
-       WHERE id = $7 RETURNING *`,
+      `UPDATE payments SET amount_paid = $1, pending_amount = $2, payment_mode = $3, payment_date = $4, bank_account_id = $5, transaction_id = $6, collection_month = $7
+       WHERE id = $8 RETURNING *`,
       [amount, pending, payment_mode !== undefined ? payment_mode : payment.payment_mode,
        payment_date !== undefined ? payment_date : payment.payment_date,
        bank_account_id !== undefined ? bank_account_id : payment.bank_account_id,
        transaction_id !== undefined ? transaction_id : payment.transaction_id,
+       collection_month !== undefined && /^\d{4}-\d{2}$/.test(collection_month) ? collection_month : payment.collection_month,
        payment.id]
     );
     await refreshEnrollmentStatus(payment.enrollment_id);
@@ -1827,6 +1845,10 @@ app.get('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) => 
     if (search) {
       conditions.push(`(r.receipt_number ILIKE $${params.length + 1} OR r.student_name ILIKE $${params.length + 1} OR r.course_name ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
+    }
+    if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
+      conditions.push(`to_char(r.created_at, 'YYYY-MM') = $${params.length + 1}`);
+      params.push(req.query.month);
     }
     if (req.user.role === 'ops') {
       conditions.push(`r.created_by NOT IN (SELECT id FROM users WHERE role = 'admin')`);
@@ -2286,27 +2308,25 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
       userFilter = "AND p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
       enrollFilter = "AND e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')";
     }
-    let monthFilter = '';
-    const month = req.query.month;
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      params.push(month);
-      monthFilter = ` AND to_char(e.created_at, 'YYYY-MM') = $${params.length} `;
-    }
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
+    params.push(month);
+    const collectionFilter = ` AND p.collection_month = $${params.length} `;
+    const trainingFilter = ` AND e.training_month = $${params.length} `;
 
     const kpi = await query(`
       SELECT
-        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.status = 'approved' ${userFilter}) as total_revenue,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.status = 'approved' ${userFilter} ${collectionFilter}) as total_revenue,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
-         FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_pending,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter}) as active_enrollments,
-        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter}) as total_enrollments,
-        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${monthFilter}) as month_total_enrollments,
-        (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter}) as pending_approvals
+         FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as total_pending,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter} ${trainingFilter}) as active_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as total_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as month_total_enrollments,
+        (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter} ${collectionFilter}) as pending_approvals
     `, params);
 
     res.json(kpi.rows[0]);
@@ -2318,14 +2338,10 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
 app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const { month } = req.query;
-    let monthE = '';
-    let monthP = '';
-    let params = [];
-    if (month && /^\d{4}-\d{2}$/.test(month)) {
-      monthE = `AND date_trunc('month', e.created_at) = date_trunc('month', $1::date)`;
-      monthP = `AND date_trunc('month', p.created_at) = date_trunc('month', $1::date)`;
-      params.push(month + '-01');
-    }
+    const m = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
+    const monthE = `AND e.training_month = $1`;
+    const monthP = `AND p.collection_month = $1`;
+    const params = [m];
     const result = await query(`
       SELECT
         u.id, u.name, u.email, u.role, u.can_sell,
@@ -2361,13 +2377,13 @@ app.get('/api/dashboard/trends', auth(), async (req, res) => {
 
     const result = await query(`
       SELECT
-        DATE_TRUNC('month', p.created_at) as month,
+        collection_month as month,
         COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as revenue,
-        COUNT(*) FILTER (WHERE p.status = 'approved') as deals
+        COUNT(DISTINCT p.enrollment_id) FILTER (WHERE p.status = 'approved') as deals
       FROM payments p
       WHERE 1=1 ${userFilter}
-      GROUP BY month
-      ORDER BY month DESC
+      GROUP BY collection_month
+      ORDER BY collection_month DESC
       LIMIT 12
     `, params);
     res.json(result.rows);
@@ -2509,23 +2525,24 @@ app.get('/api/dashboard/hr-overview', auth(), async (req, res) => {
 
 app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     const result = await query(`
       SELECT
         u.name as salesperson,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
-        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.training_month = $1) as enrollments,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved' AND p.collection_month = $1) as collected,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
-         FROM enrollments e WHERE e.sales_user_id = u.id) as pending_collection,
-        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
+         FROM enrollments e WHERE e.sales_user_id = u.id AND e.training_month = $1) as pending_collection,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval' AND p.collection_month = $1) as pending_approvals
       FROM users u
       WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
       ORDER BY collected DESC
-    `);
+    `, [m]);
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2534,15 +2551,16 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
 
 app.get('/api/reports/bank-wise', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     const result = await query(`
       SELECT ba.account_name, ba.bank_name, ba.account_number,
              COUNT(p.id) as transactions,
              COALESCE(SUM(p.amount_paid) FILTER (WHERE p.status = 'approved'), 0) as total_collected
       FROM bank_accounts ba
-      LEFT JOIN payments p ON p.bank_account_id = ba.id
+      LEFT JOIN payments p ON p.bank_account_id = ba.id AND p.collection_month = $1
       GROUP BY ba.id, ba.account_name, ba.bank_name, ba.account_number
       ORDER BY total_collected DESC
-    `);
+    `, [m]);
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2551,8 +2569,9 @@ app.get('/api/reports/bank-wise', auth(['admin', 'manager', 'ops']), async (req,
 
 app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
+    const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     const result = await query(`
-      SELECT s.name as student_name, s.phone, e.course_name, u.name as salesperson,
+      SELECT s.name as student_name, s.phone, e.course_name, u.name as salesperson, e.training_month,
              GREATEST(e.total_amount - COALESCE((
                SELECT SUM(p2.amount_paid) FROM payments p2
                WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
@@ -2561,12 +2580,13 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), asyn
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id
-      WHERE GREATEST(e.total_amount - COALESCE((
-              SELECT SUM(p2.amount_paid) FROM payments p2
-              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
-            ), 0), 0) > 0
+      WHERE e.training_month = $1
+        AND GREATEST(e.total_amount - COALESCE((
+                SELECT SUM(p2.amount_paid) FROM payments p2
+                WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
+              ), 0), 0) > 0
       ORDER BY pending_amount DESC
-    `);
+    `, [m]);
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2579,6 +2599,11 @@ app.get('/api/reports/category', auth(['admin', 'manager', 'ops']), async (req, 
     const role = req.user.role;
     const conditions = [];
     const params = [];
+
+    if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
+      conditions.push(`e.training_month = $${params.length + 1}`);
+      params.push(req.query.month);
+    }
 
     if (role === 'sales') {
       conditions.push(`e.sales_user_id = $${params.length + 1}`);
@@ -2714,6 +2739,7 @@ async function init() {
         transaction_id TEXT,
         receipt_url TEXT,
         status TEXT DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'approved', 'rejected')),
+        collection_month TEXT,
         approved_by INTEGER REFERENCES users(id),
         approved_at TIMESTAMPTZ,
         rejection_reason TEXT,
@@ -2978,6 +3004,8 @@ async function init() {
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
+      await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
+      await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
                    WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);

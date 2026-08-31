@@ -56,6 +56,16 @@ export default function Receipts() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+  const [monthOptions, setMonthOptions] = useState(() => {
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+    }
+    return months;
+  });
   const [enrollments, setEnrollments] = useState([]);
   const [enrollSearch, setEnrollSearch] = useState('');
   const [pendingEnrolls, setPendingEnrolls] = useState([]);
@@ -73,7 +83,9 @@ export default function Receipts() {
   const load = useCallback(async (p = 1, s = '') => {
     try {
       setLoading(true);
-      const data = await api.receipts.list({ page: p, limit: 20, search: s });
+      const params = { page: p, limit: 20, search: s };
+      if (filterMonth) params.month = filterMonth;
+      const data = await api.receipts.list(params);
       setReceipts(data.receipts || []);
       setTotal(data.total || 0);
     } catch (e) {
@@ -81,7 +93,7 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, filterMonth]);
 
   useEffect(() => {
     if (mode === 'history') load(page, search);
@@ -401,6 +413,12 @@ export default function Receipts() {
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />
+              </div>
+              <div className="flex items-center gap-2">
+                <select className="input-field w-48" value={filterMonth} onChange={(e) => { setFilterMonth(e.target.value); setPage(1); }}>
+                  <option value="">All Months</option>
+                  {monthOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <span>{total} total</span>

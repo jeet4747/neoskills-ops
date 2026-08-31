@@ -22,10 +22,21 @@ export default function Payments() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+  const [monthOptions, setMonthOptions] = useState(() => {
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+    }
+    return months;
+  });
   const [enrollSearch, setEnrollSearch] = useState('');
   const [form, setForm] = useState({
     enrollment_id: '', student_id: '', amount_paid: '',
     payment_mode: 'upi', bank_account_id: '', transaction_id: '',
+    collection_month: new Date().toISOString().slice(0, 7),
   });
   const [receiptFiles, setReceiptFiles] = useState([]);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
@@ -65,6 +76,11 @@ export default function Payments() {
     )},
     { key: 'payment_mode', label: 'Mode', render: (r) => <span className="capitalize">{r.payment_mode}</span> },
     { key: 'bank_account_name', label: 'Account', render: (r) => r.bank_account_name || '-' },
+    { key: 'collection_month', label: 'Month', render: (r) => r.collection_month ? (
+      <span>
+        {new Date(r.collection_month + '-01').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+      </span>
+    ) : '-' },
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'receipt_url', label: 'Receipt', render: (r) => {
       const urls = getReceiptUrls(r);
@@ -76,12 +92,14 @@ export default function Payments() {
     } },
   ];
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [filterMonth]);
 
   async function load() {
     try {
+      const params = {};
+      if (filterMonth) params.month = filterMonth;
       const [p, e, b] = await Promise.all([
-        api.payments.list(isManager ? {} : {}),
+        api.payments.list(params),
         api.enrollments.list({ status: 'active' }),
         api.bankAccounts.list(),
       ]);
@@ -115,6 +133,7 @@ export default function Payments() {
         payment_mode: isCash ? 'cash' : form.payment_mode,
         bank_account_id: parseInt(form.bank_account_id) || null,
         transaction_id: form.transaction_id,
+        collection_month: form.collection_month,
       });
 
       if (receiptFiles.length && payment.id) {
@@ -125,7 +144,7 @@ export default function Payments() {
 
       toast.success(`Payment of ₹${Number(form.amount_paid).toLocaleString()} recorded and sent for approval`);
       setShowAdd(false);
-      setForm({ enrollment_id: '', student_id: '', amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' });
+      setForm({ enrollment_id: '', student_id: '', amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', collection_month: new Date().toISOString().slice(0, 7) });
       setSelectedEnrollment(null);
       setReceiptFiles([]);
       setEnrollSearch('');
@@ -136,9 +155,9 @@ export default function Payments() {
   }
 
   function handleEnrollmentChange(enrollmentId) {
-    setForm({ ...form, enrollment_id: enrollmentId, student_id: '' });
     const enrollment = enrollments.find((en) => en.id === parseInt(enrollmentId));
     setSelectedEnrollment(enrollment);
+    setForm({ ...form, enrollment_id: enrollmentId, student_id: enrollment?.student_id || '', collection_month: enrollment?.training_month || new Date().toISOString().slice(0, 7) });
     setEnrollSearch('');
   }
 
@@ -172,6 +191,10 @@ export default function Payments() {
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
+        </select>
+        <select className="input-field w-48" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}>
+          <option value="">All Months</option>
+          {monthOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </div>
 
@@ -299,6 +322,17 @@ export default function Payments() {
               <input className="input-field" value={form.transaction_id}
                 onChange={(e) => setForm({ ...form, transaction_id: e.target.value })}
                 placeholder="e.g. UTR/ref number" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Month</label>
+              <input type="month" className="input-field" value={form.collection_month}
+                onChange={(e) => setForm({ ...form, collection_month: e.target.value })} />
+              <p className="text-xs text-gray-400 mt-1">
+                {selectedEnrollment?.training_month ? `Defaults to training month (${selectedEnrollment.training_month})` : 'Defaults to training month of selected enrollment'}
+              </p>
             </div>
           </div>
 

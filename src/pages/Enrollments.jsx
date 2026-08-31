@@ -37,6 +37,16 @@ export default function Enrollments() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+  const [monthOptions, setMonthOptions] = useState(() => {
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+    }
+    return months;
+  });
   const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
@@ -80,12 +90,15 @@ export default function Enrollments() {
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
   const canDelete = user?.role === 'admin' || user?.role === 'manager';
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [filterStatus, filterMonth]);
 
   async function load() {
     try {
+      const params = {};
+      if (filterStatus) params.status = filterStatus;
+      if (filterMonth) params.month = filterMonth;
       const [enrollData, accounts] = await Promise.all([
-        api.enrollments.list(filterStatus ? { status: filterStatus } : {}),
+        api.enrollments.list(params),
         api.bankAccounts.list(),
       ]);
       setEnrollments(enrollData);
@@ -241,7 +254,11 @@ export default function Enrollments() {
 
   function openPay(enrollment) {
     setPaying(enrollment);
-    setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
+    setPayForm({
+      amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '',
+      payment_date: new Date().toISOString().slice(0, 10),
+      collection_month: enrollment.training_month || new Date().toISOString().slice(0, 7),
+    });
     setPayReceiptFiles([]);
     setPayErrors({});
   }
@@ -267,6 +284,7 @@ export default function Enrollments() {
         payment_date: payForm.payment_date || null,
         bank_account_id: parseInt(payForm.bank_account_id) || null,
         transaction_id: payForm.transaction_id,
+        collection_month: payForm.collection_month,
       });
       if (payReceiptFiles.length && payment.id) {
         const compressed = [];
@@ -275,7 +293,7 @@ export default function Enrollments() {
       }
       toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
       setPaying(null);
-      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10) });
+      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10), collection_month: '' });
       setPayReceiptFiles([]);
       load();
     } catch (e) { toast.error(e.message); }
@@ -530,6 +548,10 @@ export default function Enrollments() {
           <option value="active">Payment Pending</option>
           <option value="waiting_approval">Approval Pending</option>
           <option value="completed">Completed</option>
+        </select>
+        <select className="input-field w-48" value={filterMonth} onChange={(e) => { setFilterMonth(e.target.value); }}>
+          <option value="">All Months</option>
+          {monthOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </div>
 
@@ -942,7 +964,7 @@ export default function Enrollments() {
       </Modal>
 
       {/* Record Payment Modal */}
-      <Modal open={!!paying} onClose={() => { setPaying(null); setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '' }); setPayReceiptFile(null); }}
+      <Modal open={!!paying} onClose={() => { setPaying(null); setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', collection_month: '' }); setPayReceiptFile(null); }}
         title="Record Payment" size="md">
         {paying && (
           <form onSubmit={handlePaySubmit} className="space-y-4">
@@ -967,6 +989,12 @@ export default function Enrollments() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Month</label>
+                <input type="month" className="input-field" value={payForm.collection_month}
+                  onChange={(e) => setPayForm({ ...payForm, collection_month: e.target.value })} />
+                <p className="text-xs text-gray-400 mt-1">Defaults to the training month ({paying.training_month}). Use for collections on Aug batches received in Sep.</p>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received Date</label>
                 <input type="date" className="input-field" value={payForm.payment_date}
                   onChange={(e) => setPayForm({ ...payForm, payment_date: e.target.value })} />
@@ -978,13 +1006,6 @@ export default function Enrollments() {
                   onChange={(e) => { setPayForm({ ...payForm, amount_paid: e.target.value }); setPayErrors({}); }}
                   placeholder={`Max ₹${Number(paying.pending_amount).toLocaleString()}`} min="1" />
                 {payErrors.amount && <p className="text-xs text-red-500 mt-1">{payErrors.amount}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode</label>
-                <select className="input-field" value={payForm.payment_mode}
-                  onChange={(e) => setPayForm({ ...payForm, payment_mode: e.target.value })} disabled={payIsCash}>
-                  {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
               </div>
             </div>
 

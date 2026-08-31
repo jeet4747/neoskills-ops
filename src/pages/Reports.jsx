@@ -18,13 +18,23 @@ export default function Reports() {
   const [salespeople, setSalespeople] = useState([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthOptions, setMonthOptions] = useState(() => {
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+    }
+    return months;
+  });
 
   useEffect(() => {
     Promise.all([
-      api.reports.salesperson(),
-      api.reports.bankWise(),
-      api.reports.pendingPayments(),
-      api.reports.category(),
+      api.reports.salesperson({ month: selectedMonth }),
+      api.reports.bankWise({ month: selectedMonth }),
+      api.reports.pendingPayments({ month: selectedMonth }),
+      api.reports.category({ month: selectedMonth }),
       api.users.list(),
     ])
       .then(([s, b, p, c, u]) => {
@@ -36,18 +46,18 @@ export default function Reports() {
       })
       .catch(() => toast.error('Failed to load reports'))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, selectedMonth]);
 
   useEffect(() => {
     if (activeTab !== 'category') return;
     let cancelled = false;
     setLoading(true);
-    api.reports.category(filters)
+    api.reports.category({ ...filters, month: selectedMonth })
       .then((c) => { if (!cancelled) setCategoryData(c); })
       .catch(() => { if (!cancelled) toast.error('Failed to load category analytics'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [activeTab, filters, toast]);
+  }, [activeTab, filters, toast, selectedMonth]);
 
   const tabs = [
     { key: 'category', label: 'Category Analytics' },
@@ -117,9 +127,14 @@ export default function Reports() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Export insights and track performance</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Export insights and track performance</p>
+        </div>
+        <select className="input-field w-52" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+          {monthOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
       </div>
 
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full overflow-x-auto">
