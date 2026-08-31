@@ -77,6 +77,7 @@ export default function TrainingCalendar() {
   const [allEnrollments, setAllEnrollments] = useState([]);
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const load = useCallback(async () => {
     try {
@@ -89,12 +90,14 @@ export default function TrainingCalendar() {
 
   useEffect(() => { load(); }, [load]);
 
-  const sortedSessions = [...sessions].sort((a, b) => {
-    const dA = a.session_date || '';
-    const dB = b.session_date || '';
-    if (dA !== dB) return dA.localeCompare(dB);
-    return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
-  });
+  const sortedSessions = [...sessions]
+    .filter((s) => statusFilter === 'all' || s.status === statusFilter)
+    .sort((a, b) => {
+      const dA = a.session_date || '';
+      const dB = b.session_date || '';
+      if (dA !== dB) return dA.localeCompare(dB);
+      return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
+    });
 
   const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalReceived = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0), 0);
@@ -182,9 +185,21 @@ export default function TrainingCalendar() {
           <h1 className="text-2xl font-bold text-gray-900">Training Calendar</h1>
           <p className="text-sm text-gray-500 mt-0.5">Plan sessions, manage batches, track candidates</p>
         </div>
-        <button onClick={openCreate} className="btn-primary flex items-center gap-2 shadow-sm">
-          <Plus size={16} /> New Session
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="appearance-none bg-white border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-200 cursor-pointer">
+              <option value="all">All Status</option>
+              {STATUSES.map((st) => (
+                <option key={st.value} value={st.value}>{st.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+          <button onClick={openCreate} className="btn-primary flex items-center gap-2 shadow-sm">
+            <Plus size={16} /> New Session
+          </button>
+        </div>
       </div>
 
       {/* Month Nav + Stats */}
@@ -234,13 +249,15 @@ export default function TrainingCalendar() {
         <div className="space-y-3">
           {[1,2,3,4].map((i) => <div key={i} className="h-14 skeleton w-full rounded-xl" />)}
         </div>
-      ) : sessions.length === 0 ? (
+      ) : sortedSessions.length === 0 ? (
         <Card>
           <CardBody className="py-16 text-center">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Calendar size={24} className="text-gray-300" />
             </div>
-            <p className="text-gray-500 text-sm mb-1">No sessions planned for {getMonthLabel(month)}</p>
+            <p className="text-gray-500 text-sm mb-1">
+              {statusFilter === 'all' ? `No sessions planned for ${getMonthLabel(month)}` : `No ${STATUSES.find((x) => x.value === statusFilter)?.label} sessions in ${getMonthLabel(month)}`}
+            </p>
             <p className="text-gray-400 text-xs mb-4">Create a session to start tracking</p>
             <button onClick={openCreate} className="btn-primary text-sm">Create Session</button>
           </CardBody>
