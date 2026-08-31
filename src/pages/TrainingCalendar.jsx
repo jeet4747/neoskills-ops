@@ -93,6 +93,9 @@ export default function TrainingCalendar() {
   const sortedSessions = [...sessions]
     .filter((s) => statusFilter === 'all' || s.status === statusFilter)
     .sort((a, b) => {
+      const aActive = a.status === 'in_future' || a.status === 'batch_started';
+      const bActive = b.status === 'in_future' || b.status === 'batch_started';
+      if (aActive !== bActive) return aActive ? -1 : 1;
       const dA = a.session_date || '';
       const dB = b.session_date || '';
       if (dA !== dB) return dA.localeCompare(dB);
