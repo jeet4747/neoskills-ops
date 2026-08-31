@@ -272,9 +272,9 @@ app.get('/api/team/analytics', auth(['admin', 'manager', 'ops']), async (req, re
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved'
           AND p.collection_month = $1) as month_collected,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
-          AND e.training_month = $1) as month_enrollments,
+          AND to_char(e.created_at, 'YYYY-MM') = $1) as month_enrollments,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id
-          AND e.training_month = $1
+          AND to_char(e.created_at, 'YYYY-MM') = $1
           AND e.status = 'completed') as month_completed
       FROM users u
       WHERE (u.role = 'sales' OR u.role = 'manager' OR u.can_sell = true)
@@ -352,7 +352,7 @@ app.get('/api/users/:id/analytics', auth(), async (req, res) => {
           ), 0), 0)
         ), 0) as pending_amount
       FROM enrollments e
-      WHERE e.sales_user_id = $1 AND e.training_month = $2
+      WHERE e.sales_user_id = $1 AND to_char(e.created_at, 'YYYY-MM') = $2
       GROUP BY e.category
       ORDER BY enrollments DESC
     `, [userId, month]);
@@ -361,7 +361,7 @@ app.get('/api/users/:id/analytics', auth(), async (req, res) => {
       SELECT e.source, COUNT(*) as enrollments,
              COALESCE(SUM(e.total_amount), 0) as total_amount
       FROM enrollments e
-      WHERE e.sales_user_id = $1 AND e.training_month = $2 AND e.source IS NOT NULL AND e.source <> ''
+      WHERE e.sales_user_id = $1 AND to_char(e.created_at, 'YYYY-MM') = $2 AND e.source IS NOT NULL AND e.source <> ''
       GROUP BY e.source
       ORDER BY enrollments DESC
     `, [userId, month]);
@@ -392,8 +392,8 @@ app.get('/api/users/:id/analytics', auth(), async (req, res) => {
 
     const summary = await query(`
       SELECT
-        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = $1 AND e.training_month = $2) as month_enrollments,
-        (SELECT COALESCE(SUM(e.total_amount), 0) FROM enrollments e WHERE e.sales_user_id = $1 AND e.training_month = $2) as month_business,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = $1 AND to_char(e.created_at, 'YYYY-MM') = $2) as month_enrollments,
+        (SELECT COALESCE(SUM(e.total_amount), 0) FROM enrollments e WHERE e.sales_user_id = $1 AND to_char(e.created_at, 'YYYY-MM') = $2) as month_business,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = $1 AND p.status = 'approved' AND p.collection_month = $2) as month_collected,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = $1 AND p.status = 'pending_approval' AND p.collection_month = $2) as month_pending_approvals
     `, [userId, month]);
@@ -596,7 +596,7 @@ app.get('/api/enrollments', auth(), async (req, res) => {
     }
 
     if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
-      conditions.push(`e.training_month = $${params.length + 1}`);
+      conditions.push(`to_char(e.created_at, 'YYYY-MM') = $${params.length + 1}`);
       params.push(req.query.month);
     }
 
@@ -2391,7 +2391,7 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
     const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     params.push(month);
     const collectionFilter = ` AND p.collection_month = $${params.length} `;
-    const trainingFilter = ` AND e.training_month = $${params.length} `;
+    const createdFilter = ` AND to_char(e.created_at, 'YYYY-MM') = $${params.length} `;
 
     const kpi = await query(`
       SELECT
@@ -2402,10 +2402,10 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
-         FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as total_pending,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter} ${trainingFilter}) as active_enrollments,
-        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as total_enrollments,
-        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${trainingFilter}) as month_total_enrollments,
+         FROM enrollments e WHERE 1=1 ${enrollFilter} ${createdFilter}) as total_pending,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.status IN ('active', 'waiting_approval') ${enrollFilter} ${createdFilter}) as active_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${createdFilter}) as total_enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE 1=1 ${enrollFilter} ${createdFilter}) as month_total_enrollments,
         (SELECT COUNT(*) FROM payments p WHERE p.status = 'pending_approval' ${userFilter} ${collectionFilter}) as pending_approvals
     `, params);
 
@@ -2419,7 +2419,7 @@ app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, re
   try {
     const { month } = req.query;
     const m = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
-    const monthE = `AND e.training_month = $1`;
+    const monthE = `AND to_char(e.created_at, 'YYYY-MM') = $1`;
     const monthP = `AND p.collection_month = $1`;
     const params = [m];
     const result = await query(`
@@ -2610,7 +2610,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
       SELECT
         u.id,
         u.name as salesperson,
-        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.training_month = $1) as enrollments,
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND to_char(e.created_at, 'YYYY-MM') = $1) as enrollments,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved' AND p.collection_month = $1) as collected,
         (SELECT COALESCE(SUM(
            GREATEST(e.total_amount - COALESCE((
@@ -2618,7 +2618,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
            ), 0), 0)
          ), 0)
-         FROM enrollments e WHERE e.sales_user_id = u.id AND e.training_month = $1) as pending_collection,
+         FROM enrollments e WHERE e.sales_user_id = u.id AND to_char(e.created_at, 'YYYY-MM') = $1) as pending_collection,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval' AND p.collection_month = $1) as pending_approvals
       FROM users u
       WHERE (u.role = 'sales' OR u.can_sell = true OR u.role = 'admin') AND u.status = 'active'
@@ -2661,7 +2661,7 @@ app.get('/api/reports/pending-payments', auth(['admin', 'manager', 'ops']), asyn
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id
-      WHERE e.training_month = $1
+      WHERE to_char(e.created_at, 'YYYY-MM') = $1
         AND GREATEST(e.total_amount - COALESCE((
                 SELECT SUM(p2.amount_paid) FROM payments p2
                 WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
@@ -2682,7 +2682,7 @@ app.get('/api/reports/category', auth(['admin', 'manager', 'ops']), async (req, 
     const params = [];
 
     if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
-      conditions.push(`e.training_month = $${params.length + 1}`);
+      conditions.push(`to_char(e.created_at, 'YYYY-MM') = $${params.length + 1}`);
       params.push(req.query.month);
     }
 
