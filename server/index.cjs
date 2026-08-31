@@ -3002,6 +3002,7 @@ async function init() {
       await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
       await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
+      await query(`UPDATE enrollments SET training_month = to_char(created_at, 'YYYY-MM') WHERE training_month IS NULL OR training_month = ''`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
