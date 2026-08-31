@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, Download, ExternalLink } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
@@ -10,6 +11,7 @@ const EMPTY_FILTERS = { category: '', status: '', from: '', to: '', sales_user_i
 
 export default function Reports() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('category');
   const [salesperson, setSalesperson] = useState([]);
   const [bankWise, setBankWise] = useState([]);
@@ -75,7 +77,12 @@ export default function Reports() {
   ];
 
   const salespersonCols = [
-    { key: 'salesperson', label: 'Salesperson' },
+    { key: 'salesperson', label: 'Salesperson', render: (r) => (
+      <span className="text-primary-600 font-medium hover:underline inline-flex items-center gap-1.5">
+        {r.salesperson}
+        <ExternalLink size={13} className="text-gray-400" />
+      </span>
+    )},
     { key: 'enrollments', label: 'Enrollments' },
     { key: 'collected', label: 'Collected', render: (r) => `₹${Number(r.collected).toLocaleString()}` },
     { key: 'pending_collection', label: 'Pending', render: (r) => <span className="text-amber-600 font-medium">{`₹${Number(r.pending_collection).toLocaleString()}`}</span> },
@@ -210,7 +217,9 @@ export default function Reports() {
                     <span className="text-gray-500">Pending: <b className="text-amber-600">{`₹${Number(categoryData.totals.pending).toLocaleString()}`}</b></span>
                   </div>
                 )}
-                <Table columns={currentCols} data={currentData} />
+                <Table columns={currentCols} data={currentData}
+                  onRowClick={activeTab === 'salesperson' ? (r) => navigate(`/salesperson/${r.id}`) : undefined}
+                />
               </>
             ) : (
               <div className="text-center py-12">

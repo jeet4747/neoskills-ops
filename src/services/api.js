@@ -167,6 +167,10 @@ export const api = {
     list: () => request('/users'),
     listSimple: () => request('/users/list'),
     getProfile: (id) => request(`/users/${id}/profile`),
+    analytics: (id, params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/users/${id}/analytics${q ? `?${q}` : ''}`);
+    },
     create: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     teamAnalytics: (params = {}) => {

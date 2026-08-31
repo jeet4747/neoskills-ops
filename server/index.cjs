@@ -332,6 +332,86 @@ app.get('/api/users/:id/profile', auth(), async (req, res) => {
   }
 });
 
+app.get('/api/users/:id/analytics', auth(), async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
+
+    const userResult = await query('SELECT id, name, email, role FROM users WHERE id = $1', [userId]);
+    if (!userResult.rows.length) return res.status(404).json({ error: 'User not found' });
+
+    const byCategory = await query(`
+      SELECT
+        e.category,
+        COUNT(*) as enrollments,
+        COALESCE(SUM(e.total_amount), 0) as total_amount,
+        COALESCE(SUM(
+          GREATEST(e.total_amount - COALESCE((
+            SELECT SUM(p2.amount_paid) FROM payments p2
+            WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
+          ), 0), 0)
+        ), 0) as pending_amount
+      FROM enrollments e
+      WHERE e.sales_user_id = $1 AND e.training_month = $2
+      GROUP BY e.category
+      ORDER BY enrollments DESC
+    `, [userId, month]);
+
+    const bySource = await query(`
+      SELECT e.source, COUNT(*) as enrollments,
+             COALESCE(SUM(e.total_amount), 0) as total_amount
+      FROM enrollments e
+      WHERE e.sales_user_id = $1 AND e.training_month = $2 AND e.source IS NOT NULL AND e.source <> ''
+      GROUP BY e.source
+      ORDER BY enrollments DESC
+    `, [userId, month]);
+
+    const collectedByCategory = await query(`
+      SELECT
+        e.category,
+        COUNT(p.id) as payments,
+        COALESCE(SUM(p.amount_paid), 0) as collected
+      FROM payments p
+      JOIN enrollments e ON p.enrollment_id = e.id
+      WHERE p.sales_user_id = $1 AND p.status = 'approved' AND p.collection_month = $2
+      GROUP BY e.category
+      ORDER BY collected DESC
+    `, [userId, month]);
+
+    const monthly = await query(`
+      SELECT
+        to_char(e.created_at, 'YYYY-MM') as month,
+        COUNT(*) as enrollments,
+        COALESCE(SUM(e.total_amount), 0) as total_amount
+      FROM enrollments e
+      WHERE e.sales_user_id = $1
+      GROUP BY to_char(e.created_at, 'YYYY-MM')
+      ORDER BY month DESC
+      LIMIT 12
+    `, [userId]);
+
+    const summary = await query(`
+      SELECT
+        (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = $1 AND e.training_month = $2) as month_enrollments,
+        (SELECT COALESCE(SUM(e.total_amount), 0) FROM enrollments e WHERE e.sales_user_id = $1 AND e.training_month = $2) as month_business,
+        (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = $1 AND p.status = 'approved' AND p.collection_month = $2) as month_collected,
+        (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = $1 AND p.status = 'pending_approval' AND p.collection_month = $2) as month_pending_approvals
+    `, [userId, month]);
+
+    res.json({
+      user: userResult.rows[0],
+      month,
+      byCategory: byCategory.rows,
+      bySource: bySource.rows,
+      collectedByCategory: collectedByCategory.rows,
+      monthly: monthly.rows,
+      ...summary.rows[0],
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/students', auth(), async (req, res) => {
   try {
     const { search } = req.query;
@@ -2528,6 +2608,7 @@ app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (re
     const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     const result = await query(`
       SELECT
+        u.id,
         u.name as salesperson,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id AND e.training_month = $1) as enrollments,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved' AND p.collection_month = $1) as collected,
