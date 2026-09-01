@@ -432,7 +432,7 @@ export default function Batches() {
                           <div className={`h-1.5 rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-primary-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
                         </div>
                       </div>
-                      {canManage && <button onClick={() => handleRemoveMember(m)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><X size={14} /></button>}
+                      <button onClick={() => handleRemoveMember(m)} title="Remove candidate" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><X size={14} /></button>
                     </div>
                   );
                 })}

@@ -1409,15 +1409,8 @@ app.post('/api/batches/:id/members', auth(['admin', 'manager', 'ops', 'sales']),
   }
 });
 
-app.delete('/api/batches/:id/members/:enrollmentId', auth(['admin', 'manager', 'ops', 'sales']), async (req, res) => {
+app.delete('/api/batches/:id/members/:enrollmentId', auth(), async (req, res) => {
   try {
-    if (req.user.role === 'sales') {
-      const ownership = await query(
-        'SELECT id FROM enrollments WHERE id = $1 AND sales_user_id = $2',
-        [req.params.enrollmentId, req.user.id]
-      );
-      if (!ownership.rows.length) return res.status(403).json({ error: 'You can only remove your own enrollments' });
-    }
     const result = await query(
       'DELETE FROM batch_members WHERE batch_id = $1 AND enrollment_id = $2 RETURNING id',
       [req.params.id, req.params.enrollmentId]
