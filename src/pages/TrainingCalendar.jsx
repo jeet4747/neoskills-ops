@@ -179,6 +179,14 @@ export default function TrainingCalendar() {
       load();
     } catch (e) { toast.error(e.message); }
   }
+  async function handleRemoveCandidate(session, ce) {
+    if (!window.confirm(`Remove ${ce.student_name || ce.enrollment_name} from this session?`)) return;
+    try {
+      await api.calendar.removeEnrollment(session.id, ce.enrollment_id);
+      toast.success('Candidate removed');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
   const filteredEnrollments = allEnrollments.filter((e) => {
     const addedIds = sessionEnrollments.map((se) => se.enrollment_id);
     if (addedIds.includes(e.id)) return false;
@@ -369,6 +377,10 @@ export default function TrainingCalendar() {
                               {ce.pending_amount > 0 && (
                                 <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
                               )}
+                              <button onClick={() => handleRemoveCandidate(s, ce)} title="Remove candidate"
+                                className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <X size={14} />
+                              </button>
                             </div>
                           </div>
                         ))}
