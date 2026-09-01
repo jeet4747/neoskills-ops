@@ -1705,7 +1705,7 @@ app.post('/api/payments', auth(), async (req, res) => {
     if (!enrollment_id || !amount_paid)
       return res.status(400).json({ error: 'enrollment_id and amount_paid required' });
 
-    const enroll = await query('SELECT total_amount, training_month FROM enrollments WHERE id = $1', [enrollment_id]);
+    const enroll = await query('SELECT total_amount, training_month, created_at FROM enrollments WHERE id = $1', [enrollment_id]);
     if (!enroll.rows.length) return res.status(404).json({ error: 'Enrollment not found' });
 
     const total = parseFloat(enroll.rows[0].total_amount);
@@ -1722,10 +1722,11 @@ app.post('/api/payments', auth(), async (req, res) => {
     }
     const pending = Math.max(0, total - (paidSoFar + paid));
 
+    const recordedMonth = (enroll.rows[0].created_at ? new Date(enroll.rows[0].created_at).toISOString().slice(0, 7) : '');
     const cm = /^\d{4}-\d{2}$/.test(collection_month || '')
       ? collection_month
-      : /^\d{4}-\d{2}$/.test(enroll.rows[0].training_month || '')
-        ? enroll.rows[0].training_month
+      : /^\d{4}-\d{2}$/.test(recordedMonth)
+        ? recordedMonth
         : new Date().toISOString().slice(0, 7);
 
     const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';

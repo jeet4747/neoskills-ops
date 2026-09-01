@@ -257,7 +257,7 @@ export default function Enrollments() {
     setPayForm({
       amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '',
       payment_date: new Date().toISOString().slice(0, 10),
-      collection_month: enrollment.training_month || new Date().toISOString().slice(0, 7),
+      collection_month: (enrollment.created_at ? new Date(enrollment.created_at).toISOString().slice(0, 7) : '') || new Date().toISOString().slice(0, 7),
     });
     setPayReceiptFiles([]);
     setPayErrors({});
@@ -992,7 +992,7 @@ export default function Enrollments() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Month</label>
                 <input type="month" className="input-field" value={payForm.collection_month}
                   onChange={(e) => setPayForm({ ...payForm, collection_month: e.target.value })} />
-                <p className="text-xs text-gray-400 mt-1">Defaults to the training month ({paying.training_month}). Use for collections on Aug batches received in Sep.</p>
+                <p className="text-xs text-gray-400 mt-1">Defaults to the recorded month ({paying.created_at ? new Date(paying.created_at).toISOString().slice(0, 7) : 'this month'}). This is the month the collection counts towards.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received Date</label>

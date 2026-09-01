@@ -157,7 +157,7 @@ export default function Payments() {
   function handleEnrollmentChange(enrollmentId) {
     const enrollment = enrollments.find((en) => en.id === parseInt(enrollmentId));
     setSelectedEnrollment(enrollment);
-    setForm({ ...form, enrollment_id: enrollmentId, student_id: enrollment?.student_id || '', collection_month: enrollment?.training_month || new Date().toISOString().slice(0, 7) });
+    setForm({ ...form, enrollment_id: enrollmentId, student_id: enrollment?.student_id || '', collection_month: (enrollment?.created_at ? new Date(enrollment.created_at).toISOString().slice(0, 7) : '') || new Date().toISOString().slice(0, 7) });
     setEnrollSearch('');
   }
 
@@ -331,7 +331,7 @@ export default function Payments() {
               <input type="month" className="input-field" value={form.collection_month}
                 onChange={(e) => setForm({ ...form, collection_month: e.target.value })} />
               <p className="text-xs text-gray-400 mt-1">
-                {selectedEnrollment?.training_month ? `Defaults to training month (${selectedEnrollment.training_month})` : 'Defaults to training month of selected enrollment'}
+                {selectedEnrollment?.created_at ? `Defaults to recorded month (${new Date(selectedEnrollment.created_at).toISOString().slice(0, 7)})` : 'Defaults to the recorded month of the selected enrollment'}
               </p>
             </div>
           </div>
