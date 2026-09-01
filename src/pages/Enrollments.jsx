@@ -37,7 +37,7 @@ export default function Enrollments() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterMonth, setFilterMonth] = useState('');
+  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [monthOptions, setMonthOptions] = useState(() => {
     const months = [];
     for (let i = 0; i < 12; i++) {
