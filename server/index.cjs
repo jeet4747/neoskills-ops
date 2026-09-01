@@ -1521,7 +1521,6 @@ app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
          FROM enrollments e
          LEFT JOIN students s ON s.id = e.student_id
          LEFT JOIN users u ON u.id = e.sales_user_id
-         WHERE e.status = 'active'
          ORDER BY e.course_name`
       );
     } else {
@@ -1531,7 +1530,7 @@ app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
          FROM enrollments e
          LEFT JOIN students s ON s.id = e.student_id
          LEFT JOIN users u ON u.id = e.sales_user_id
-         WHERE e.status = 'active' AND e.sales_user_id = $1
+         WHERE e.sales_user_id = $1
          ORDER BY e.course_name`,
         [req.user.id]
       );
