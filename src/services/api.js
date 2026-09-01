@@ -51,7 +51,10 @@ export const api = {
     },
     trends: () => request('/dashboard/trends'),
     sourceAnalytics: () => request('/dashboard/source-analytics'),
-    pendingCollections: () => request('/dashboard/pending-collections'),
+    pendingCollections: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/dashboard/pending-collections${q ? `?${q}` : ''}`);
+    },
     hrOverview: () => request('/dashboard/hr-overview'),
   },
   targets: {

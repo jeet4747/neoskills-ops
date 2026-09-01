@@ -151,7 +151,7 @@ export default function Dashboard() {
   async function openPendingCollections() {
     setShowPending(true);
     setPendingLoading(true);
-    try { setPendingList(await api.dashboard.pendingCollections()); }
+    try { setPendingList(await api.dashboard.pendingCollections({ month: selectedMonth })); }
     catch (e) { setPendingList([]); }
     finally { setPendingLoading(false); }
   }
@@ -438,7 +438,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <Modal open={showPending} onClose={() => setShowPending(false)} title="Pending Collections" size="xl">
+      <Modal open={showPending} onClose={() => setShowPending(false)} title={`Pending Collections · ${currentMonthLabel}`} size="xl">
         {pendingLoading ? (
           <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-14 skeleton w-full" />)}</div>
         ) : pendingList.length === 0 ? (

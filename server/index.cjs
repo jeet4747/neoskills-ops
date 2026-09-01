@@ -2490,6 +2490,7 @@ app.get('/api/dashboard/source-analytics', auth(['admin', 'manager', 'ops']), as
 app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
   try {
     const role = req.user.role;
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
     let salesFilter = '';
     let params = [];
     if (role === 'sales') {
@@ -2498,6 +2499,8 @@ app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
     } else if (role === 'ops') {
       salesFilter = `AND e.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')`;
     }
+    params.push(month);
+    const monthFilter = ` AND to_char(e.created_at, 'YYYY-MM') = $${params.length} `;
     const result = await query(`
       SELECT e.id as enrollment_id, s.name as student_name, s.phone as student_phone,
              s.email as student_email, s.city as student_city, e.course_name, e.batch_name,
@@ -2513,7 +2516,7 @@ app.get('/api/dashboard/pending-collections', auth(), async (req, res) => {
       FROM enrollments e
       JOIN students s ON e.student_id = s.id
       JOIN users u ON e.sales_user_id = u.id
-      WHERE 1=1 ${salesFilter}
+      WHERE 1=1 ${salesFilter} ${monthFilter}
         AND GREATEST(e.total_amount - COALESCE((
              SELECT SUM(p2.amount_paid) FROM payments p2
              WHERE p2.enrollment_id = e.id AND p2.status = 'approved'
