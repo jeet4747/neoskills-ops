@@ -259,4 +259,9 @@ export const api = {
     addEnrollment: (sessionId, enrollmentId) => request(`/training-calendar/${sessionId}/enrollments`, { method: 'POST', body: JSON.stringify({ enrollment_id: enrollmentId }) }),
     removeEnrollment: (sessionId, enrollmentId) => request(`/training-calendar/${sessionId}/enrollments/${enrollmentId}`, { method: 'DELETE' }),
   },
+  attendance: {
+    status: (date) => request(`/attendance/status${date ? `?date=${date}` : ''}`),
+    punchIn: () => request('/attendance/punch-in', { method: 'POST' }),
+    punchOut: () => request('/attendance/punch-out', { method: 'POST' }),
+  },
 };

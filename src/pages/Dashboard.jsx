@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText } from 'lucide-react';
+import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText, LogIn, LogOut } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -67,6 +67,10 @@ export default function Dashboard() {
   const [targetInput, setTargetInput] = useState('');
 
   const [hrData, setHrData] = useState(null);
+  const [punch, setPunch] = useState(null);
+  const [punchBusy, setPunchBusy] = useState(false);
+
+  const canPunch = user?.id !== 13;
 
   useEffect(() => {
     setSelectedMonth(new Date().toISOString().slice(0, 7));
@@ -156,6 +160,40 @@ export default function Dashboard() {
     finally { setPendingLoading(false); }
   }
 
+  function fmtPunchTime(t) {
+    if (!t) return '';
+    const dt = new Date(t);
+    let h = dt.getHours();
+    const m = dt.getMinutes().toString().padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ap}`;
+  }
+
+  useEffect(() => {
+    if (!canPunch) return;
+    let active = true;
+    api.attendance.status()
+      .then((s) => { if (active) setPunch(s); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [canPunch]);
+
+  async function handlePunch() {
+    if (!canPunch) return;
+    setPunchBusy(true);
+    try {
+      if (punch && punch.punch_in && !punch.punch_out) {
+        const s = await api.attendance.punchOut();
+        setPunch(s);
+      } else {
+        const s = await api.attendance.punchIn();
+        setPunch(s);
+      }
+    } catch (e) { alert(e.message); }
+    finally { setPunchBusy(false); }
+  }
+
   const SkeletonCard = () => <div className="h-28 skeleton w-full" />;
 
   if (loading) {
@@ -189,6 +227,21 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {canPunch && (
+            punch && punch.punch_in && !punch.punch_out ? (
+              <button onClick={handlePunch} disabled={punchBusy}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
+              </button>
+            ) : (
+              <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                {punch && punch.punch_in && punch.punch_out
+                  ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
+                  : <><LogIn size={16} /> Punch In</>}
+              </button>
+            )
+          )}
           <div className="relative">
             <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <select className="input-field pl-8 text-sm w-44" value={selectedMonth}

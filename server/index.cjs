@@ -2574,6 +2574,60 @@ app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
   }
 });
 
+const ATTENDANCE_EXCLUDED_IDS = [13];
+
+app.get('/api/attendance/status', auth(), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const d = date || new Date().toISOString().slice(0, 10);
+    const result = await query(
+      'SELECT id, punch_in, punch_out FROM attendance WHERE user_id = $1 AND date = $2',
+      [req.user.id, d]
+    );
+    res.json(result.rows[0] || null);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/attendance/punch-in', auth(), async (req, res) => {
+  try {
+    if (ATTENDANCE_EXCLUDED_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Punch in not available' });
+    const d = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const result = await query(
+      `INSERT INTO attendance (user_id, date, punch_in)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, date) DO UPDATE SET punch_in = COALESCE(attendance.punch_in, $3)
+       RETURNING id, punch_in, punch_out`,
+      [req.user.id, d, now]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/attendance/punch-out', auth(), async (req, res) => {
+  try {
+    if (ATTENDANCE_EXCLUDED_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Punch out not available' });
+    const d = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const result = await query(
+      `INSERT INTO attendance (user_id, date, punch_out)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, date) DO UPDATE SET punch_out = $3
+       RETURNING id, punch_in, punch_out`,
+      [req.user.id, d, now]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/dashboard/hr-overview', auth(), async (req, res) => {
   try {
     const isHR = req.user.role === 'hr';
@@ -3049,6 +3103,15 @@ async function init() {
         user_id INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (session_id, enrollment_id)
+      );
+      CREATE TABLE IF NOT EXISTS attendance (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        date DATE NOT NULL,
+        punch_in TIMESTAMPTZ,
+        punch_out TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (user_id, date)
       );
     `);
     console.log('Database tables created');
