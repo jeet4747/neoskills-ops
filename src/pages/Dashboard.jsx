@@ -263,7 +263,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {isManager && targets.length > 0 && (
+      {targets.length > 0 && (
         <Card>
           <CardHeader>
             <h3 className="font-semibold text-gray-900">Team Targets — {currentMonthLabel}</h3>

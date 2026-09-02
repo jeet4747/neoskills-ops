@@ -2531,13 +2531,9 @@ app.get('/api/targets', auth(), async (req, res) => {
                FROM sales_targets t JOIN users u ON u.id = t.user_id
                WHERE t.month = $1 AND t.year = $2`;
     const params = [m, y];
-    const isSeller = req.user.role === 'sales' || (req.user.role === 'hr' && req.user.can_sell);
     if (user_id) {
       sql += ' AND t.user_id = $3';
       params.push(user_id);
-    } else if (isSeller) {
-      sql += ' AND t.user_id = $3';
-      params.push(req.user.id);
     }
     sql += ' ORDER BY u.name';
     const result = await query(sql, params);
