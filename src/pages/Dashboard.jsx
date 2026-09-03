@@ -759,6 +759,57 @@ function HRDashboard({ hrData, user }) {
   const taskMap = {};
   tasks.forEach((t) => { taskMap[t.status] = parseInt(t.count); });
 
+  const canPunch = user?.id !== 13;
+  const [punch, setPunch] = useState(null);
+  const [punchBusy, setPunchBusy] = useState(false);
+  const [showPunchOut, setShowPunchOut] = useState(false);
+  const [callsInput, setCallsInput] = useState('');
+  const [nomsInput, setNomsInput] = useState('');
+  const [punchOutBusy, setPunchOutBusy] = useState(false);
+
+  function fmtPunchTime(t) {
+    if (!t) return '';
+    const dt = new Date(t);
+    let h = dt.getHours();
+    const m = dt.getMinutes().toString().padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ap}`;
+  }
+
+  useEffect(() => {
+    if (!canPunch) return;
+    let active = true;
+    api.attendance.status()
+      .then((s) => { if (active) setPunch(s); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [canPunch]);
+
+  async function handlePunch() {
+    if (!canPunch) return;
+    if (punch && punch.punch_in && !punch.punch_out) { setShowPunchOut(true); return; }
+    setPunchBusy(true);
+    try {
+      const s = await api.attendance.punchIn();
+      setPunch(s);
+    } catch (e) { alert(e.message); }
+    finally { setPunchBusy(false); }
+  }
+
+  async function submitPunchOut(ev) {
+    ev.preventDefault();
+    setPunchOutBusy(true);
+    try {
+      const s = await api.attendance.punchOut({ connected_calls: callsInput, nominations: nomsInput });
+      setPunch(s);
+      setShowPunchOut(false);
+      setCallsInput('');
+      setNomsInput('');
+    } catch (e) { alert(e.message); }
+    finally { setPunchOutBusy(false); }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -766,11 +817,28 @@ function HRDashboard({ hrData, user }) {
           <h1 className="text-2xl font-bold text-gray-900">HR Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">Welcome back, {user?.name}</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white text-sm font-bold">
-            {user?.name?.charAt(0).toUpperCase()}
+        <div className="flex items-center gap-2">
+          {canPunch && (
+            punch && punch.punch_in && !punch.punch_out ? (
+              <button onClick={handlePunch} disabled={punchBusy}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
+              </button>
+            ) : (
+              <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                {punch && punch.punch_in && punch.punch_out
+                  ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
+                  : <><LogIn size={16} /> Punch In</>}
+              </button>
+            )
+          )}
+          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white text-sm font-bold">
+              {user?.name?.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm font-medium text-gray-700">{user?.name}</span>
           </div>
-          <span className="text-sm font-medium text-gray-700">{user?.name}</span>
         </div>
       </div>
 
@@ -849,6 +917,27 @@ function HRDashboard({ hrData, user }) {
           </div>
         </CardBody>
       </Card>
+
+      <Modal open={showPunchOut} onClose={() => setShowPunchOut(false)} title="Punch Out" size="sm">
+        <form onSubmit={submitPunchOut} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Connected Calls</label>
+            <input type="number" min="0" required className="input-field" placeholder="Total calls connected today"
+              value={callsInput} onChange={(e) => setCallsInput(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Today's Nominations</label>
+            <input type="number" min="0" required className="input-field" placeholder="Total nominations today"
+              value={nomsInput} onChange={(e) => setNomsInput(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setShowPunchOut(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" disabled={punchOutBusy} className="btn-primary flex-1">
+              {punchOutBusy ? 'Punching out...' : 'Punch Out'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
