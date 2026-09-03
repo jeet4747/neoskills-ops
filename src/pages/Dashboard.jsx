@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText, LogIn, LogOut } from 'lucide-react';
+import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ import StatsCard, { GradientStatsCard } from '../components/ui/StatsCard';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+import PunchButton from '../components/Attendance/PunchButton';
 
 const COLORS = ['#003B7A', '#FFC300', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#84CC16'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -67,18 +68,11 @@ export default function Dashboard() {
   const [targetInput, setTargetInput] = useState('');
 
   const [hrData, setHrData] = useState(null);
-  const [punch, setPunch] = useState(null);
-  const [punchBusy, setPunchBusy] = useState(false);
-  const [showPunchOut, setShowPunchOut] = useState(false);
-  const [callsInput, setCallsInput] = useState('');
-  const [nomsInput, setNomsInput] = useState('');
-  const [punchOutBusy, setPunchOutBusy] = useState(false);
   const [workingToday, setWorkingToday] = useState([]);
   const [dailyReport, setDailyReport] = useState([]);
   const [reportFrom, setReportFrom] = useState(new Date().toISOString().slice(0, 10));
   const [reportTo, setReportTo] = useState(new Date().toISOString().slice(0, 10));
 
-  const canPunch = user?.id !== 13;
   const canReport = user?.id === 4 || user?.id === 13 || user?.id === 19 || user?.id === 12;
 
   useEffect(() => {
@@ -189,46 +183,11 @@ export default function Dashboard() {
     catch (e) { /* ignore */ }
   }
 
-  useEffect(() => {
-    if (!canPunch) return;
-    let active = true;
-    api.attendance.status()
-      .then((s) => { if (active) setPunch(s); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [canPunch]);
-
   useEffect(() => { loadWorkingToday(); }, []);
 
   useEffect(() => {
     if (canReport) loadDailyReport();
   }, [canReport, reportFrom, reportTo]);
-
-  async function handlePunch() {
-    if (!canPunch) return;
-    if (punch && punch.punch_in && !punch.punch_out) { setShowPunchOut(true); return; }
-    setPunchBusy(true);
-    try {
-      const s = await api.attendance.punchIn();
-      setPunch(s);
-      loadWorkingToday();
-    } catch (e) { alert(e.message); }
-    finally { setPunchBusy(false); }
-  }
-
-  async function submitPunchOut(ev) {
-    ev.preventDefault();
-    setPunchOutBusy(true);
-    try {
-      const s = await api.attendance.punchOut({ connected_calls: callsInput, nominations: nomsInput });
-      setPunch(s);
-      setShowPunchOut(false);
-      setCallsInput('');
-      setNomsInput('');
-      loadWorkingToday();
-    } catch (e) { alert(e.message); }
-    finally { setPunchOutBusy(false); }
-  }
 
   const SkeletonCard = () => <div className="h-28 skeleton w-full" />;
 
@@ -263,21 +222,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          {canPunch && (
-            punch && punch.punch_in && !punch.punch_out ? (
-              <button onClick={handlePunch} disabled={punchBusy}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
-                <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
-              </button>
-            ) : (
-              <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
-                {punch && punch.punch_in && punch.punch_out
-                  ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
-                  : <><LogIn size={16} /> Punch In</>}
-              </button>
-            )
-          )}
+          <PunchButton user={user} onChange={loadWorkingToday} />
           <div className="relative flex-1 min-w-[140px]">
             <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <select className="input-field pl-8 text-sm w-full" value={selectedMonth}
@@ -729,26 +674,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <Modal open={showPunchOut} onClose={() => setShowPunchOut(false)} title="Punch Out" size="sm">
-        <form onSubmit={submitPunchOut} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Connected Calls</label>
-            <input type="number" min="0" required className="input-field" placeholder="Total calls connected today"
-              value={callsInput} onChange={(e) => setCallsInput(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Today's Nominations</label>
-            <input type="number" min="0" required className="input-field" placeholder="Total nominations today"
-              value={nomsInput} onChange={(e) => setNomsInput(e.target.value)} />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => setShowPunchOut(false)} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={punchOutBusy} className="btn-primary flex-1">
-              {punchOutBusy ? 'Punching out...' : 'Punch Out'}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }
@@ -759,57 +684,6 @@ function HRDashboard({ hrData, user }) {
   const taskMap = {};
   tasks.forEach((t) => { taskMap[t.status] = parseInt(t.count); });
 
-  const canPunch = user?.id !== 13;
-  const [punch, setPunch] = useState(null);
-  const [punchBusy, setPunchBusy] = useState(false);
-  const [showPunchOut, setShowPunchOut] = useState(false);
-  const [callsInput, setCallsInput] = useState('');
-  const [nomsInput, setNomsInput] = useState('');
-  const [punchOutBusy, setPunchOutBusy] = useState(false);
-
-  function fmtPunchTime(t) {
-    if (!t) return '';
-    const dt = new Date(t);
-    let h = dt.getHours();
-    const m = dt.getMinutes().toString().padStart(2, '0');
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m} ${ap}`;
-  }
-
-  useEffect(() => {
-    if (!canPunch) return;
-    let active = true;
-    api.attendance.status()
-      .then((s) => { if (active) setPunch(s); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [canPunch]);
-
-  async function handlePunch() {
-    if (!canPunch) return;
-    if (punch && punch.punch_in && !punch.punch_out) { setShowPunchOut(true); return; }
-    setPunchBusy(true);
-    try {
-      const s = await api.attendance.punchIn();
-      setPunch(s);
-    } catch (e) { alert(e.message); }
-    finally { setPunchBusy(false); }
-  }
-
-  async function submitPunchOut(ev) {
-    ev.preventDefault();
-    setPunchOutBusy(true);
-    try {
-      const s = await api.attendance.punchOut({ connected_calls: callsInput, nominations: nomsInput });
-      setPunch(s);
-      setShowPunchOut(false);
-      setCallsInput('');
-      setNomsInput('');
-    } catch (e) { alert(e.message); }
-    finally { setPunchOutBusy(false); }
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -818,21 +692,7 @@ function HRDashboard({ hrData, user }) {
           <p className="text-sm text-gray-400 mt-0.5">Welcome back, {user?.name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {canPunch && (
-            punch && punch.punch_in && !punch.punch_out ? (
-              <button onClick={handlePunch} disabled={punchBusy}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
-                <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
-              </button>
-            ) : (
-              <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
-                {punch && punch.punch_in && punch.punch_out
-                  ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
-                  : <><LogIn size={16} /> Punch In</>}
-              </button>
-            )
-          )}
+          <PunchButton user={user} />
           <div className="flex items-center gap-2 bg-white px-3 sm:px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
             <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white text-sm font-bold">
               {user?.name?.charAt(0).toUpperCase()}
@@ -918,26 +778,6 @@ function HRDashboard({ hrData, user }) {
         </CardBody>
       </Card>
 
-      <Modal open={showPunchOut} onClose={() => setShowPunchOut(false)} title="Punch Out" size="sm">
-        <form onSubmit={submitPunchOut} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Connected Calls</label>
-            <input type="number" min="0" required className="input-field" placeholder="Total calls connected today"
-              value={callsInput} onChange={(e) => setCallsInput(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Today's Nominations</label>
-            <input type="number" min="0" required className="input-field" placeholder="Total nominations today"
-              value={nomsInput} onChange={(e) => setNomsInput(e.target.value)} />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => setShowPunchOut(false)} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={punchOutBusy} className="btn-primary flex-1">
-              {punchOutBusy ? 'Punching out...' : 'Punch Out'}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

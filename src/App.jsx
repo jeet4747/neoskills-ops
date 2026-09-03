@@ -17,6 +17,7 @@ import Batches from './pages/Batches';
 import Tasks from './pages/Tasks';
 import TrainingCalendar from './pages/TrainingCalendar';
 import Broadcast from './pages/Broadcast';
+import Attendance from './pages/Attendance';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="payments" element={<Payments />} />
         <Route path="batches" element={<Navigate to="/training-calendar" replace />} />
         <Route path="tasks" element={<Tasks />} />
+        <Route path="attendance" element={<Attendance />} />
         <Route path="training-calendar" element={<TrainingCalendar />} />
         <Route
           path="receipts"

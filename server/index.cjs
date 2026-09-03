@@ -2576,13 +2576,14 @@ app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
 
 const ATTENDANCE_EXCLUDED_IDS = [13];
 const ATTENDANCE_REPORT_IDS = [4, 13, 19, 12];
+const ATTENDANCE_MONTHLY_IDS = [4, 13];
 
 app.get('/api/attendance/status', auth(), async (req, res) => {
   try {
     const { date } = req.query;
     const d = date || new Date().toISOString().slice(0, 10);
     const result = await query(
-      'SELECT id, punch_in, punch_out, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
+      'SELECT id, punch_in, punch_out, status, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
       [req.user.id, d]
     );
     res.json(result.rows[0] || null);
@@ -2629,6 +2630,70 @@ app.post('/api/attendance/punch-out', auth(), async (req, res) => {
       [req.user.id, d, now, parseInt(connected_calls, 10) || 0, parseInt(nominations, 10) || 0, summary || null]
     );
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/attendance/action', auth(), async (req, res) => {
+  try {
+    if (ATTENDANCE_EXCLUDED_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not available' });
+    const { action, connected_calls, nominations, summary } = req.body || {};
+    const d = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const cols = 'id, punch_in, punch_out, status, connected_calls, nominations, summary';
+    let result;
+    if (action === 'punch_in') {
+      result = await query(
+        `INSERT INTO attendance (user_id, date, punch_in, status)
+         VALUES ($1, $2, $3, 'punch_in')
+         ON CONFLICT (user_id, date) DO UPDATE
+           SET status = 'punch_in', punch_in = COALESCE(attendance.punch_in, $3)
+         RETURNING ${cols}`,
+        [req.user.id, d, now]
+      );
+    } else if (action === 'on_break' || action === 'on_leave') {
+      result = await query(
+        `INSERT INTO attendance (user_id, date, status)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, date) DO UPDATE SET status = $3
+         RETURNING ${cols}`,
+        [req.user.id, d, action]
+      );
+    } else if (action === 'early_logout' || action === 'punch_out') {
+      result = await query(
+        `INSERT INTO attendance (user_id, date, punch_out, status, connected_calls, nominations, summary)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (user_id, date) DO UPDATE
+           SET punch_out = $3, status = $4, connected_calls = $5, nominations = $6, summary = $7
+         RETURNING ${cols}`,
+        [req.user.id, d, now, action, parseInt(connected_calls, 10) || 0, parseInt(nominations, 10) || 0, summary || null]
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/attendance/monthly', auth(), async (req, res) => {
+  try {
+    if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not authorized' });
+    const { month } = req.query;
+    const m = month || new Date().toISOString().slice(0, 7);
+    const result = await query(
+      `SELECT a.id, a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status,
+              a.connected_calls, a.nominations, a.summary
+       FROM attendance a JOIN users u ON u.id = a.user_id
+       WHERE to_char(a.date, 'YYYY-MM') = $1 AND a.user_id <> ALL($2)
+       ORDER BY a.date, u.name`,
+      [m, ATTENDANCE_EXCLUDED_IDS]
+    );
+    res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3154,6 +3219,7 @@ async function init() {
         date DATE NOT NULL,
         punch_in TIMESTAMPTZ,
         punch_out TIMESTAMPTZ,
+        status TEXT,
         connected_calls INTEGER DEFAULT 0,
         nominations INTEGER DEFAULT 0,
         summary TEXT,
@@ -3192,6 +3258,7 @@ async function init() {
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS connected_calls INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS nominations INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS summary TEXT`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status TEXT`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -21,6 +21,7 @@ export default function Sidebar({ open, onClose }) {
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
+    { to: '/attendance', icon: Clock, label: 'Attendance', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     {
       to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin', 'ops', 'hr'],
