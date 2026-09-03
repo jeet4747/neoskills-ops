@@ -106,7 +106,7 @@ export default function PunchButton({ user, onChange }) {
   }
 
   function onPick(action) {
-    if (action === 'punch_out' || action === 'early_logout') { setOutAction(action); setShowForm(true); setOpen(false); return; }
+    if ((action === 'punch_out' || action === 'early_logout') && user.id !== 19) { setOutAction(action); setShowForm(true); setOpen(false); return; }
     runAction(action);
   }
 
