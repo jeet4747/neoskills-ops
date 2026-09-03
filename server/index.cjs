@@ -2575,7 +2575,7 @@ app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
 });
 
 const ATTENDANCE_EXCLUDED_IDS = [13];
-const ATTENDANCE_REPORT_IDS = [4, 13];
+const ATTENDANCE_REPORT_IDS = [4, 13, 19];
 
 app.get('/api/attendance/status', auth(), async (req, res) => {
   try {
