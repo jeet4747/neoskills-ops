@@ -262,25 +262,25 @@ export default function Dashboard() {
             {isManager ? 'Team performance at a glance' : 'Your performance overview'} · {currentMonthLabel}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {canPunch && (
             punch && punch.punch_in && !punch.punch_out ? (
               <button onClick={handlePunch} disabled={punchBusy}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
                 <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
               </button>
             ) : (
               <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
                 {punch && punch.punch_in && punch.punch_out
                   ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
                   : <><LogIn size={16} /> Punch In</>}
               </button>
             )
           )}
-          <div className="relative">
+          <div className="relative flex-1 min-w-[140px]">
             <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <select className="input-field pl-8 text-sm w-44" value={selectedMonth}
+            <select className="input-field pl-8 text-sm w-full" value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}>
               {monthOptions.map((m) => {
                 const d = new Date(m + '-01');
@@ -288,11 +288,11 @@ export default function Dashboard() {
               })}
             </select>
           </div>
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-2 bg-white px-3 sm:px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
             <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white text-sm font-bold">
               {user?.name?.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-gray-700">{user?.name}</span>
+            <span className="text-sm font-medium text-gray-700 hidden sm:inline">{user?.name}</span>
           </div>
         </div>
       </div>
@@ -817,27 +817,27 @@ function HRDashboard({ hrData, user }) {
           <h1 className="text-2xl font-bold text-gray-900">HR Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">Welcome back, {user?.name}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {canPunch && (
             punch && punch.punch_in && !punch.punch_out ? (
               <button onClick={handlePunch} disabled={punchBusy}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
                 <LogOut size={16} /> Punch Out {fmtPunchTime(punch.punch_in)}
               </button>
             ) : (
               <button onClick={handlePunch} disabled={punchBusy || (punch && punch.punch_in && punch.punch_out)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60">
                 {punch && punch.punch_in && punch.punch_out
                   ? <><Clock size={16} /> Punched In {fmtPunchTime(punch.punch_in)} / Out {fmtPunchTime(punch.punch_out)}</>
                   : <><LogIn size={16} /> Punch In</>}
               </button>
             )
           )}
-          <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-2 bg-white px-3 sm:px-4 py-2 rounded-2xl border border-gray-100 shadow-sm">
             <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center text-white text-sm font-bold">
               {user?.name?.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-gray-700">{user?.name}</span>
+            <span className="text-sm font-medium text-gray-700 hidden sm:inline">{user?.name}</span>
           </div>
         </div>
       </div>
