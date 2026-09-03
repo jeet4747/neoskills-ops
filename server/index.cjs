@@ -1463,7 +1463,7 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
                   e.batch_name AS module, e.training_fee, e.sales_user_id,
                   u.name AS user_name, s.name AS student_name, s.phone AS student_phone,
                   COALESCE((SELECT SUM(p.amount_paid) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS paid_amount,
-                  COALESCE((SELECT SUM(p.pending_amount) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0) AS pending_amount,
+                  GREATEST(e.total_amount - COALESCE((SELECT SUM(p.amount_paid) FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'approved'), 0), 0) AS pending_amount,
                   CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.enrollment_id = e.id AND p.status = 'pending_approval') THEN true ELSE false END AS has_pending_payment,
                   (SELECT u2.name FROM users u2 WHERE u2.id = e.sales_user_id) AS poc_name
            FROM session_enrollments se
