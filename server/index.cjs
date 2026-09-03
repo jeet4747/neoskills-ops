@@ -2583,7 +2583,7 @@ app.get('/api/attendance/status', auth(), async (req, res) => {
     const { date } = req.query;
     const d = date || new Date().toISOString().slice(0, 10);
     const result = await query(
-      'SELECT id, punch_in, punch_out, status, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
+      'SELECT id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
       [req.user.id, d]
     );
     res.json(result.rows[0] || null);
@@ -2642,37 +2642,59 @@ app.post('/api/attendance/action', auth(), async (req, res) => {
     const { action, connected_calls, nominations, summary } = req.body || {};
     const d = new Date().toISOString().slice(0, 10);
     const now = new Date().toISOString();
-    const cols = 'id, punch_in, punch_out, status, connected_calls, nominations, summary';
-    let result;
+    const cols = 'id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary';
+    let sql, params;
     if (action === 'punch_in') {
-      result = await query(
-        `INSERT INTO attendance (user_id, date, punch_in, status)
-         VALUES ($1, $2, $3, 'punch_in')
-         ON CONFLICT (user_id, date) DO UPDATE
-           SET status = 'punch_in', punch_in = COALESCE(attendance.punch_in, $3)
-         RETURNING ${cols}`,
-        [req.user.id, d, now]
-      );
+      sql = `INSERT INTO attendance (user_id, date, punch_in, status, break_start, break_end, total_break_minutes)
+             VALUES ($1, $2, $3, 'punch_in', NULL, NULL, 0)
+             ON CONFLICT (user_id, date) DO UPDATE
+               SET status = 'punch_in',
+                   punch_in = COALESCE(attendance.punch_in, $3),
+                   break_start = NULL,
+                   break_end = NULL,
+                   total_break_minutes = COALESCE(attendance.total_break_minutes, 0)
+             RETURNING ${cols}`;
+      params = [req.user.id, d, now];
     } else if (action === 'on_break' || action === 'on_leave') {
-      result = await query(
-        `INSERT INTO attendance (user_id, date, status)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (user_id, date) DO UPDATE SET status = $3
-         RETURNING ${cols}`,
-        [req.user.id, d, action]
-      );
+      sql = `INSERT INTO attendance (user_id, date, status, break_start)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, date) DO UPDATE
+               SET status = $3,
+                   break_start = COALESCE(attendance.break_start, $4)
+             RETURNING ${cols}`;
+      params = [req.user.id, d, action, now];
+    } else if (action === 'resume') {
+      sql = `INSERT INTO attendance (user_id, date, status, break_end, total_break_minutes)
+             VALUES ($1, $2, 'punch_in', $3, 0)
+             ON CONFLICT (user_id, date) DO UPDATE
+               SET status = 'punch_in',
+                   break_end = $3,
+                   total_break_minutes = COALESCE(attendance.total_break_minutes, 0) +
+                     COALESCE(GREATEST(ROUND(EXTRACT(EPOCH FROM ($3 - attendance.break_start)::interval) / 60), 0), 0),
+                   break_start = NULL
+             RETURNING ${cols}`;
+      params = [req.user.id, d, now];
     } else if (action === 'early_logout' || action === 'punch_out') {
-      result = await query(
-        `INSERT INTO attendance (user_id, date, punch_out, status, connected_calls, nominations, summary)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (user_id, date) DO UPDATE
-           SET punch_out = $3, status = $4, connected_calls = $5, nominations = $6, summary = $7
-         RETURNING ${cols}`,
-        [req.user.id, d, now, action, parseInt(connected_calls, 10) || 0, parseInt(nominations, 10) || 0, summary || null]
-      );
+      sql = `INSERT INTO attendance (user_id, date, punch_out, status, break_end, connected_calls, nominations, summary, total_break_minutes)
+             VALUES ($1, $2, $3, $4, $3, $5, $6, $7, 0)
+             ON CONFLICT (user_id, date) DO UPDATE
+               SET punch_out = $3,
+                   status = $4,
+                   break_end = COALESCE(attendance.break_end, $3),
+                   total_break_minutes = COALESCE(attendance.total_break_minutes, 0) +
+                     CASE WHEN attendance.break_start IS NOT NULL
+                       THEN COALESCE(GREATEST(ROUND(EXTRACT(EPOCH FROM ($3 - attendance.break_start)::interval) / 60), 0), 0)
+                       ELSE 0 END,
+                   break_start = NULL,
+                   connected_calls = $5,
+                   nominations = $6,
+                   summary = $7
+             RETURNING ${cols}`;
+      params = [req.user.id, d, now, action, parseInt(connected_calls, 10) || 0, parseInt(nominations, 10) || 0, summary || null];
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
+    const result = await query(sql, params);
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2687,6 +2709,7 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
     const m = month || new Date().toISOString().slice(0, 7);
     const result = await query(
       `SELECT a.id, a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status,
+              a.break_start, a.break_end, a.total_break_minutes,
               a.connected_calls, a.nominations, a.summary
        FROM attendance a JOIN users u ON u.id = a.user_id
        WHERE to_char(a.date, 'YYYY-MM') = $1 AND a.user_id <> ALL($2)
@@ -2703,7 +2726,7 @@ app.get('/api/attendance/today', auth(), async (req, res) => {
   try {
     const d = new Date().toISOString().slice(0, 10);
     const result = await query(
-      `SELECT a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.connected_calls, a.nominations
+      `SELECT a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.status, a.break_start, a.total_break_minutes, a.connected_calls, a.nominations
        FROM attendance a JOIN users u ON u.id = a.user_id
        WHERE a.date = $1 AND a.user_id <> ALL($2)
        ORDER BY a.punch_in`,
@@ -2721,7 +2744,7 @@ app.get('/api/attendance/daily-report', auth(), async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     const { from, to } = req.query;
     let sql = `
-      SELECT a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.connected_calls, a.nominations, a.summary
+      SELECT a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status, a.break_start, a.break_end, a.total_break_minutes, a.connected_calls, a.nominations, a.summary
       FROM attendance a JOIN users u ON u.id = a.user_id
       WHERE a.user_id <> ALL($1)`;
     const params = [ATTENDANCE_EXCLUDED_IDS];
@@ -3220,6 +3243,9 @@ async function init() {
         punch_in TIMESTAMPTZ,
         punch_out TIMESTAMPTZ,
         status TEXT,
+        break_start TIMESTAMPTZ,
+        break_end TIMESTAMPTZ,
+        total_break_minutes INTEGER DEFAULT 0,
         connected_calls INTEGER DEFAULT 0,
         nominations INTEGER DEFAULT 0,
         summary TEXT,
@@ -3259,6 +3285,9 @@ async function init() {
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS nominations INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS summary TEXT`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status TEXT`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_start TIMESTAMPTZ`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_end TIMESTAMPTZ`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_break_minutes INTEGER DEFAULT 0`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
