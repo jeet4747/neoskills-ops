@@ -69,8 +69,17 @@ export default function Dashboard() {
   const [hrData, setHrData] = useState(null);
   const [punch, setPunch] = useState(null);
   const [punchBusy, setPunchBusy] = useState(false);
+  const [showPunchOut, setShowPunchOut] = useState(false);
+  const [callsInput, setCallsInput] = useState('');
+  const [nomsInput, setNomsInput] = useState('');
+  const [punchOutBusy, setPunchOutBusy] = useState(false);
+  const [workingToday, setWorkingToday] = useState([]);
+  const [dailyReport, setDailyReport] = useState([]);
+  const [reportFrom, setReportFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [reportTo, setReportTo] = useState(new Date().toISOString().slice(0, 10));
 
   const canPunch = user?.id !== 13;
+  const canReport = user?.id === 4 || user?.id === 13;
 
   useEffect(() => {
     setSelectedMonth(new Date().toISOString().slice(0, 7));
@@ -170,6 +179,16 @@ export default function Dashboard() {
     return `${h}:${m} ${ap}`;
   }
 
+  async function loadWorkingToday() {
+    try { setWorkingToday(await api.attendance.today()); }
+    catch (e) { /* ignore */ }
+  }
+
+  async function loadDailyReport() {
+    try { setDailyReport(await api.attendance.dailyReport(reportFrom, reportTo)); }
+    catch (e) { /* ignore */ }
+  }
+
   useEffect(() => {
     if (!canPunch) return;
     let active = true;
@@ -179,19 +198,36 @@ export default function Dashboard() {
     return () => { active = false; };
   }, [canPunch]);
 
+  useEffect(() => { loadWorkingToday(); }, []);
+
+  useEffect(() => {
+    if (canReport) loadDailyReport();
+  }, [canReport, reportFrom, reportTo]);
+
   async function handlePunch() {
     if (!canPunch) return;
+    if (punch && punch.punch_in && !punch.punch_out) { setShowPunchOut(true); return; }
     setPunchBusy(true);
     try {
-      if (punch && punch.punch_in && !punch.punch_out) {
-        const s = await api.attendance.punchOut();
-        setPunch(s);
-      } else {
-        const s = await api.attendance.punchIn();
-        setPunch(s);
-      }
+      const s = await api.attendance.punchIn();
+      setPunch(s);
+      loadWorkingToday();
     } catch (e) { alert(e.message); }
     finally { setPunchBusy(false); }
+  }
+
+  async function submitPunchOut(ev) {
+    ev.preventDefault();
+    setPunchOutBusy(true);
+    try {
+      const s = await api.attendance.punchOut({ connected_calls: callsInput, nominations: nomsInput });
+      setPunch(s);
+      setShowPunchOut(false);
+      setCallsInput('');
+      setNomsInput('');
+      loadWorkingToday();
+    } catch (e) { alert(e.message); }
+    finally { setPunchOutBusy(false); }
   }
 
   const SkeletonCard = () => <div className="h-28 skeleton w-full" />;
@@ -273,6 +309,92 @@ export default function Dashboard() {
           )
         ) : (
           <GradientStatsCard icon={TrendingUp} label="Total Nominations" value={summary?.total_enrollments || 0} color="blue" />
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Clock size={16} className="text-emerald-600" />
+              <h3 className="font-semibold text-gray-900">Working Today</h3>
+            </div>
+          </CardHeader>
+          <CardBody className="p-5">
+            {workingToday.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No one has punched in yet today</p>
+            ) : (
+              <div className="space-y-2">
+                {workingToday.map((w) => (
+                  <div key={w.user_id} className="flex items-center gap-3 py-2 px-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${w.punch_out ? 'bg-gray-200 text-gray-500' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {w.name?.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-900 truncate">{w.name}</p>
+                      <p className="text-[10px] text-gray-400 capitalize">{w.role}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-semibold text-gray-700">In {fmtPunchTime(w.punch_in)}</p>
+                      {w.punch_out ? (
+                        <p className="text-[10px] text-gray-400">Out {fmtPunchTime(w.punch_out)} · {w.connected_calls || 0} calls · {w.nominations || 0} nom</p>
+                      ) : (
+                        <p className="text-[10px] text-emerald-600 font-medium">Currently working</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        {canReport && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Clock size={16} className="text-primary-600" />
+                <h3 className="font-semibold text-gray-900">Daily Login Report</h3>
+              </div>
+            </CardHeader>
+            <CardBody className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <input type="date" className="input-field text-xs" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} />
+                <span className="text-xs text-gray-400">to</span>
+                <input type="date" className="input-field text-xs" value={reportTo} onChange={(e) => setReportTo(e.target.value)} />
+              </div>
+              {dailyReport.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">No attendance records in this range</p>
+              ) : (
+                <div className="max-h-72 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-gray-400 border-b border-gray-100">
+                        <th className="py-2 pr-2 font-medium">Date</th>
+                        <th className="py-2 pr-2 font-medium">Employee</th>
+                        <th className="py-2 pr-2 font-medium">In</th>
+                        <th className="py-2 pr-2 font-medium">Out</th>
+                        <th className="py-2 pr-2 font-medium">Calls</th>
+                        <th className="py-2 font-medium">Nom</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyReport.map((r, i) => (
+                        <tr key={i} className="border-b border-gray-50 text-gray-700">
+                          <td className="py-2 pr-2 whitespace-nowrap">{String(r.date).slice(0, 10)}</td>
+                          <td className="py-2 pr-2 font-medium">{r.name}</td>
+                          <td className="py-2 pr-2">{fmtPunchTime(r.punch_in)}</td>
+                          <td className="py-2 pr-2">{r.punch_out ? fmtPunchTime(r.punch_out) : '—'}</td>
+                          <td className="py-2 pr-2">{r.connected_calls || 0}</td>
+                          <td className="py-2">{r.nominations || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardBody>
+          </Card>
         )}
       </div>
 
@@ -606,6 +728,27 @@ export default function Dashboard() {
           </Card>
         </div>
       )}
+
+      <Modal open={showPunchOut} onClose={() => setShowPunchOut(false)} title="Punch Out" size="sm">
+        <form onSubmit={submitPunchOut} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Connected Calls</label>
+            <input type="number" min="0" required className="input-field" placeholder="Total calls connected today"
+              value={callsInput} onChange={(e) => setCallsInput(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Today's Nominations</label>
+            <input type="number" min="0" required className="input-field" placeholder="Total nominations today"
+              value={nomsInput} onChange={(e) => setNomsInput(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setShowPunchOut(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" disabled={punchOutBusy} className="btn-primary flex-1">
+              {punchOutBusy ? 'Punching out...' : 'Punch Out'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -2575,13 +2575,14 @@ app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
 });
 
 const ATTENDANCE_EXCLUDED_IDS = [13];
+const ATTENDANCE_REPORT_IDS = [4, 13];
 
 app.get('/api/attendance/status', auth(), async (req, res) => {
   try {
     const { date } = req.query;
     const d = date || new Date().toISOString().slice(0, 10);
     const result = await query(
-      'SELECT id, punch_in, punch_out FROM attendance WHERE user_id = $1 AND date = $2',
+      'SELECT id, punch_in, punch_out, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
       [req.user.id, d]
     );
     res.json(result.rows[0] || null);
@@ -2600,7 +2601,7 @@ app.post('/api/attendance/punch-in', auth(), async (req, res) => {
       `INSERT INTO attendance (user_id, date, punch_in)
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id, date) DO UPDATE SET punch_in = COALESCE(attendance.punch_in, $3)
-       RETURNING id, punch_in, punch_out`,
+       RETURNING id, punch_in, punch_out, connected_calls, nominations, summary`,
       [req.user.id, d, now]
     );
     res.json(result.rows[0]);
@@ -2615,14 +2616,57 @@ app.post('/api/attendance/punch-out', auth(), async (req, res) => {
       return res.status(403).json({ error: 'Punch out not available' });
     const d = new Date().toISOString().slice(0, 10);
     const now = new Date().toISOString();
+    const { connected_calls, nominations, summary } = req.body || {};
     const result = await query(
-      `INSERT INTO attendance (user_id, date, punch_out)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, date) DO UPDATE SET punch_out = $3
-       RETURNING id, punch_in, punch_out`,
-      [req.user.id, d, now]
+      `INSERT INTO attendance (user_id, date, punch_out, connected_calls, nominations, summary)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id, date) DO UPDATE
+         SET punch_out = $3,
+             connected_calls = $4,
+             nominations = $5,
+             summary = $6
+       RETURNING id, punch_in, punch_out, connected_calls, nominations, summary`,
+      [req.user.id, d, now, parseInt(connected_calls, 10) || 0, parseInt(nominations, 10) || 0, summary || null]
     );
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/attendance/today', auth(), async (req, res) => {
+  try {
+    const d = new Date().toISOString().slice(0, 10);
+    const result = await query(
+      `SELECT a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.connected_calls, a.nominations
+       FROM attendance a JOIN users u ON u.id = a.user_id
+       WHERE a.date = $1 AND a.user_id <> ALL($2)
+       ORDER BY a.punch_in`,
+      [d, ATTENDANCE_EXCLUDED_IDS]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/attendance/daily-report', auth(), async (req, res) => {
+  try {
+    if (!ATTENDANCE_REPORT_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not authorized' });
+    const { from, to } = req.query;
+    let sql = `
+      SELECT a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.connected_calls, a.nominations, a.summary
+      FROM attendance a JOIN users u ON u.id = a.user_id
+      WHERE a.user_id <> ALL($1)`;
+    const params = [ATTENDANCE_EXCLUDED_IDS];
+    if (from && to) {
+      sql += ` AND a.date BETWEEN $2 AND $3`;
+      params.push(from, to);
+    }
+    sql += ` ORDER BY a.date DESC, u.name`;
+    const result = await query(sql, params);
+    res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3110,6 +3154,9 @@ async function init() {
         date DATE NOT NULL,
         punch_in TIMESTAMPTZ,
         punch_out TIMESTAMPTZ,
+        connected_calls INTEGER DEFAULT 0,
+        nominations INTEGER DEFAULT 0,
+        summary TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (user_id, date)
       );
@@ -3142,6 +3189,9 @@ async function init() {
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS connected_calls INTEGER DEFAULT 0`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS nominations INTEGER DEFAULT 0`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS summary TEXT`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

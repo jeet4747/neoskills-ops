@@ -262,6 +262,8 @@ export const api = {
   attendance: {
     status: (date) => request(`/attendance/status${date ? `?date=${date}` : ''}`),
     punchIn: () => request('/attendance/punch-in', { method: 'POST' }),
-    punchOut: () => request('/attendance/punch-out', { method: 'POST' }),
+    punchOut: (data) => request('/attendance/punch-out', { method: 'POST', body: JSON.stringify(data || {}) }),
+    today: () => request('/attendance/today'),
+    dailyReport: (from, to) => request(`/attendance/daily-report${from && to ? `?from=${from}&to=${to}` : ''}`),
   },
 };
