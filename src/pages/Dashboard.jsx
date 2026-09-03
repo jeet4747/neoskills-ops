@@ -79,7 +79,7 @@ export default function Dashboard() {
   const [reportTo, setReportTo] = useState(new Date().toISOString().slice(0, 10));
 
   const canPunch = user?.id !== 13;
-  const canReport = user?.id === 4 || user?.id === 13 || user?.id === 19;
+  const canReport = user?.id === 4 || user?.id === 13 || user?.id === 19 || user?.id === 12;
 
   useEffect(() => {
     setSelectedMonth(new Date().toISOString().slice(0, 7));
