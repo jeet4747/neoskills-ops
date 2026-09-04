@@ -265,6 +265,7 @@ export const api = {
     punchOut: (data) => request('/attendance/punch-out', { method: 'POST', body: JSON.stringify(data || {}) }),
     action: (data) => request('/attendance/action', { method: 'POST', body: JSON.stringify(data || {}) }),
     today: () => request('/attendance/today'),
+    daily: (date) => request(`/attendance/daily${date ? `?date=${date}` : ''}`),
     monthly: (month) => request(`/attendance/monthly${month ? `?month=${month}` : ''}`),
     dailyReport: (from, to) => request(`/attendance/daily-report${from && to ? `?from=${from}&to=${to}` : ''}`),
   },

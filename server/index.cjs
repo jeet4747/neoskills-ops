@@ -2577,6 +2577,26 @@ app.delete('/api/targets/:id', auth(['admin', 'manager']), async (req, res) => {
 const ATTENDANCE_EXCLUDED_IDS = [13];
 const ATTENDANCE_REPORT_IDS = [4, 13, 19, 12];
 const ATTENDANCE_MONTHLY_IDS = [4, 13];
+const ATTENDANCE_EOD_HOUR = 23;
+const ATTENDANCE_EOD_MINUTE = 59;
+
+async function settleEodLeaves(dateStr) {
+  const d = dateStr || new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  if (d > today) return;
+  if (d === today) {
+    const now = new Date();
+    if (now.getHours() < ATTENDANCE_EOD_HOUR || (now.getHours() === ATTENDANCE_EOD_HOUR && now.getMinutes() < ATTENDANCE_EOD_MINUTE)) return;
+  }
+  await query(
+    `INSERT INTO attendance (user_id, date, status)
+     SELECT u.id, $1::date, 'on_leave'
+     FROM users u
+     WHERE u.status = 'active' AND u.id <> ALL($2)
+       AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.user_id = u.id AND a.date = $1::date)`,
+    [d, ATTENDANCE_EXCLUDED_IDS]
+  );
+}
 
 app.get('/api/attendance/status', auth(), async (req, res) => {
   try {
@@ -2715,6 +2735,29 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
        WHERE to_char(a.date, 'YYYY-MM') = $1 AND a.user_id <> ALL($2)
        ORDER BY a.date, u.name`,
       [m, ATTENDANCE_EXCLUDED_IDS]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/attendance/daily', auth(), async (req, res) => {
+  try {
+    if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not authorized' });
+    const d = req.query.date || new Date().toISOString().slice(0, 10);
+    await settleEodLeaves(d);
+    const result = await query(
+      `SELECT u.id AS user_id, u.name, u.role,
+              a.punch_in, a.punch_out, a.status,
+              a.break_start, a.break_end, a.total_break_minutes,
+              a.connected_calls, a.nominations
+       FROM users u
+       LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $1::date
+       WHERE u.status = 'active' AND u.id <> ALL($2)
+       ORDER BY u.name`,
+      [d, ATTENDANCE_EXCLUDED_IDS]
     );
     res.json(result.rows);
   } catch (e) {
