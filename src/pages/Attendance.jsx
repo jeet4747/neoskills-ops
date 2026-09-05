@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX } from 'lucide-react';
+import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX, Users } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
@@ -9,11 +9,11 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const STATUS_META = {
-  punch_in: { label: 'Punched In', color: 'bg-emerald-50 text-emerald-600' },
+  punch_in: { label: 'Working', color: 'bg-emerald-50 text-emerald-600' },
   on_break: { label: 'On Break', color: 'bg-amber-50 text-amber-600' },
   on_leave: { label: 'On Leave', color: 'bg-purple-50 text-purple-600' },
   early_logout: { label: 'Early Logout', color: 'bg-orange-50 text-orange-600' },
-  punch_out: { label: 'Punched Out', color: 'bg-gray-100 text-gray-600' },
+  punch_out: { label: 'Worked', color: 'bg-gray-100 text-gray-600' },
 };
 
 function fmt(t) {
@@ -67,7 +67,6 @@ export default function Attendance() {
   }
 
   async function loadDaily() {
-    if (!isGridAllowed) return;
     setLoading(true);
     try { setRows(await api.attendance.daily(date)); }
     catch (e) { setRows([]); }
@@ -75,7 +74,7 @@ export default function Attendance() {
   }
 
   useEffect(() => { loadOwn(); }, []);
-  useEffect(() => { loadDaily(); }, [date, isGridAllowed]);
+  useEffect(() => { loadDaily(); }, [date]);
 
   const nowMs = Date.now();
   const ownWorked = punch?.punch_in
@@ -138,6 +137,58 @@ export default function Attendance() {
           )}
         </CardBody>
       </Card>
+
+      {!isGridAllowed && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-primary-600" />
+              <h3 className="font-semibold text-gray-900">Working Today</h3>
+              <span className="text-xs text-gray-400 font-normal">· {dateLabel(today)}</span>
+            </div>
+          </CardHeader>
+          <CardBody className="p-5">
+            {loading ? (
+              <p className="text-sm text-gray-400 text-center py-8">Loading...</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {rows.map((r) => {
+                  let label = 'Absent', dot = 'bg-gray-300', time = '';
+                  if (r.status === 'on_leave') { label = 'On Leave'; dot = 'bg-purple-500'; time = ''; }
+                  else if (r.punch_in) {
+                    label = 'Working';
+                    dot = 'bg-emerald-500';
+                    time = `${fmt(r.punch_in)}${r.punch_out ? ' – ' + fmt(r.punch_out) : ''}`;
+                    if (r.status === 'on_break') { label = 'On Break'; dot = 'bg-amber-500'; }
+                    if (r.status === 'early_logout') { label = 'Early Logout'; dot = 'bg-orange-500'; }
+                    if (r.status === 'punch_out') { label = 'Worked'; dot = 'bg-gray-500'; }
+                  }
+                  return (
+                    <li key={r.user_id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 bg-gray-100 text-gray-600">
+                          {r.name?.charAt(0).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-gray-900 truncate">{r.name}</p>
+                          <p className="text-[10px] text-gray-400 capitalize">{r.role === 'sales' ? 'Sales Rep' : r.role}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {time && <span className="text-xs text-gray-500">{time}</span>}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold text-gray-600`}>
+                          <span className={`w-2 h-2 rounded-full ${dot}`} />
+                          {label}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {isGridAllowed && (
         <Card>

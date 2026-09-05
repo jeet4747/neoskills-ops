@@ -2744,9 +2744,10 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
 
 app.get('/api/attendance/daily', auth(), async (req, res) => {
   try {
-    if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))
-      return res.status(403).json({ error: 'Not authorized' });
-    const d = req.query.date || new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const isFull = ATTENDANCE_MONTHLY_IDS.includes(req.user.id);
+    const d = req.query.date || today;
+    if (!isFull && d !== today) return res.status(403).json({ error: 'Not authorized' });
     await settleEodLeaves(d);
     const result = await query(
       `SELECT u.id AS user_id, u.name, u.role,
