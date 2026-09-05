@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -20,9 +20,10 @@ export default function Sidebar({ open, onClose }) {
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
-    { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
+    { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/attendance', icon: Clock, label: 'Attendance', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
+    { to: '/hiring', icon: Briefcase, label: 'Hiring', roles: ['hr', 'admin'] },
     {
       to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin', 'ops', 'hr'],
       badge: pendingCount > 0 ? pendingCount : null,
@@ -31,7 +32,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/training-calendar', icon: Layers, label: 'Batches & Calendar', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/receipts', icon: FileText, label: 'Receipts', roles: ['admin', 'manager', 'ops', 'hr'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin', 'manager', 'ops'] },
-    { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager', 'hr'] },
+    { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
     { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin', 'ops'] },
     { to: '/broadcast', icon: Radio, label: 'Broadcast', roles: ['admin'] },

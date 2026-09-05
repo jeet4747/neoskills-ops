@@ -2825,6 +2825,137 @@ app.get('/api/dashboard/hr-overview', auth(), async (req, res) => {
   }
 });
 
+app.get('/api/hiring/overview', auth(), async (req, res) => {
+  try {
+    if (req.user.role !== 'hr' && req.user.role !== 'admin')
+      return res.status(403).json({ error: 'Not authorized' });
+    const [compan, open, cand] = await Promise.all([
+      query(`SELECT c.*, (SELECT COUNT(*) FROM job_openings o WHERE o.company_id = c.id) as openings FROM hiring_companies c WHERE c.is_active = true ORDER BY c.name`),
+      query(`SELECT o.*, c.name as company_name FROM job_openings o JOIN hiring_companies c ON c.id = o.company_id ORDER BY o.created_at DESC`),
+      query(`SELECT cc.*, c.name as company_name, o.title as opening_title, o.company_id as opening_company_id
+             FROM hiring_candidates cc
+             LEFT JOIN hiring_companies c ON c.id = cc.company_id
+             LEFT JOIN job_openings o ON o.id = cc.opening_id
+             ORDER BY cc.created_at DESC`),
+    ]);
+    const openings = open.rows;
+    const candidates = cand.rows;
+    res.json({
+      companies: compan.rows,
+      openings,
+      candidates,
+      stats: {
+        companies: compan.rows.length,
+        open_openings: openings.filter((o) => o.status === 'open').length,
+        total_openings: openings.length,
+        candidates: candidates.length,
+        screening: candidates.filter((c) => ['applied', 'screening'].includes(c.status)).length,
+        shortlisted: candidates.filter((c) => c.status === 'shortlisted').length,
+        forwarded: candidates.filter((c) => c.status === 'forwarded').length,
+        hired: candidates.filter((c) => c.status === 'hired').length,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/hiring/companies', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const { name, contact_person, email, phone } = req.body;
+    if (!name) return res.status(400).json({ error: 'Company name required' });
+    const result = await query(
+      `INSERT INTO hiring_companies (name, contact_person, email, phone) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, contact_person, email, phone]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/hiring/openings', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const { company_id, title, location, experience, salary, skills, openings_count, status } = req.body;
+    if (!company_id || !title) return res.status(400).json({ error: 'company_id and title required' });
+    const result = await query(
+      `INSERT INTO job_openings (company_id, title, location, experience, salary, skills, openings_count, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [company_id, title, location, experience, salary, skills, openings_count || 1, status || 'open']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/hiring/openings/:id/status', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['open', 'on_hold', 'filled', 'closed'].includes(status))
+      return res.status(400).json({ error: 'Invalid status' });
+    const result = await query(
+      `UPDATE job_openings SET status = $1 WHERE id = $2 RETURNING *`,
+      [status, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Opening not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/hiring/candidates', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const { name, email, phone, resume_url, opening_id, company_id, source, status, screening_note } = req.body;
+    if (!name) return res.status(400).json({ error: 'Candidate name required' });
+    const result = await query(
+      `INSERT INTO hiring_candidates (name, email, phone, resume_url, opening_id, company_id, source, status, screening_note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [name, email, phone, resume_url, opening_id, company_id, source, status || 'applied', screening_note]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/hiring/candidates/:id', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const { status, screening_note } = req.body;
+    const result = await query(
+      `UPDATE hiring_candidates SET status = $1, screening_note = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+      [status || 'applied', screening_note || null, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Candidate not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/hiring/candidates/:id/forward', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE hiring_candidates SET status = 'forwarded', forwarded_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Candidate not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/hiring/candidates/:id', auth(['hr', 'admin']), async (req, res) => {
+  try {
+    await query('DELETE FROM hiring_candidates WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Deleted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/reports/salesperson', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const m = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : new Date().toISOString().slice(0, 7);
@@ -3295,6 +3426,42 @@ async function init() {
         summary TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (user_id, date)
+      );
+      CREATE TABLE IF NOT EXISTS hiring_companies (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        contact_person TEXT,
+        email TEXT,
+        phone TEXT,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS job_openings (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER REFERENCES hiring_companies(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        location TEXT,
+        experience TEXT,
+        salary TEXT,
+        skills TEXT,
+        openings_count INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'open' CHECK (status IN ('open', 'on_hold', 'filled', 'closed')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS hiring_candidates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        resume_url TEXT,
+        opening_id INTEGER REFERENCES job_openings(id) ON DELETE SET NULL,
+        company_id INTEGER REFERENCES hiring_companies(id) ON DELETE SET NULL,
+        source TEXT,
+        status TEXT DEFAULT 'applied' CHECK (status IN ('applied', 'screening', 'shortlisted', 'forwarded', 'rejected', 'hired')),
+        screening_note TEXT,
+        forwarded_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     console.log('Database tables created');

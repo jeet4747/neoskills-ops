@@ -269,4 +269,14 @@ export const api = {
     monthly: (month) => request(`/attendance/monthly${month ? `?month=${month}` : ''}`),
     dailyReport: (from, to) => request(`/attendance/daily-report${from && to ? `?from=${from}&to=${to}` : ''}`),
   },
+  hiring: {
+    overview: () => request('/hiring/overview'),
+    createCompany: (data) => request('/hiring/companies', { method: 'POST', body: JSON.stringify(data) }),
+    createOpening: (data) => request('/hiring/openings', { method: 'POST', body: JSON.stringify(data) }),
+    updateOpeningStatus: (id, status) => request(`/hiring/openings/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+    createCandidate: (data) => request('/hiring/candidates', { method: 'POST', body: JSON.stringify(data) }),
+    updateCandidate: (id, data) => request(`/hiring/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    forwardCandidate: (id) => request(`/hiring/candidates/${id}/forward`, { method: 'POST' }),
+    removeCandidate: (id) => request(`/hiring/candidates/${id}`, { method: 'DELETE' }),
+  },
 };

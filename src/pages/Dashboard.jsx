@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText } from 'lucide-react';
+import { DollarSign, Users, Clock, TrendingUp, AlertCircle, Medal, Filter, CheckCircle, ChevronRight, Target, Edit3, X, Check, UsersRound, ListChecks, FileText, Building2, Briefcase, FileSearch, Send } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -99,7 +99,7 @@ export default function Dashboard() {
     setLoading(true);
     try {
       if (showHRPanel) {
-        const ov = await api.dashboard.hrOverview();
+        const ov = await api.hiring.overview();
         setHrData(ov);
         setLoading(false);
         return;
@@ -562,15 +562,17 @@ export default function Dashboard() {
 
 function HRDashboard({ hrData, user }) {
   const navigate = useNavigate();
-  const { team, tasks, enrollments, recentActivity } = hrData;
-  const taskMap = {};
-  tasks.forEach((t) => { taskMap[t.status] = parseInt(t.count); });
+  const { companies, openings, candidates, stats } = hrData || { companies: [], openings: [], candidates: [], stats: {} };
+  const openOpenings = openings?.filter((o) => o.status === 'open').slice(0, 5) || [];
+  const recentCandidates = (candidates || []).slice(0, 6);
+  const candMeta = (s) =>
+    ({ applied: 'Applied', screening: 'Screening', shortlisted: 'Shortlisted', forwarded: 'Forwarded', rejected: 'Rejected', hired: 'Hired' })[s] || s;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">HR Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Hiring Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">Welcome back, {user?.name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -585,81 +587,70 @@ function HRDashboard({ hrData, user }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <GradientStatsCard icon={Users} label="Total Team Members" value={team.length} color="primary" />
-        <GradientStatsCard icon={ListChecks} label="Open Tasks" value={(taskMap.todo || 0) + (taskMap.in_progress || 0)} color="blue" />
-        <GradientStatsCard icon={Target} label="Tasks Completed" value={taskMap.done || 0} color="emerald" />
-        <GradientStatsCard icon={FileText} label="Total Enrollments" value={enrollments?.total || 0} color="amber" />
+        <GradientStatsCard icon={Building2} label="Partner Companies" value={stats.companies || 0} color="primary" />
+        <GradientStatsCard icon={Briefcase} label="Open Openings" value={stats.open_openings || 0} color="blue" />
+        <GradientStatsCard icon={FileSearch} label="Resume Screening" value={stats.screening || 0} color="amber" />
+        <GradientStatsCard icon={Send} label="Resumes Forwarded" value={stats.forwarded || 0} color="emerald" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><h3 className="font-semibold text-gray-900">Task Board Overview</h3></CardHeader>
-          <CardBody>
-            <div className="space-y-3">
-              {['backlog', 'todo', 'in_progress', 'in_review', 'done'].map((s) => (
-                <div key={s} className="flex items-center gap-3">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium min-w-[90px] ${STATUS_COLORS[s]}`}>
-                    {s.replace('_', ' ')}
-                  </span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full bg-primary-500 transition-all"
-                      style={{ width: `${tasks.length ? Math.round(((taskMap[s] || 0) / Math.max(...tasks.map((t) => parseInt(t.count)), 1)) * 100) : 0}%` }} />
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Open Openings</h3>
+              <button onClick={() => navigate('/hiring')} className="text-xs font-medium text-primary-600 hover:text-primary-700">Manage →</button>
+            </div>
+          </CardHeader>
+          <CardBody className="p-0">
+            <div className="divide-y divide-gray-50">
+              {openOpenings.length ? openOpenings.map((o) => (
+                <div key={o.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors">
+                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0">
+                    <Briefcase size={14} />
                   </div>
-                  <span className="text-sm font-semibold text-gray-900 w-6 text-right">{taskMap[s] || 0}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{o.title}</p>
+                    <p className="text-xs text-gray-400 truncate">{o.company_name}{o.location ? ` · ${o.location}` : ''}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{o.openings_count} position{o.openings_count !== 1 ? 's' : ''}</span>
                 </div>
-              ))}
+              )) : <p className="text-center text-gray-400 py-8 text-sm">No open openings yet.</p>}
             </div>
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader><h3 className="font-semibold text-gray-900">Team Roster</h3></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Latest Candidates</h3>
+              <button onClick={() => navigate('/hiring')} className="text-xs font-medium text-primary-600 hover:text-primary-700">Manage →</button>
+            </div>
+          </CardHeader>
           <CardBody className="p-0">
-            <div className="max-h-80 overflow-y-auto">
-              {team.map((m) => (
-                <div key={m.id} className="flex items-center gap-3 px-5 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                  <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
-                    {m.name?.charAt(0).toUpperCase()}
+            <div className="divide-y divide-gray-50">
+              {recentCandidates.length ? recentCandidates.map((c) => (
+                <div key={c.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors">
+                  <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center text-purple-600 text-xs font-bold shrink-0">
+                    {c.name?.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{m.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{c.opening_title || 'No opening'} · {c.company_name || '—'}</p>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                    m.status === 'active' ? 'bg-emerald-50 text-emerald-600' : m.status === 'on_leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider shrink-0 ${
+                    c.status === 'forwarded' ? 'bg-emerald-50 text-emerald-600' :
+                    c.status === 'hired' ? 'bg-purple-50 text-purple-600' :
+                    c.status === 'rejected' ? 'bg-red-50 text-red-600' :
+                    c.status === 'shortlisted' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
                   }`}>
-                    {m.status}
+                    {candMeta(c.status)}
                   </span>
-                  <span className="text-xs text-gray-400 capitalize">{m.role}</span>
                 </div>
-              ))}
+              )) : <p className="text-center text-gray-400 py-8 text-sm">No candidates yet.</p>}
             </div>
           </CardBody>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader><h3 className="font-semibold text-gray-900">Recent Activity</h3></CardHeader>
-        <CardBody className="p-0">
-          <div className="max-h-72 overflow-y-auto">
-            {recentActivity.length ? recentActivity.map((a) => (
-              <div key={a.id} className="flex items-start gap-3 px-5 py-3 border-b border-gray-50 last:border-0">
-                <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-xs shrink-0 mt-0.5">
-                  {a.user_name?.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium text-gray-900">{a.user_name || 'System'}</span>{' '}
-                    {a.details}
-                  </p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(a.created_at)}</p>
-                </div>
-              </div>
-            )) : <p className="text-center text-gray-400 py-8 text-sm">No recent activity</p>}
-          </div>
-        </CardBody>
-      </Card>
-
     </div>
   );
 }
