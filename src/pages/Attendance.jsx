@@ -10,6 +10,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 
 const STATUS_META = {
   punch_in: { label: 'Working', color: 'bg-emerald-50 text-emerald-600' },
+  late_login: { label: 'Late Login', color: 'bg-orange-50 text-orange-600' },
   on_break: { label: 'On Break', color: 'bg-amber-50 text-amber-600' },
   on_leave: { label: 'On Leave', color: 'bg-purple-50 text-purple-600' },
   early_logout: { label: 'Early Logout', color: 'bg-orange-50 text-orange-600' },
@@ -154,11 +155,13 @@ export default function Attendance() {
               <ul className="divide-y divide-gray-100">
                 {rows.map((r) => {
                   let label = 'Absent', dot = 'bg-gray-300', time = '';
+                  const rowStatus = r.late_login ? 'late_login' : r.status;
                   if (r.status === 'on_leave') { label = 'On Leave'; dot = 'bg-purple-500'; time = ''; }
                   else if (r.punch_in) {
                     label = 'Working';
                     dot = 'bg-emerald-500';
                     time = `${fmt(r.punch_in)}${r.punch_out ? ' – ' + fmt(r.punch_out) : ''}`;
+                    if (r.late_login) { label = 'Late Login'; dot = 'bg-orange-500'; }
                     if (r.status === 'on_break') { label = 'On Break'; dot = 'bg-amber-500'; }
                     if (r.status === 'early_logout') { label = 'Early Logout'; dot = 'bg-orange-500'; }
                     if (r.status === 'punch_out') { label = 'Worked'; dot = 'bg-gray-500'; }
@@ -245,11 +248,12 @@ export default function Attendance() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {rows.map((r) => {
                   const isAbsent = !r.punch_in && r.status !== 'on_leave';
-                  const meta = r.status === 'on_leave'
+                  const gridStatus = r.late_login ? 'late_login' : r.status;
+                  const meta = gridStatus === 'on_leave'
                     ? STATUS_META.on_leave
                     : isAbsent
                       ? { label: 'Absent', color: 'bg-gray-100 text-gray-500' }
-                      : STATUS_META[r.status] || STATUS_META.punch_in;
+                      : STATUS_META[gridStatus] || STATUS_META.punch_in;
                   return (
                     <div key={r.user_id} className={`rounded-2xl p-4 border ${isAbsent || r.status === 'on_leave' ? 'bg-gray-50/70 border-gray-100' : 'bg-white border-gray-100'} shadow-sm`}>
                       <div className="flex items-start justify-between gap-2">

@@ -23,7 +23,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops'] },
     { to: '/attendance', icon: Clock, label: 'Attendance', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
-    { to: '/hiring', icon: Briefcase, label: 'Hiring', roles: ['hr', 'admin'] },
+    { to: '/hiring', icon: Briefcase, label: 'Hiring', roles: ['hr'], ids: [19] },
     {
       to: '/approvals', icon: CheckSquare, label: 'Approvals', roles: ['manager', 'admin', 'ops', 'hr'],
       badge: pendingCount > 0 ? pendingCount : null,
@@ -35,10 +35,10 @@ export default function Sidebar({ open, onClose }) {
     { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },
     { to: '/reports', icon: FileBarChart, label: 'Reports', roles: ['manager', 'admin', 'ops'] },
-    { to: '/broadcast', icon: Radio, label: 'Broadcast', roles: ['admin'] },
+    { to: '/broadcast', icon: Radio, label: 'Broadcast', roles: ['admin'], ids: [14] },
   ];
 
-  const items = navItems.filter((item) => item.roles.includes(user?.role));
+  const items = navItems.filter((item) => item.roles.includes(user?.role) && (!item.ids || item.ids.includes(user?.id)));
 
   return (
     <>

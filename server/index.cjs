@@ -2579,6 +2579,8 @@ const ATTENDANCE_REPORT_IDS = [4, 13, 19, 12];
 const ATTENDANCE_MONTHLY_IDS = [4, 13];
 const ATTENDANCE_EOD_HOUR = 23;
 const ATTENDANCE_EOD_MINUTE = 59;
+const HIRING_IDS = [19];
+const BROADCAST_IDS = [14];
 
 async function settleEodLeaves(dateStr) {
   const d = dateStr || new Date().toISOString().slice(0, 10);
@@ -2598,12 +2600,18 @@ async function settleEodLeaves(dateStr) {
   );
 }
 
+function hiringOnly(req, res, next) {
+  if (!HIRING_IDS.includes(req.user.id))
+    return res.status(403).json({ error: 'Not authorized' });
+  next();
+}
+
 app.get('/api/attendance/status', auth(), async (req, res) => {
   try {
     const { date } = req.query;
     const d = date || new Date().toISOString().slice(0, 10);
     const result = await query(
-      'SELECT id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary FROM attendance WHERE user_id = $1 AND date = $2',
+      'SELECT id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary, late_login FROM attendance WHERE user_id = $1 AND date = $2',
       [req.user.id, d]
     );
     res.json(result.rows[0] || null);
@@ -2659,22 +2667,23 @@ app.post('/api/attendance/action', auth(), async (req, res) => {
   try {
     if (ATTENDANCE_EXCLUDED_IDS.includes(req.user.id))
       return res.status(403).json({ error: 'Not available' });
-    const { action, connected_calls, nominations, summary } = req.body || {};
+    const { action, connected_calls, nominations, summary, late_login } = req.body || {};
     const d = new Date().toISOString().slice(0, 10);
     const now = new Date().toISOString();
-    const cols = 'id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary';
+    const cols = 'id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary, late_login';
     let sql, params;
     if (action === 'punch_in') {
-      sql = `INSERT INTO attendance (user_id, date, punch_in, status, break_start, break_end, total_break_minutes)
-             VALUES ($1, $2, $3, 'punch_in', NULL, NULL, 0)
+      sql = `INSERT INTO attendance (user_id, date, punch_in, status, break_start, break_end, total_break_minutes, late_login)
+             VALUES ($1, $2, $3, 'punch_in', NULL, NULL, 0, $4)
              ON CONFLICT (user_id, date) DO UPDATE
                SET status = 'punch_in',
                    punch_in = COALESCE(attendance.punch_in, $3),
                    break_start = NULL,
                    break_end = NULL,
-                   total_break_minutes = COALESCE(attendance.total_break_minutes, 0)
+                   total_break_minutes = COALESCE(attendance.total_break_minutes, 0),
+                   late_login = COALESCE(attendance.late_login, false) OR $4
              RETURNING ${cols}`;
-      params = [req.user.id, d, now];
+      params = [req.user.id, d, now, !!late_login];
     } else if (action === 'on_break' || action === 'on_leave') {
       sql = `INSERT INTO attendance (user_id, date, status, break_start)
              VALUES ($1, $2, $3, $4)
@@ -2730,7 +2739,7 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
     const result = await query(
       `SELECT a.id, a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status,
               a.break_start, a.break_end, a.total_break_minutes,
-              a.connected_calls, a.nominations, a.summary
+              a.connected_calls, a.nominations, a.summary, a.late_login
        FROM attendance a JOIN users u ON u.id = a.user_id
        WHERE to_char(a.date, 'YYYY-MM') = $1 AND a.user_id <> ALL($2)
        ORDER BY a.date, u.name`,
@@ -2751,7 +2760,7 @@ app.get('/api/attendance/daily', auth(), async (req, res) => {
     await settleEodLeaves(d);
     const result = await query(
       `SELECT u.id AS user_id, u.name, u.role,
-              a.punch_in, a.punch_out, a.status,
+              a.punch_in, a.punch_out, a.status, a.late_login,
               a.break_start, a.break_end, a.total_break_minutes,
               a.connected_calls, a.nominations
        FROM users u
@@ -2770,7 +2779,7 @@ app.get('/api/attendance/today', auth(), async (req, res) => {
   try {
     const d = new Date().toISOString().slice(0, 10);
     const result = await query(
-      `SELECT a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.status, a.break_start, a.total_break_minutes, a.connected_calls, a.nominations
+      `SELECT a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.status, a.late_login, a.break_start, a.total_break_minutes, a.connected_calls, a.nominations
        FROM attendance a JOIN users u ON u.id = a.user_id
        WHERE a.date = $1 AND a.user_id <> ALL($2)
        ORDER BY a.punch_in`,
@@ -2788,7 +2797,7 @@ app.get('/api/attendance/daily-report', auth(), async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     const { from, to } = req.query;
     let sql = `
-      SELECT a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status, a.break_start, a.break_end, a.total_break_minutes, a.connected_calls, a.nominations, a.summary
+      SELECT a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status, a.late_login, a.break_start, a.break_end, a.total_break_minutes, a.connected_calls, a.nominations, a.summary
       FROM attendance a JOIN users u ON u.id = a.user_id
       WHERE a.user_id <> ALL($1)`;
     const params = [ATTENDANCE_EXCLUDED_IDS];
@@ -2827,7 +2836,7 @@ app.get('/api/dashboard/hr-overview', auth(), async (req, res) => {
 
 app.get('/api/hiring/overview', auth(), async (req, res) => {
   try {
-    if (req.user.role !== 'hr' && req.user.role !== 'admin')
+    if (!HIRING_IDS.includes(req.user.id))
       return res.status(403).json({ error: 'Not authorized' });
     const [compan, open, cand] = await Promise.all([
       query(`SELECT c.*, (SELECT COUNT(*) FROM job_openings o WHERE o.company_id = c.id) as openings FROM hiring_companies c WHERE c.is_active = true ORDER BY c.name`),
@@ -2860,7 +2869,7 @@ app.get('/api/hiring/overview', auth(), async (req, res) => {
   }
 });
 
-app.post('/api/hiring/companies', auth(['hr', 'admin']), async (req, res) => {
+app.post('/api/hiring/companies', auth(), hiringOnly, async (req, res) => {
   try {
     const { name, contact_person, email, phone } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name required' });
@@ -2874,7 +2883,7 @@ app.post('/api/hiring/companies', auth(['hr', 'admin']), async (req, res) => {
   }
 });
 
-app.post('/api/hiring/openings', auth(['hr', 'admin']), async (req, res) => {
+app.post('/api/hiring/openings', auth(), hiringOnly, async (req, res) => {
   try {
     const { company_id, title, location, experience, salary, skills, openings_count, status } = req.body;
     if (!company_id || !title) return res.status(400).json({ error: 'company_id and title required' });
@@ -2889,7 +2898,7 @@ app.post('/api/hiring/openings', auth(['hr', 'admin']), async (req, res) => {
   }
 });
 
-app.put('/api/hiring/openings/:id/status', auth(['hr', 'admin']), async (req, res) => {
+app.put('/api/hiring/openings/:id/status', auth(), hiringOnly, async (req, res) => {
   try {
     const { status } = req.body;
     if (!['open', 'on_hold', 'filled', 'closed'].includes(status))
@@ -2905,7 +2914,7 @@ app.put('/api/hiring/openings/:id/status', auth(['hr', 'admin']), async (req, re
   }
 });
 
-app.post('/api/hiring/candidates', auth(['hr', 'admin']), async (req, res) => {
+app.post('/api/hiring/candidates', auth(), hiringOnly, async (req, res) => {
   try {
     const { name, email, phone, resume_url, opening_id, company_id, source, status, screening_note } = req.body;
     if (!name) return res.status(400).json({ error: 'Candidate name required' });
@@ -2920,7 +2929,7 @@ app.post('/api/hiring/candidates', auth(['hr', 'admin']), async (req, res) => {
   }
 });
 
-app.put('/api/hiring/candidates/:id', auth(['hr', 'admin']), async (req, res) => {
+app.put('/api/hiring/candidates/:id', auth(), hiringOnly, async (req, res) => {
   try {
     const { status, screening_note } = req.body;
     const result = await query(
@@ -2934,7 +2943,7 @@ app.put('/api/hiring/candidates/:id', auth(['hr', 'admin']), async (req, res) =>
   }
 });
 
-app.post('/api/hiring/candidates/:id/forward', auth(['hr', 'admin']), async (req, res) => {
+app.post('/api/hiring/candidates/:id/forward', auth(), hiringOnly, async (req, res) => {
   try {
     const result = await query(
       `UPDATE hiring_candidates SET status = 'forwarded', forwarded_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`,
@@ -2947,7 +2956,7 @@ app.post('/api/hiring/candidates/:id/forward', auth(['hr', 'admin']), async (req
   }
 });
 
-app.delete('/api/hiring/candidates/:id', auth(['hr', 'admin']), async (req, res) => {
+app.delete('/api/hiring/candidates/:id', auth(), hiringOnly, async (req, res) => {
   try {
     await query('DELETE FROM hiring_candidates WHERE id = $1', [req.params.id]);
     res.json({ message: 'Deleted' });
@@ -3424,6 +3433,7 @@ async function init() {
         connected_calls INTEGER DEFAULT 0,
         nominations INTEGER DEFAULT 0,
         summary TEXT,
+        late_login BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (user_id, date)
       );
@@ -3499,6 +3509,7 @@ async function init() {
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_start TIMESTAMPTZ`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_end TIMESTAMPTZ`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_break_minutes INTEGER DEFAULT 0`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS late_login BOOLEAN DEFAULT false`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

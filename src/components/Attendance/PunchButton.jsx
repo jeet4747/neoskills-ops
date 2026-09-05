@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { LogIn, LogOut, Coffee, Plane, DoorOpen, ChevronDown, PlayCircle, Clock } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Plane, DoorOpen, ChevronDown, PlayCircle, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '../../services/api';
 import Modal from '../ui/Modal';
 
 const ACTION_SET = {
   punch_in: { key: 'punch_in', label: 'Punch In', icon: LogIn },
+  late_login: { key: 'late_login', label: 'Late Login', icon: AlertTriangle },
   on_break: { key: 'on_break', label: 'On Break', icon: Coffee },
   on_leave: { key: 'on_leave', label: 'On Leave', icon: Plane },
   resume: { key: 'resume', label: 'Back to Work', icon: PlayCircle },
@@ -13,7 +14,7 @@ const ACTION_SET = {
 };
 
 const AVAILABLE = {
-  null: ['punch_in'],
+  null: ['punch_in', 'late_login'],
   punch_in: ['on_break', 'on_leave', 'early_logout', 'punch_out'],
   on_break: ['resume', 'early_logout', 'punch_out'],
   on_leave: ['resume', 'early_logout', 'punch_out'],
@@ -22,6 +23,7 @@ const AVAILABLE = {
 };
 
 const STATUS_LABELS = {
+  late_login: 'Late Login',
   punch_in: 'Punched In',
   on_break: 'On Break',
   on_leave: 'On Leave',
@@ -30,6 +32,7 @@ const STATUS_LABELS = {
 };
 
 const STATUS_STYLES = {
+  late_login: 'bg-orange-500 hover:bg-orange-600',
   punch_in: 'bg-emerald-500 hover:bg-emerald-600',
   on_break: 'bg-amber-500 hover:bg-amber-600',
   on_leave: 'bg-amber-500 hover:bg-amber-600',
@@ -84,7 +87,10 @@ export default function PunchButton({ user, onChange }) {
     setOpen(false);
     setBusy(true);
     try {
-      const s = await api.attendance.action({ action });
+      const s = await api.attendance.action({
+        action: action === 'late_login' ? 'punch_in' : action,
+        late_login: action === 'late_login',
+      });
       setPunch(s);
       refresh();
     } catch (e) { alert(e.message); }
@@ -111,12 +117,14 @@ export default function PunchButton({ user, onChange }) {
   }
 
   const status = punch?.status || null;
+  const isLate = !!(punch?.late_login);
+  const displayStatus = status === 'punch_in' && isLate ? 'late_login' : status;
   const isOnAbsence = status === 'on_break' || status === 'on_leave';
-  const buttonLabel = status
-    ? (isOnAbsence && punch.break_start ? `${STATUS_LABELS[status]} since ${fmtPunchTime(punch.break_start)}` : STATUS_LABELS[status])
+  const buttonLabel = displayStatus
+    ? (isOnAbsence && punch.break_start ? `${STATUS_LABELS[displayStatus]} since ${fmtPunchTime(punch.break_start)}` : STATUS_LABELS[displayStatus])
     : 'Punch In';
-  const buttonIcon = status
-    ? (status === 'on_break' ? Coffee : status === 'on_leave' ? Plane : status === 'early_logout' ? DoorOpen : LogOut)
+  const buttonIcon = displayStatus
+    ? (displayStatus === 'late_login' ? AlertTriangle : displayStatus === 'on_break' ? Coffee : displayStatus === 'on_leave' ? Plane : displayStatus === 'early_logout' ? DoorOpen : LogOut)
     : LogIn;
   const Icon = buttonIcon;
   const actions = (AVAILABLE[status] || []).map((k) => ACTION_SET[k]);
@@ -127,7 +135,7 @@ export default function PunchButton({ user, onChange }) {
       <button
         onClick={() => setOpen((o) => !o)}
         disabled={busy}
-        className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60 ${STATUS_STYLES[status] || 'bg-emerald-500 hover:bg-emerald-600'}`}
+        className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 text-white text-sm font-semibold rounded-2xl shadow-sm transition-colors disabled:opacity-60 ${STATUS_STYLES[displayStatus] || 'bg-emerald-500 hover:bg-emerald-600'}`}
       >
         <Icon size={16} /> {buttonLabel}
         {hasCalls && <span className="text-[10px] opacity-90 font-normal">({punch.connected_calls || 0}c · {punch.nominations || 0}n)</span>}

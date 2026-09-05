@@ -21,7 +21,7 @@ import Attendance from './pages/Attendance';
 import Hiring from './pages/Hiring';
 import AppLayout from './components/Layout/AppLayout';
 
-function ProtectedRoute({ children, roles }) {
+function ProtectedRoute({ children, roles, ids }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -32,6 +32,9 @@ function ProtectedRoute({ children, roles }) {
   }
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+  if (ids && !ids.includes(user.id)) {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -85,7 +88,7 @@ export default function App() {
         <Route
           path="hiring"
           element={
-            <ProtectedRoute roles={['hr', 'admin']}>
+            <ProtectedRoute ids={[19]}>
               <Hiring />
             </ProtectedRoute>
           }
@@ -126,7 +129,7 @@ export default function App() {
         <Route
           path="broadcast"
           element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} ids={[14]}>
               <Broadcast />
             </ProtectedRoute>
           }
