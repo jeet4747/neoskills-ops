@@ -1285,12 +1285,21 @@ const BATCH_STATS_JOIN = `
     GROUP BY bm.batch_id
   ) m ON m.batch_id = b.id
 `;
+const BATCH_STATUS = `
+  CASE
+    WHEN b.end_date IS NOT NULL AND b.end_date < CURRENT_DATE THEN 'completed'
+    WHEN b.status = 'completed' THEN 'completed'
+    WHEN b.start_date IS NOT NULL AND b.start_date <= CURRENT_DATE THEN 'started'
+    ELSE 'planned'
+  END AS derived_status
+`;
 
 app.get('/api/batches', auth(), async (req, res) => {
   try {
     const result = await query(
-      `SELECT b.*, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} ORDER BY b.created_at DESC`
+      `SELECT b.*, ${BATCH_STATUS}, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} ORDER BY b.created_at DESC`
     );
+    result.rows.forEach((r) => { r.status = r.derived_status; delete r.derived_status; });
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1300,10 +1309,12 @@ app.get('/api/batches', auth(), async (req, res) => {
 app.get('/api/batches/:id', auth(), async (req, res) => {
   try {
     const batch = await query(
-      `SELECT b.*, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} WHERE b.id = $1`,
+      `SELECT b.*, ${BATCH_STATUS}, ${BATCH_STATS} FROM batches b ${BATCH_STATS_JOIN} WHERE b.id = $1`,
       [req.params.id]
     );
     if (!batch.rows.length) return res.status(404).json({ error: 'Batch not found' });
+    const row = { ...batch.rows[0], status: batch.rows[0].derived_status };
+    delete row.derived_status;
     const members = await query(
       `SELECT e.id AS enrollment_id, e.course_name, e.total_amount, e.status AS enrollment_status,
               s.name AS student_name, s.phone AS student_phone, s.email AS student_email,
@@ -1320,7 +1331,7 @@ app.get('/api/batches/:id', auth(), async (req, res) => {
        ORDER BY s.name`,
       [req.params.id]
     );
-    res.json({ ...batch.rows[0], members: members.rows });
+    res.json({ ...row, members: members.rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1328,13 +1339,15 @@ app.get('/api/batches/:id', auth(), async (req, res) => {
 
 app.post('/api/batches', auth(), async (req, res) => {
   try {
-    const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
+    const { name, course_name, trainer_name, start_date, end_date, zoom_link } = req.body;
     if (!name || !name.trim())
       return res.status(400).json({ error: 'Batch name is required' });
     const result = await query(
-      `INSERT INTO batches (name, course_name, trainer_name, start_date, status, zoom_link, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [name.trim(), course_name || null, trainer_name || null, start_date || null, status === 'completed' ? 'completed' : 'active', zoom_link || null, req.user.id]
+      `INSERT INTO batches (name, course_name, trainer_name, start_date, end_date, status, zoom_link, created_by)
+       VALUES ($1, $2, $3, $4, $5,
+               CASE WHEN $4::date IS NOT NULL AND $4::date <= CURRENT_DATE THEN 'started' ELSE 'planned' END,
+               $6, $7) RETURNING *`,
+      [name.trim(), course_name || null, trainer_name || null, start_date || null, end_date || null, zoom_link || null, req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -1344,7 +1357,7 @@ app.post('/api/batches', auth(), async (req, res) => {
 
 app.put('/api/batches/:id', auth(), async (req, res) => {
   try {
-    const { name, course_name, trainer_name, start_date, status, zoom_link } = req.body;
+    const { name, course_name, trainer_name, start_date, end_date, zoom_link } = req.body;
     const existing = await query('SELECT id FROM batches WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Batch not found' });
     const result = await query(
@@ -1353,10 +1366,10 @@ app.put('/api/batches/:id', auth(), async (req, res) => {
          course_name = COALESCE($2, course_name),
          trainer_name = COALESCE($3, trainer_name),
          start_date = COALESCE($4, start_date),
-         status = CASE WHEN $5::text IN ('active', 'completed') THEN $5::text ELSE status END,
+         end_date = COALESCE($5, end_date),
          zoom_link = COALESCE($6, zoom_link)
        WHERE id = $7 RETURNING *`,
-      [name?.trim() || null, course_name || null, trainer_name || null, start_date || null, status || null, zoom_link || null, req.params.id]
+      [name?.trim() || null, course_name || null, trainer_name || null, start_date || null, end_date || null, zoom_link || null, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (e) {
@@ -3320,7 +3333,8 @@ async function init() {
         course_name TEXT,
         trainer_name TEXT,
         start_date DATE,
-        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+        end_date DATE,
+        status TEXT DEFAULT 'planned' CHECK (status IN ('active', 'planned', 'started', 'completed')),
         created_by INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -3496,6 +3510,7 @@ async function init() {
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
       await query(`UPDATE enrollments SET training_month = to_char(created_at, 'YYYY-MM') WHERE training_month IS NULL OR training_month = ''`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
+      await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS end_date DATE`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS connected_calls INTEGER DEFAULT 0`);
@@ -3506,6 +3521,8 @@ async function init() {
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_end TIMESTAMPTZ`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_break_minutes INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS late_login BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE batches DROP CONSTRAINT IF EXISTS batches_status_check`);
+      await query(`ALTER TABLE batches ADD CONSTRAINT batches_status_check CHECK (status IN ('active', 'planned', 'started', 'completed'))`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p

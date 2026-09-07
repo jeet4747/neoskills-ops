@@ -17,7 +17,7 @@ function fmt(n) {
 }
 
 function emptyForm() {
-  return { name: '', course_name: '', trainer_name: '', start_date: '', status: 'active', zoom_link: '' };
+  return { name: '', course_name: '', trainer_name: '', start_date: '', end_date: '', zoom_link: '' };
 }
 
 function downloadCsv(filename, headers, rows) {
@@ -65,6 +65,8 @@ export default function Batches() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -94,6 +96,11 @@ export default function Batches() {
     });
   }, [batches, search, statusFilter]);
 
+  const plannedBatches = useMemo(() => filteredBatches.filter((b) => b.status === 'planned'), [filteredBatches]);
+  const oldBatches = useMemo(() => filteredBatches.filter((b) => b.status === 'started' || b.status === 'completed'), [filteredBatches]);
+  const showPlanned = !statusFilter || statusFilter === 'planned';
+  const showOld = !statusFilter || statusFilter === 'started' || statusFilter === 'completed';
+
   const chartData = useMemo(() => batches.map((b) => ({
     name: b.name.length > 12 ? b.name.slice(0, 12) + '…' : b.name,
     fullName: b.name,
@@ -109,7 +116,7 @@ export default function Batches() {
   function openCreate() { setEditing(null); setForm(emptyForm()); setShowForm(true); }
   function openEdit(b) {
     setEditing(b);
-    setForm({ name: b.name || '', course_name: b.course_name || '', trainer_name: b.trainer_name || '', start_date: b.start_date ? b.start_date.slice(0, 10) : '', status: b.status || 'active', zoom_link: b.zoom_link || '' });
+    setForm({ name: b.name || '', course_name: b.course_name || '', trainer_name: b.trainer_name || '', start_date: b.start_date ? b.start_date.slice(0, 10) : '', end_date: b.end_date ? b.end_date.slice(0, 10) : '', zoom_link: b.zoom_link || '' });
     setShowForm(true);
   }
 
@@ -124,10 +131,17 @@ export default function Batches() {
     finally { setSaving(false); }
   }
 
-  async function handleDelete(b) {
-    if (!window.confirm(`Delete batch "${b.name}"?`)) return;
-    try { await api.batches.remove(b.id); toast.success('Batch deleted'); if (detail?.id === b.id) setDetail(null); load(); }
-    catch (e) { toast.error(e.message); }
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await api.batches.remove(deleteTarget.id);
+      toast.success('Batch deleted');
+      if (detail?.id === deleteTarget.id) setDetail(null);
+      setDeleteTarget(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setDeleting(false); }
   }
 
   async function openDetail(b) {
@@ -150,6 +164,65 @@ export default function Batches() {
     try { setAdding(true); await api.batches.addMembers(detail.id, selected); toast.success(`${selected.length} student(s) added`); setShowAdd(false); openDetail(detail); load(); }
     catch (e) { toast.error(e.message); }
     finally { setAdding(false); }
+  }
+
+  function renderBatchCard(b) {
+    const pending = Number(b.total_fee || 0) - Number(b.received || 0);
+    const pct = Number(b.total_fee || 0) ? Math.round((Number(b.received || 0) / Number(b.total_fee || 0)) * 100) : 0;
+    return (
+      <div key={b.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden">
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <ProgressRing pct={pct} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-gray-900 truncate">{b.name}</h3>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {b.course_name && <span className="flex items-center gap-1 text-xs text-gray-500"><GraduationCap size={12} /> {b.course_name}</span>}
+                    {b.trainer_name && <span className="text-xs text-gray-500">by {b.trainer_name}</span>}
+                    {b.start_date && <span className="flex items-center gap-1 text-xs text-gray-400"><Calendar size={11} /> Starts {new Date(b.start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+                    {b.status === 'completed' && b.end_date && <span className="flex items-center gap-1 text-xs text-gray-400"><Calendar size={11} /> {new Date(b.end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+                  </div>
+                </div>
+                <Badge status={b.status}>{b.status.charAt(0).toUpperCase() + b.status.slice(1)}</Badge>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-50">
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase">Students</p>
+                  <p className="text-sm font-bold text-gray-900 flex items-center gap-1"><Users size={13} className="text-gray-400" /> {b.student_count || 0}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase">Received</p>
+                  <p className="text-sm font-bold text-emerald-600">{fmt(b.received)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase">Pending</p>
+                  <p className="text-sm font-bold text-amber-600">{fmt(pending)}</p>
+                </div>
+              </div>
+
+              <div className="w-full bg-gray-100 rounded-full h-1.5 mt-3">
+                <div className={`h-1.5 rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-primary-500' : 'bg-gray-200'}`} style={{ width: `${Math.min(100, pct)}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center border-t border-gray-50 bg-gray-50/50">
+          <button onClick={() => openDetail(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors border-r border-gray-100">
+            <Eye size={15} /> View
+          </button>
+          <button onClick={() => openEdit(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border-r border-gray-100">
+            <Pencil size={15} /> Edit
+          </button>
+          <button onClick={() => setDeleteTarget(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
+            <Trash2 size={15} /> Delete
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function handleRemoveMember(m) {
@@ -186,7 +259,7 @@ export default function Batches() {
   function exportBatches() {
     if (!filteredBatches.length) { toast.info('No data to export'); return; }
     const headers = 'Batch,Course,Trainer,Start Date,Status,Students,Total Fee,Received,Pending';
-    const rows = filteredBatches.map((b) => `"${b.name}","${b.course_name || ''}","${b.trainer_name || ''}",${b.start_date ? b.start_date.slice(0, 10) : ''},${b.status === 'completed' ? 'Completed' : 'Active'},${b.student_count || 0},${Number(b.total_fee || 0)},${Number(b.received || 0)},${Number(b.total_fee || 0) - Number(b.received || 0)}`);
+    const rows = filteredBatches.map((b) => `"${b.name}","${b.course_name || ''}","${b.trainer_name || ''}",${b.start_date ? b.start_date.slice(0, 10) : ''},${(b.status && b.status.charAt(0).toUpperCase() + b.status.slice(1)) || 'Active'},${b.student_count || 0},${Number(b.total_fee || 0)},${Number(b.received || 0)},${Number(b.total_fee || 0) - Number(b.received || 0)}`);
     downloadCsv('batches.csv', headers, rows); toast.success('Batches exported');
   }
 
@@ -255,7 +328,8 @@ export default function Batches() {
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 sm:w-40">
           <option value="">All Status</option>
-          <option value="active">Active</option>
+          <option value="planned">Planned</option>
+          <option value="started">Started</option>
           <option value="completed">Completed</option>
         </select>
       </div>
@@ -268,64 +342,39 @@ export default function Batches() {
           <p className="text-gray-500 text-sm">{batches.length === 0 ? 'No batches yet. Create your first batch.' : 'No batches match your search.'}</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filteredBatches.map((b) => {
-            const pending = Number(b.total_fee || 0) - Number(b.received || 0);
-            const pct = Number(b.total_fee || 0) ? Math.round((Number(b.received || 0) / Number(b.total_fee || 0)) * 100) : 0;
-            return (
-              <div key={b.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-start gap-3">
-                    <ProgressRing pct={pct} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="text-base font-bold text-gray-900 truncate">{b.name}</h3>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                            {b.course_name && <span className="flex items-center gap-1 text-xs text-gray-500"><GraduationCap size={12} /> {b.course_name}</span>}
-                            {b.trainer_name && <span className="text-xs text-gray-500">by {b.trainer_name}</span>}
-                            {b.start_date && <span className="flex items-center gap-1 text-xs text-gray-400"><Calendar size={11} /> {new Date(b.start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
-                          </div>
-                        </div>
-                        <Badge status={b.status}>{b.status === 'completed' ? 'Completed' : 'Active'}</Badge>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-50">
-                        <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Students</p>
-                          <p className="text-sm font-bold text-gray-900 flex items-center gap-1"><Users size={13} className="text-gray-400" /> {b.student_count || 0}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Received</p>
-                          <p className="text-sm font-bold text-emerald-600">{fmt(b.received)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-gray-400 uppercase">Pending</p>
-                          <p className="text-sm font-bold text-amber-600">{fmt(pending)}</p>
-                        </div>
-                      </div>
-
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 mt-3">
-                        <div className={`h-1.5 rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-primary-500' : 'bg-gray-200'}`} style={{ width: `${Math.min(100, pct)}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center border-t border-gray-50 bg-gray-50/50">
-                  <button onClick={() => openDetail(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors border-r border-gray-100">
-                    <Eye size={15} /> View
-                  </button>
-                  <button onClick={() => openEdit(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border-r border-gray-100">
-                    <Pencil size={15} /> Edit
-                  </button>
-                  <button onClick={() => handleDelete(b)} className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
-                    <Trash2 size={15} /> Delete
-                  </button>
-                </div>
+        <div className="space-y-8">
+          {showPlanned && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Planned Batches</h2>
+                <span className="text-xs font-medium text-gray-400">({plannedBatches.length})</span>
               </div>
-            );
-          })}
+              {plannedBatches.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-2xl border border-gray-100">
+                  <p className="text-sm text-gray-400">No planned batches.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">{plannedBatches.map(renderBatchCard)}</div>
+              )}
+            </div>
+          )}
+          {showOld && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Old Batches</h2>
+                <span className="text-xs font-medium text-gray-400">({oldBatches.length})</span>
+              </div>
+              {oldBatches.length === 0 ? (
+                <div className="text-center py-10 bg-white rounded-2xl border border-gray-100">
+                  <p className="text-sm text-gray-400">No old batches yet. Batches move here automatically once they start.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">{oldBatches.map(renderBatchCard)}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -373,13 +422,11 @@ export default function Batches() {
               <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className="input-field" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input-field">
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">End Date</label>
+              <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} className="input-field" />
             </div>
           </div>
+          <p className="text-xs text-gray-500">Status is automatic: Planned until the start date, Started once it begins, Completed after the end date passes.</p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Zoom Meeting Link</label>
             <input value={form.zoom_link} onChange={(e) => setForm({ ...form, zoom_link: e.target.value })} placeholder="https://zoom.us/j/..." className="input-field" />
@@ -398,6 +445,8 @@ export default function Batches() {
               {detail.course_name && <span className="flex items-center gap-1"><GraduationCap size={14} /> {detail.course_name}</span>}
               {detail.trainer_name && <span>Trainer: {detail.trainer_name}</span>}
               {detail.start_date && <span className="flex items-center gap-1"><Calendar size={14} /> {new Date(detail.start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+              {detail.end_date && <span className="flex items-center gap-1"><Calendar size={14} /> Ends {new Date(detail.end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+              <Badge status={detail.status}>{(detail.status || 'planned').charAt(0).toUpperCase() + (detail.status || 'planned').slice(1)}</Badge>
             </div>
             <div className="flex flex-wrap gap-2">
               {canManage && <button onClick={exportRoster} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-medium rounded-xl hover:bg-gray-50"><Download size={14} /> Export</button>}
@@ -497,6 +546,20 @@ export default function Batches() {
                 <p className="text-xs text-gray-500 truncate max-w-[160px]">{m.student_email || <span className="text-red-400">No email</span>}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Batch">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete batch <span className="font-semibold text-gray-900">{deleteTarget?.name}</span>? This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setDeleteTarget(null)} className="btn-secondary">Cancel</button>
+            <button onClick={handleDelete} disabled={deleting} className="px-4 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 disabled:opacity-50">
+              {deleting ? 'Deleting...' : 'Delete Batch'}
+            </button>
           </div>
         </div>
       </Modal>
