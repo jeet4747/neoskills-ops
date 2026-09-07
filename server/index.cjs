@@ -1069,19 +1069,15 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
 });
 
 app.delete('/api/tasks/:id', auth(), async (req, res) => {
-  try {
-    const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
-    if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
-    const task = existing.rows[0];
-    const isManager = req.user.role === 'admin' || req.user.role === 'manager';
-    if (!isManager && task.created_by !== req.user.id)
-      return res.status(403).json({ error: 'Not authorized to delete this task' });
-    await query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
-    res.json({ message: 'Task deleted' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+   try {
+     const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+     if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
+     await query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
+     res.json({ message: 'Task deleted' });
+   } catch (e) {
+     res.status(500).json({ error: e.message });
+   }
+ });
 
 app.get('/api/task-labels', auth(), async (req, res) => {
   try {

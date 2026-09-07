@@ -291,13 +291,11 @@ export default function Tasks() {
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <h4 className="text-sm font-medium text-gray-900 flex-1 min-w-0">{task.title}</h4>
-                        {canManage && (
-                          <button onClick={(ev) => { ev.stopPropagation(); handleDelete(task); }}
-                            className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                            title="Delete task">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
+                        <button onClick={(ev) => { ev.stopPropagation(); handleDelete(task); }}
+                          className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                          title="Delete task">
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                       {task.description && (
                         <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
