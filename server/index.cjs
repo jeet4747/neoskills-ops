@@ -1446,6 +1446,10 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
     }
     const sessions = await query(
       `SELECT ts.*,
+        CASE WHEN ts.status IN ('completed', 'canceled') THEN ts.status
+             WHEN ts.session_date <= CURRENT_DATE THEN 'batch_started'
+             ELSE 'in_future'
+        END AS effective_status,
         b.name AS batch_name,
         u.name AS created_by_name
        FROM training_sessions ts
@@ -1498,8 +1502,10 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       const enrollments = enrollMap[s.id] || [];
       const pendingEnrollments = enrollments.filter((e) => e.pending_amount > 0 || e.has_pending_payment);
       const totalPending = enrollments.reduce((sum, e) => sum + (parseFloat(e.pending_amount) || 0), 0);
+      const row = { ...s, status: s.effective_status };
+      delete row.effective_status;
       return {
-        ...s,
+        ...row,
         nominations: nomMap[s.id] || [],
         total_tentative: (nomMap[s.id] || []).reduce((sum, n) => sum + n.tentative_count, 0),
         confirmed_enrollments: enrollments,

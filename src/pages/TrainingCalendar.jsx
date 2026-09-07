@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
-  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap,
+  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, CheckCircle2, Undo2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -93,21 +93,15 @@ export default function TrainingCalendar() {
   const sortedSessions = [...sessions]
     .filter((s) => statusFilter === 'all' || s.status === statusFilter)
     .sort((a, b) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const isActive = (st) => st === 'in_future' || st === 'batch_started';
-      const aFuture = isActive(a.status) && (a.session_date || '') >= today;
-      const bFuture = isActive(b.status) && (b.session_date || '') >= today;
-      const aDone = a.status === 'completed' || a.status === 'canceled';
-      const bDone = b.status === 'completed' || b.status === 'canceled';
-      const rank = (f, d) => (f ? 0 : d ? 1 : 2);
-      const ra = rank(aFuture, aDone);
-      const rb = rank(bFuture, bDone);
-      if (ra !== rb) return ra - rb;
-      const dA = a.session_date || '';
-      const dB = b.session_date || '';
-      if (dA !== dB) return dA.localeCompare(dB);
+      const r = (b.session_date || '').localeCompare(a.session_date || '');
+      if (r !== 0) return r;
       return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
     });
+
+  const plannedSessions = sortedSessions.filter((s) => s.status === 'in_future').slice().reverse();
+  const oldSessions = sortedSessions.filter((s) => s.status !== 'in_future');
+  const showPlanned = statusFilter === 'all' || statusFilter === 'in_future';
+  const showOld = statusFilter === 'all' || statusFilter === 'batch_started' || statusFilter === 'completed' || statusFilter === 'canceled';
 
   const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalReceived = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0), 0);
@@ -151,6 +145,143 @@ export default function TrainingCalendar() {
       toast.success('Session deleted');
       load();
     } catch (e) { toast.error(e.message); }
+  }
+  async function markCompleted(s) {
+    try {
+      await api.calendar.update(s.id, { status: 'completed' });
+      toast.success(`${s.course_name} marked completed`);
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  async function reopenSession(s) {
+    try {
+      await api.calendar.update(s.id, { status: 'in_future' });
+      toast.success('Session marked In Future');
+      load();
+    } catch (e) { toast.error(e.message); }
+  }
+  function renderSessionCard(s) {
+    const count = s.confirmed_count || 0;
+    const st = getStatusVariant(s.status);
+    const isOpen = viewSession === s.id;
+    const received = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0);
+    const pending = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0);
+
+    return (
+      <Card key={s.id}>
+        {/* Main Row */}
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-4">
+            {/* Date */}
+            <div className="shrink-0 w-14 text-center">
+              <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
+              <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
+              <p className="text-[9px] text-gray-300">{new Date(s.session_date).getFullYear()}</p>
+            </div>
+
+            <div className="w-px h-12 bg-gray-100 shrink-0" />
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
+                {received > 0 && (
+                  <span className="text-sm font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</span>
+                )}
+                {pending > 0 && (
+                  <span className="text-sm font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {s.batch_name && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                    <GraduationCap size={10} /> {s.batch_name}
+                  </span>
+                )}
+                {s.timing && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                    <Clock size={10} /> {s.timing}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="shrink-0">
+              <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => setViewSession(isOpen ? null : s.id)}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                View ({count})
+              </button>
+              <button onClick={() => openAddCandidate(s)}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
+                <Plus size={12} /> Add
+              </button>
+              {s.status === 'batch_started' && (
+                <button onClick={() => markCompleted(s)} title="Mark Completed"
+                  className="p-1.5 text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
+                  <CheckCircle2 size={14} />
+                </button>
+              )}
+              {s.status === 'completed' && (
+                <button onClick={() => reopenSession(s)} title="Reopen"
+                  className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                  <Undo2 size={14} />
+                </button>
+              )}
+              <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                <Pencil size={14} />
+              </button>
+              <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded: Candidate List */}
+        {isOpen && (
+          <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+            {(s.confirmed_enrollments || []).length > 0 ? (
+              <div className="space-y-2">
+                {(s.confirmed_enrollments || []).map((ce, idx) => (
+                  <div key={idx} className="flex items-center gap-3 py-2 px-3 bg-white rounded-xl border border-gray-100">
+                    <span className="w-6 h-6 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                        {ce.poc_name && <span>POC: {ce.poc_name}</span>}
+                        {ce.student_phone && <span>{ce.student_phone}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {ce.paid_amount > 0 && (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
+                      )}
+                      {ce.pending_amount > 0 && (
+                        <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
+                      )}
+                      <button onClick={() => handleRemoveCandidate(s, ce)} title="Remove candidate"
+                        className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 py-4 text-center">No candidates added yet</p>
+            )}
+          </div>
+        )}
+      </Card>
+    );
   }
   async function openAddCandidate(session) {
     setAddSession(session);
@@ -281,118 +412,43 @@ export default function TrainingCalendar() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {sortedSessions.map((s) => {
-            const count = s.confirmed_count || 0;
-            const st = getStatusVariant(s.status);
-            const isOpen = viewSession === s.id;
-            const received = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0);
-            const pending = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0);
-
-            return (
-              <Card key={s.id}>
-                {/* Main Row */}
-                <div className="px-5 py-4">
-                  <div className="flex items-center gap-4">
-                    {/* Date */}
-                    <div className="shrink-0 w-14 text-center">
-                      <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
-                      <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
-                      <p className="text-[9px] text-gray-300">{new Date(s.session_date).getFullYear()}</p>
-                    </div>
-
-                    <div className="w-px h-12 bg-gray-100 shrink-0" />
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{s.course_name}</p>
-                        {received > 0 && (
-                          <span className="text-sm font-bold text-emerald-600">₹{received.toLocaleString('en-IN')}</span>
-                        )}
-                        {pending > 0 && (
-                          <span className="text-sm font-bold text-amber-600">₹{pending.toLocaleString('en-IN')}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {s.batch_name && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-                            <GraduationCap size={10} /> {s.batch_name}
-                          </span>
-                        )}
-                        {s.timing && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
-                            <Clock size={10} /> {s.timing}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Status */}
-                    <div className="shrink-0">
-                      <Badge status={st} className="text-[10px]">{STATUSES.find((x) => x.value === s.status)?.label}</Badge>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => setViewSession(isOpen ? null : s.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        View ({count})
-                      </button>
-                      <button onClick={() => openAddCandidate(s)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors">
-                        <Plus size={12} /> Add
-                      </button>
-                      <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setDeleting(s)} className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded: Candidate List */}
-                {isOpen && (
-                  <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
-                    {(s.confirmed_enrollments || []).length > 0 ? (
-                      <div className="space-y-2">
-                        {(s.confirmed_enrollments || []).map((ce, idx) => (
-                          <div key={idx} className="flex items-center gap-3 py-2 px-3 bg-white rounded-xl border border-gray-100">
-                            <span className="w-6 h-6 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
-                                {ce.poc_name && <span>POC: {ce.poc_name}</span>}
-                                {ce.student_phone && <span>{ce.student_phone}</span>}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {ce.paid_amount > 0 && (
-                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">₹{parseFloat(ce.paid_amount).toLocaleString('en-IN')} paid</span>
-                              )}
-                              {ce.pending_amount > 0 && (
-                                <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{parseFloat(ce.pending_amount).toLocaleString('en-IN')} due</span>
-                              )}
-                              <button onClick={() => handleRemoveCandidate(s, ce)} title="Remove candidate"
-                                className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                <X size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400 py-4 text-center">No candidates added yet</p>
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+        <div className="space-y-8">
+          {showPlanned && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Planned Batches</h2>
+                <span className="text-xs font-medium text-gray-400">({plannedSessions.length})</span>
+              </div>
+              {plannedSessions.length === 0 ? (
+                <Card>
+                  <CardBody className="py-8 text-center">
+                    <p className="text-sm text-gray-400">No planned batches.</p>
+                  </CardBody>
+                </Card>
+              ) : (
+                <div className="space-y-3">{plannedSessions.map(renderSessionCard)}</div>
+              )}
+            </div>
+          )}
+          {showOld && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Old Batches</h2>
+                <span className="text-xs font-medium text-gray-400">({oldSessions.length})</span>
+              </div>
+              {oldSessions.length === 0 ? (
+                <Card>
+                  <CardBody className="py-8 text-center">
+                    <p className="text-sm text-gray-400">No old batches yet. Batches move here automatically once they start.</p>
+                  </CardBody>
+                </Card>
+              ) : (
+                <div className="space-y-3">{oldSessions.map(renderSessionCard)}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -493,11 +549,7 @@ export default function TrainingCalendar() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input-field">
-              {STATUSES.map((st) => (
-                <option key={st.value} value={st.value}>{st.label}</option>
-              ))}
-            </select>
+            <p className="text-xs text-gray-400">Automatic — In Future until the batch date, Batch Started once it begins. Use the ✓ button on a started batch to mark it Completed.</p>
           </div>
           <div className="flex gap-2 pt-2">
             <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>
