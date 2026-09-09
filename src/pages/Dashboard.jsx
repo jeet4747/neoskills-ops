@@ -111,7 +111,7 @@ export default function Dashboard() {
 
       const promises = [
         api.dashboard.summary({ month: selectedMonth }),
-        isManager ? api.dashboard.team({ month: selectedMonth }) : Promise.resolve([]),
+        api.dashboard.team({ month: selectedMonth }),
         api.dashboard.trends(),
         isManager ? api.dashboard.sourceAnalytics() : Promise.resolve([]),
         isSales ? api.enrollments.list({}) : Promise.resolve([]),

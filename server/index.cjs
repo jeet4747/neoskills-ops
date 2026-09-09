@@ -2429,7 +2429,7 @@ app.get('/api/dashboard/summary', auth(), async (req, res) => {
   }
 });
 
-app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops']), async (req, res) => {
+app.get('/api/dashboard/team', auth(['admin', 'manager', 'ops', 'sales']), async (req, res) => {
   try {
     const { month } = req.query;
     const m = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
