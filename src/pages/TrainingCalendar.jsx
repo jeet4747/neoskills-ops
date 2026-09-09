@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
-  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, CheckCircle2, Undo2, Send, ExternalLink, MessageSquare,
+  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, CheckCircle2, Undo2, Send, ExternalLink, MessageSquare, Mail,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -87,6 +87,7 @@ export default function TrainingCalendar() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState('planned');
   const [inviteSession, setInviteSession] = useState(null);
+  const [inviteChannel, setInviteChannel] = useState('whatsapp');
 
   const load = useCallback(async () => {
     try {
@@ -202,6 +203,13 @@ export default function TrainingCalendar() {
     if (!num) return toast.error('No valid phone number');
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(buildInviteMessage(s))}`, '_blank');
   }
+  function sendEmail(ce, s) {
+    const email = ce.student_email || '';
+    if (!email) return toast.error('No email for this candidate');
+    const subject = `Invite - ${s.course_name} batch on ${fmtDate(s.session_date)}`;
+    const body = `Dear ${ce.student_name || ce.enrollment_name || 'Candidate'},\n\n${buildInviteMessage(s)}`;
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
   function renderSessionCard(s) {
     const count = s.confirmed_count || 0;
     const st = getStatusVariant(s.status);
@@ -276,7 +284,7 @@ export default function TrainingCalendar() {
                   <Undo2 size={14} />
                 </button>
               )}
-              <button onClick={() => setInviteSession(s)} title="Send invite link"
+              <button onClick={() => { setInviteSession(s); setInviteChannel('whatsapp'); }} title="Send invite link"
                 className="p-1.5 text-gray-300 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
                 <Send size={14} />
               </button>
@@ -689,26 +697,64 @@ export default function TrainingCalendar() {
 
             <button onClick={() => copyInvite(inviteSession)} className="btn-secondary w-full text-sm">Copy Invite Message</button>
 
-            {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).length > 0 ? (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Send to candidates on WhatsApp</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).map((ce, idx) => (
-                    <button key={idx} onClick={() => openWhatsApp(ce.student_phone, inviteSession)}
-                      className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-left">
-                      <span className="min-w-0">
-                        <span className="block text-xs font-semibold text-emerald-800 truncate">{ce.student_name || ce.enrollment_name}</span>
-                        <span className="block text-[10px] text-emerald-600">{ce.student_phone}</span>
-                      </span>
-                      <MessageSquare size={14} className="text-emerald-600 shrink-0" />
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-gray-400 mt-2">Each button opens WhatsApp with the invite message prefilled for that candidate.</p>
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setInviteChannel('whatsapp')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${inviteChannel === 'whatsapp' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  <MessageSquare size={13} /> WhatsApp
+                </button>
+                <button onClick={() => setInviteChannel('email')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${inviteChannel === 'email' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  <Mail size={13} /> Email
+                </button>
               </div>
-            ) : (
-              <p className="text-xs text-gray-400 text-center py-1">No candidates with phone numbers in this batch yet.</p>
-            )}
+
+              {inviteChannel === 'whatsapp' && (
+                (inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).length > 0 ? (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Send to candidates on WhatsApp</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).map((ce, idx) => (
+                        <button key={idx} onClick={() => openWhatsApp(ce.student_phone, inviteSession)}
+                          className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-left">
+                          <span className="min-w-0">
+                            <span className="block text-xs font-semibold text-emerald-800 truncate">{ce.student_name || ce.enrollment_name}</span>
+                            <span className="block text-[10px] text-emerald-600">{ce.student_phone}</span>
+                          </span>
+                          <MessageSquare size={14} className="text-emerald-600 shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Each button opens WhatsApp with the invite message prefilled for that candidate.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-1">No candidates with phone numbers in this batch yet.</p>
+                )
+              )}
+
+              {inviteChannel === 'email' && (
+                (inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_email).length > 0 ? (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Send to candidates by email</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_email).map((ce, idx) => (
+                        <button key={idx} onClick={() => sendEmail(ce, inviteSession)}
+                          className="flex items-center justify-between gap-2 p-2.5 bg-primary-50 hover:bg-primary-100 rounded-xl transition-colors text-left">
+                          <span className="min-w-0">
+                            <span className="block text-xs font-semibold text-primary-800 truncate">{ce.student_name || ce.enrollment_name}</span>
+                            <span className="block text-[10px] text-primary-600 truncate">{ce.student_email}</span>
+                          </span>
+                          <Mail size={14} className="text-primary-600 shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">Each button opens your email app with the invite prefilled for that candidate.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-1">No candidate emails in this batch yet.</p>
+                )
+              )}
+            </div>
 
             <button onClick={() => setInviteSession(null)} className="btn-primary w-full">Done</button>
           </div>
