@@ -1448,7 +1448,9 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       `SELECT ts.id, ts.course_name, ts.timing, ts.status, ts.batch_id, ts.created_by,
         ts.created_at, ts.updated_at,
         to_char(ts.session_date, 'YYYY-MM-DD') AS session_date,
-        CASE WHEN ts.status IN ('completed', 'canceled') THEN ts.status
+        CASE
+             WHEN ts.status = 'completed' AND ts.session_date > (NOW() AT TIME ZONE 'Asia/Kolkata')::date THEN 'in_future'
+             WHEN ts.status IN ('completed', 'canceled') THEN ts.status
              WHEN ts.session_date <= (NOW() AT TIME ZONE 'Asia/Kolkata')::date THEN 'batch_started'
              ELSE 'in_future'
         END AS effective_status,
