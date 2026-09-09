@@ -17,11 +17,9 @@ const STATUSES = [
   { value: 'canceled', label: 'Canceled', variant: 'rejected' },
 ];
 const TIMING_SLOTS = [
-  '6:00 AM - 8:00 AM', '7:00 AM - 9:00 AM', '8:00 AM - 10:00 AM',
-  '9:00 AM - 11:00 AM', '10:00 AM - 12:00 PM', '11:00 AM - 1:00 PM',
-  '12:00 PM - 2:00 PM', '1:00 PM - 3:00 PM', '2:00 PM - 4:00 PM',
-  '3:00 PM - 5:00 PM', '4:00 PM - 6:00 PM', '5:00 PM - 7:00 PM',
-  '6:00 PM - 8:00 PM', '7:00 PM - 9:00 PM', '8:00 PM - 10:00 PM',
+  '6 AM', '7 AM', '8 AM', '9 AM', '10 AM', '11 AM',
+  '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM',
+  '6 PM', '7 PM', '8 PM', '9 PM', '10 PM',
   'Custom',
 ];
 
@@ -58,10 +56,10 @@ function splitDate(d) {
 }
 function parseTimingToMinutes(t) {
   if (!t) return 999;
-  const match = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const match = t.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
   if (!match) return 999;
   let h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
+  const m = parseInt(match[2] || '0', 10);
   const ampm = match[3].toUpperCase();
   if (ampm === 'PM' && h !== 12) h += 12;
   if (ampm === 'AM' && h === 12) h = 0;
