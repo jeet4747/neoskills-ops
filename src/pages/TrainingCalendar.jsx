@@ -588,7 +588,14 @@ export default function TrainingCalendar() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
-            <p className="text-xs text-gray-400">Automatic — In Future until the batch date, Batch Started once it begins. Use the ✓ button on a started batch to mark it Completed.</p>
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
+              className="input-field">
+              <option value="in_future">In Future</option>
+              <option value="batch_started">Batch Started</option>
+              <option value="completed">Completed</option>
+              <option value="canceled">Canceled</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Dates update status automatically — a session with pending payments can't be marked Completed.</p>
           </div>
           <div className="flex gap-2 pt-2">
             <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>

@@ -1448,12 +1448,6 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       `SELECT ts.id, ts.course_name, ts.timing, ts.status, ts.batch_id, ts.created_by,
         ts.created_at, ts.updated_at,
         to_char(ts.session_date, 'YYYY-MM-DD') AS session_date,
-        CASE
-             WHEN ts.status = 'completed' AND ts.session_date > (NOW() AT TIME ZONE 'Asia/Kolkata')::date THEN 'in_future'
-             WHEN ts.status IN ('completed', 'canceled') THEN ts.status
-             WHEN ts.session_date <= (NOW() AT TIME ZONE 'Asia/Kolkata')::date THEN 'batch_started'
-             ELSE 'in_future'
-        END AS effective_status,
         b.name AS batch_name,
         u.name AS created_by_name
        FROM training_sessions ts
@@ -1502,12 +1496,20 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       if (!enrollMap[e.session_id]) enrollMap[e.session_id] = [];
       enrollMap[e.session_id].push({ enrollment_id: e.enrollment_id, user_id: e.user_id, enrollment_name: e.enrollment_name, module: e.module, user_name: e.user_name, student_name: e.student_name, student_phone: e.student_phone, training_fee: e.training_fee, paid_amount: e.paid_amount, pending_amount: e.pending_amount, has_pending_payment: e.has_pending_payment, poc_name: e.poc_name, sales_user_id: e.sales_user_id });
     }
+    const istToday = new Date(Date.now()).toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 10);
     const result = sessions.rows.map((s) => {
       const enrollments = enrollMap[s.id] || [];
       const pendingEnrollments = enrollments.filter((e) => e.pending_amount > 0 || e.has_pending_payment);
       const totalPending = enrollments.reduce((sum, e) => sum + (parseFloat(e.pending_amount) || 0), 0);
-      const row = { ...s, status: s.effective_status };
-      delete row.effective_status;
+      let status = s.status;
+      if (status !== 'canceled') {
+        if (!s.session_date || String(s.session_date) > istToday) status = 'in_future';
+        else if (status === 'completed' && pendingEnrollments.length > 0) status = 'batch_started';
+        else if (status === 'completed') status = 'completed';
+        else if (String(s.session_date) <= istToday) status = 'batch_started';
+        else status = 'in_future';
+      }
+      const row = { ...s, status };
       return {
         ...row,
         nominations: nomMap[s.id] || [],
