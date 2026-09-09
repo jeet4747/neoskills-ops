@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Calendar, Pencil, Trash2, X, ChevronLeft, ChevronRight,
-  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, CheckCircle2, Undo2,
+  Search, ChevronDown, ChevronUp, Zap, Clock, GraduationCap, CheckCircle2, Undo2, Send, ExternalLink, MessageSquare,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -76,7 +76,7 @@ export default function TrainingCalendar() {
   const [month, setMonth] = useState(currentMonth());
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', timingCustom: '', status: 'in_future' });
+  const [form, setForm] = useState({ session_date: '', course_name: '', timing: '', timingCustom: '', status: 'in_future', zoom_link: '', whatsapp_group_link: '' });
   const [saving, setSaving] = useState(false);
   const [viewSession, setViewSession] = useState(null);
   const [addSession, setAddSession] = useState(null);
@@ -86,6 +86,7 @@ export default function TrainingCalendar() {
   const [deleting, setDeleting] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState('planned');
+  const [inviteSession, setInviteSession] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -122,7 +123,7 @@ export default function TrainingCalendar() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', timingCustom: '', status: 'in_future' });
+    setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', timingCustom: '', status: 'in_future', zoom_link: '', whatsapp_group_link: '' });
     setShowForm(true);
   }
   function openEdit(s) {
@@ -134,6 +135,8 @@ export default function TrainingCalendar() {
       timing: isCustom ? 'Custom' : (s.timing || ''),
       timingCustom: isCustom ? s.timing : '',
       status: s.status || 'in_future',
+      zoom_link: s.zoom_link || '',
+      whatsapp_group_link: s.whatsapp_group_link || '',
     });
     setShowForm(true);
   }
@@ -172,6 +175,32 @@ export default function TrainingCalendar() {
       toast.success('Session marked In Future');
       load();
     } catch (e) { toast.error(e.message); }
+  }
+  function waPhone(p) {
+    let s = String(p || '').replace(/[^\d]/g, '');
+    if (s.length === 10) s = '91' + s;
+    return s;
+  }
+  function buildInviteMessage(s) {
+    const lines = [
+      `Hello, you are invited to the *${s.course_name}* batch.`,
+      `Date: ${fmtDate(s.session_date)}` + (s.timing ? ` | Timing: ${s.timing}` : ''),
+    ];
+    if (s.zoom_link) lines.push(`Zoom join link: ${s.zoom_link}`);
+    if (s.whatsapp_group_link) lines.push(`WhatsApp group: ${s.whatsapp_group_link}`);
+    lines.push('Please join on time. Thank you - NeoSkill Learning Solutions');
+    return lines.join('\n');
+  }
+  async function copyInvite(s) {
+    try {
+      await navigator.clipboard.writeText(buildInviteMessage(s));
+      toast.success('Invite message copied');
+    } catch (e) { toast.error('Could not copy message'); }
+  }
+  function openWhatsApp(phone, s) {
+    const num = waPhone(phone);
+    if (!num) return toast.error('No valid phone number');
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(buildInviteMessage(s))}`, '_blank');
   }
   function renderSessionCard(s) {
     const count = s.confirmed_count || 0;
@@ -247,6 +276,10 @@ export default function TrainingCalendar() {
                   <Undo2 size={14} />
                 </button>
               )}
+              <button onClick={() => setInviteSession(s)} title="Send invite link"
+                className="p-1.5 text-gray-300 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                <Send size={14} />
+              </button>
               <button onClick={() => openEdit(s)} className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
                 <Pencil size={14} />
               </button>
@@ -585,6 +618,16 @@ export default function TrainingCalendar() {
             )}
           </div>
           <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Zoom invite link</label>
+            <input value={form.zoom_link} onChange={(e) => setForm({ ...form, zoom_link: e.target.value })}
+              placeholder="https://us06web.zoom.us/j/..." className="input-field" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">WhatsApp group link</label>
+            <input value={form.whatsapp_group_link} onChange={(e) => setForm({ ...form, whatsapp_group_link: e.target.value })}
+              placeholder="https://chat.whatsapp.com/..." className="input-field" />
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Status</label>
             <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="input-field">
@@ -600,6 +643,76 @@ export default function TrainingCalendar() {
             <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving...' : editing ? 'Update' : 'Create'}</button>
           </div>
         </div>
+      </Modal>
+
+      {/* Send Invite */}
+      <Modal open={!!inviteSession} onClose={() => setInviteSession(null)} title={inviteSession ? `Invite - ${inviteSession.course_name}` : ''}>
+        {inviteSession && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Calendar size={13} className="text-primary-600" />
+              {fmtDate(inviteSession.session_date)}{inviteSession.timing ? ` at ${inviteSession.timing}` : ''}
+              <span className="ml-auto"><Badge status={getStatusVariant(inviteSession.status)}>{STATUSES.find((x) => x.value === inviteSession.status)?.label}</Badge></span>
+            </div>
+
+            {(!inviteSession.zoom_link && !inviteSession.whatsapp_group_link) && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                <Zap size={14} className="shrink-0 mt-0.5" />
+                <span>No Zoom or WhatsApp group link set yet. Open the pencil (Edit) for this batch and add them.</span>
+              </div>
+            )}
+
+            {inviteSession.zoom_link && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 shrink-0">Zoom</span>
+                <a href={inviteSession.zoom_link} target="_blank" rel="noreferrer"
+                  className="flex-1 min-w-0 text-xs text-primary-600 underline truncate">{inviteSession.zoom_link}</a>
+                <a href={inviteSession.zoom_link} target="_blank" rel="noreferrer" className="p-1.5 text-gray-400 hover:text-primary-600 rounded-lg" title="Open link">
+                  <ExternalLink size={14} />
+                </a>
+              </div>
+            )}
+            {inviteSession.whatsapp_group_link && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 shrink-0">WhatsApp</span>
+                <a href={inviteSession.whatsapp_group_link} target="_blank" rel="noreferrer"
+                  className="flex-1 min-w-0 text-xs text-emerald-600 underline truncate">{inviteSession.whatsapp_group_link}</a>
+                <a href={inviteSession.whatsapp_group_link} target="_blank" rel="noreferrer" className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg" title="Open group">
+                  <MessageSquare size={14} />
+                </a>
+              </div>
+            )}
+
+            <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-600 whitespace-pre-wrap font-mono leading-relaxed">
+              {buildInviteMessage(inviteSession)}
+            </div>
+
+            <button onClick={() => copyInvite(inviteSession)} className="btn-secondary w-full text-sm">Copy Invite Message</button>
+
+            {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).length > 0 ? (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Send to candidates on WhatsApp</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {(inviteSession.confirmed_enrollments || []).filter((ce) => ce.student_phone).map((ce, idx) => (
+                    <button key={idx} onClick={() => openWhatsApp(ce.student_phone, inviteSession)}
+                      className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-left">
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-emerald-800 truncate">{ce.student_name || ce.enrollment_name}</span>
+                        <span className="block text-[10px] text-emerald-600">{ce.student_phone}</span>
+                      </span>
+                      <MessageSquare size={14} className="text-emerald-600 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2">Each button opens WhatsApp with the invite message prefilled for that candidate.</p>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 text-center py-1">No candidates with phone numbers in this batch yet.</p>
+            )}
+
+            <button onClick={() => setInviteSession(null)} className="btn-primary w-full">Done</button>
+          </div>
+        )}
       </Modal>
 
       {/* Delete Confirm */}

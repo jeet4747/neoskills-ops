@@ -1445,7 +1445,7 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       dateFilter = `AND ts.session_date BETWEEN $1 AND $2`;
     }
     const sessions = await query(
-      `SELECT ts.id, ts.course_name, ts.timing, ts.status, ts.batch_id, ts.created_by,
+      `SELECT ts.id, ts.course_name, ts.timing, ts.zoom_link, ts.whatsapp_group_link, ts.status, ts.batch_id, ts.created_by,
         ts.created_at, ts.updated_at,
         to_char(ts.session_date, 'YYYY-MM-DD') AS session_date,
         b.name AS batch_name,
@@ -1555,13 +1555,13 @@ app.get('/api/training-calendar/my-enrollments', auth(), async (req, res) => {
 
 app.post('/api/training-calendar', auth(), async (req, res) => {
   try {
-    const { session_date, course_name, timing, batch_id, status } = req.body;
+    const { session_date, course_name, timing, batch_id, status, zoom_link, whatsapp_group_link } = req.body;
     if (!session_date || !course_name || !course_name.trim())
       return res.status(400).json({ error: 'Date and course name are required' });
     const result = await query(
-      `INSERT INTO training_sessions (session_date, course_name, timing, batch_id, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [session_date, course_name.trim(), timing || null, batch_id || null, status || 'in_future', req.user.id]
+      `INSERT INTO training_sessions (session_date, course_name, timing, batch_id, status, zoom_link, whatsapp_group_link, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [session_date, course_name.trim(), timing || null, batch_id || null, status || 'in_future', zoom_link || null, whatsapp_group_link || null, req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1569,7 +1569,7 @@ app.post('/api/training-calendar', auth(), async (req, res) => {
 
 app.put('/api/training-calendar/:id', auth(), async (req, res) => {
   try {
-    const { session_date, course_name, timing, batch_id, status } = req.body;
+    const { session_date, course_name, timing, batch_id, status, zoom_link, whatsapp_group_link } = req.body;
     const result = await query(
       `UPDATE training_sessions SET
         session_date = COALESCE($1, session_date),
@@ -1577,9 +1577,11 @@ app.put('/api/training-calendar/:id', auth(), async (req, res) => {
         timing = $3,
         batch_id = $4,
         status = COALESCE($5, status),
+        zoom_link = COALESCE($6, zoom_link),
+        whatsapp_group_link = COALESCE($7, whatsapp_group_link),
         updated_at = NOW()
-       WHERE id = $6 RETURNING *`,
-      [session_date, course_name, timing || null, batch_id || null, status || null, req.params.id]
+       WHERE id = $8 RETURNING *`,
+      [session_date, course_name, timing || null, batch_id || null, status || null, zoom_link || null, whatsapp_group_link || null, req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Session not found' });
     res.json(result.rows[0]);
@@ -3419,6 +3421,8 @@ async function init() {
         session_date DATE NOT NULL,
         course_name TEXT NOT NULL,
         timing TEXT,
+        zoom_link TEXT,
+        whatsapp_group_link TEXT,
         status TEXT DEFAULT 'in_future',
         batch_id INTEGER REFERENCES batches(id) ON DELETE SET NULL,
         created_by INTEGER REFERENCES users(id),
@@ -3524,6 +3528,8 @@ async function init() {
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS end_date DATE`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
+      await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
+      await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS connected_calls INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS nominations INTEGER DEFAULT 0`);
