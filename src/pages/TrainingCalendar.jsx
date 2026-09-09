@@ -44,8 +44,17 @@ function nextMonth(m) {
 }
 function fmtDate(d) {
   if (!d) return '';
+  const p = splitDate(d);
+  if (!p) return '';
+  return `${p.day} ${MONTHS[p.month]} ${p.year}`;
+}
+function splitDate(d) {
+  if (!d) return null;
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) - 1, day: parseInt(m[3], 10) };
   const dt = new Date(d);
-  return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+  if (isNaN(dt.getTime())) return null;
+  return { year: dt.getFullYear(), month: dt.getMonth(), day: dt.getDate() };
 }
 function parseTimingToMinutes(t) {
   if (!t) return 999;
@@ -78,6 +87,7 @@ export default function TrainingCalendar() {
   const [sessionEnrollments, setSessionEnrollments] = useState([]);
   const [deleting, setDeleting] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('planned');
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +100,11 @@ export default function TrainingCalendar() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (statusFilter === 'in_future') setViewMode('planned');
+    else if (statusFilter !== 'all') setViewMode('old');
+  }, [statusFilter]);
+
   const sortedSessions = [...sessions]
     .filter((s) => statusFilter === 'all' || s.status === statusFilter)
     .sort((a, b) => {
@@ -98,10 +113,10 @@ export default function TrainingCalendar() {
       return parseTimingToMinutes(a.timing) - parseTimingToMinutes(b.timing);
     });
 
-  const plannedSessions = sortedSessions.filter((s) => s.status === 'in_future').slice().reverse();
+  const plannedSessions = sortedSessions.filter((s) => s.status === 'in_future');
   const oldSessions = sortedSessions.filter((s) => s.status !== 'in_future');
-  const showPlanned = statusFilter === 'all' || statusFilter === 'in_future';
-  const showOld = statusFilter === 'all' || statusFilter === 'batch_started' || statusFilter === 'completed' || statusFilter === 'canceled';
+  const plannedCount = plannedSessions.length;
+  const oldCount = oldSessions.length;
 
   const totalCandidates = sessions.reduce((s, x) => s + (x.confirmed_count || 0), 0);
   const totalReceived = sessions.reduce((s, x) => s + (x.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0), 0);
@@ -166,6 +181,7 @@ export default function TrainingCalendar() {
     const isOpen = viewSession === s.id;
     const received = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.paid_amount) || 0), 0);
     const pending = (s.confirmed_enrollments || []).reduce((a, e) => a + (parseFloat(e.pending_amount) || 0), 0);
+    const dp = splitDate(s.session_date);
 
     return (
       <Card key={s.id}>
@@ -174,9 +190,9 @@ export default function TrainingCalendar() {
           <div className="flex items-center gap-4">
             {/* Date */}
             <div className="shrink-0 w-14 text-center">
-              <p className="text-xl font-bold text-gray-900 leading-tight">{new Date(s.session_date).getDate()}</p>
-              <p className="text-[10px] text-gray-400 font-medium uppercase">{MONTHS[new Date(s.session_date).getMonth()]}</p>
-              <p className="text-[9px] text-gray-300">{new Date(s.session_date).getFullYear()}</p>
+              <p className="text-xl font-bold text-gray-900 leading-tight">{dp?.day}</p>
+              <p className="text-[10px] text-gray-400 font-medium uppercase">{dp ? MONTHS[dp.month] : ''}</p>
+              <p className="text-[9px] text-gray-300">{dp?.year}</p>
             </div>
 
             <div className="w-px h-12 bg-gray-100 shrink-0" />
@@ -412,8 +428,32 @@ export default function TrainingCalendar() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-8">
-          {showPlanned && (
+        <div className="space-y-6">
+          {/* Section toggle buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setViewMode('planned')}
+              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                viewMode === 'planned'
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
+              }`}>
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              Planned Batches
+              <span className="text-xs font-medium text-gray-400">({plannedCount})</span>
+            </button>
+            <button type="button" onClick={() => setViewMode('old')}
+              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                viewMode === 'old'
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
+              }`}>
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              Old Batches
+              <span className="text-xs font-medium text-gray-400">({oldCount})</span>
+            </button>
+          </div>
+
+          {viewMode === 'planned' ? (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-indigo-500" />
@@ -430,8 +470,7 @@ export default function TrainingCalendar() {
                 <div className="space-y-3">{plannedSessions.map(renderSessionCard)}</div>
               )}
             </div>
-          )}
-          {showOld && (
+          ) : (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-amber-500" />

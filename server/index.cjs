@@ -1445,9 +1445,11 @@ app.get('/api/training-calendar', auth(), async (req, res) => {
       dateFilter = `AND ts.session_date BETWEEN $1 AND $2`;
     }
     const sessions = await query(
-      `SELECT ts.*,
+      `SELECT ts.id, ts.course_name, ts.timing, ts.status, ts.batch_id, ts.created_by,
+        ts.created_at, ts.updated_at,
+        to_char(ts.session_date, 'YYYY-MM-DD') AS session_date,
         CASE WHEN ts.status IN ('completed', 'canceled') THEN ts.status
-             WHEN ts.session_date <= CURRENT_DATE THEN 'batch_started'
+             WHEN ts.session_date <= (NOW() AT TIME ZONE 'Asia/Kolkata')::date THEN 'batch_started'
              ELSE 'in_future'
         END AS effective_status,
         b.name AS batch_name,
@@ -3533,12 +3535,6 @@ async function init() {
       await query(`UPDATE enrollments e SET status = 'waiting_approval'
                    FROM payments p
                    WHERE p.enrollment_id = e.id AND p.status = 'pending_approval'`);
-      await query(`INSERT INTO training_sessions (session_date, course_name, status, batch_id, created_by)
-                   SELECT COALESCE(b.start_date, CURRENT_DATE), b.name,
-                     CASE WHEN b.status = 'completed' THEN 'completed' ELSE 'in_future' END,
-                     b.id, b.created_by
-                   FROM batches b
-                   WHERE NOT EXISTS (SELECT 1 FROM training_sessions ts WHERE ts.batch_id = b.id)`);
       console.log('Enrollment columns migrated');
     } catch (e) {
       console.log('Migration note:', e.message);
