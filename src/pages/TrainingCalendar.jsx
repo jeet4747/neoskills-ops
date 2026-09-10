@@ -88,6 +88,9 @@ export default function TrainingCalendar() {
   const [viewMode, setViewMode] = useState('planned');
   const [inviteSession, setInviteSession] = useState(null);
   const [inviteChannel, setInviteChannel] = useState('whatsapp');
+  const [tntSession, setTntSession] = useState(null);
+  const [tntRows, setTntRows] = useState([]);
+  const [tntLoading, setTntLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -210,6 +213,36 @@ export default function TrainingCalendar() {
     const body = `Dear ${ce.student_name || ce.enrollment_name || 'Candidate'},\n\n${buildInviteMessage(s)}`;
     window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
+  async function openTNT(s) {
+    setTntSession(s);
+    setTntLoading(true);
+    setTntRows([]);
+    try {
+      const team = await api.dashboard.team({ month });
+      const existing = {};
+      (s.nominations || []).forEach((n) => { existing[n.user_id] = n.tentative_count; });
+      setTntRows(team.map((t) => ({
+        user_id: t.id,
+        name: t.name,
+        count: existing[t.id] ?? 0,
+      })));
+    } catch (e) {
+      toast.error('Could not load salespersons');
+      setTntSession(null);
+    } finally {
+      setTntLoading(false);
+    }
+  }
+  async function saveTNT() {
+    try {
+      setSaving(true);
+      await api.calendar.saveNominations(tntSession.id, tntRows.map((r) => ({ user_id: r.user_id, tentative_count: Number(r.count) || 0 })));
+      toast.success('TNT numbers saved');
+      setTntSession(null);
+      load();
+    } catch (e) { toast.error(e.message); }
+    finally { setSaving(false); }
+  }
   function renderSessionCard(s) {
     const count = s.confirmed_count || 0;
     const st = getStatusVariant(s.status);
@@ -256,6 +289,12 @@ export default function TrainingCalendar() {
                 )}
               </div>
             </div>
+
+            {/* TNT */}
+            <button onClick={() => openTNT(s)} title="Add tentative numbers per salesperson"
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors shrink-0">
+              TNT ({s.total_tentative || 0})
+            </button>
 
             {/* Status */}
             <div className="shrink-0">
@@ -757,6 +796,50 @@ export default function TrainingCalendar() {
             </div>
 
             <button onClick={() => setInviteSession(null)} className="btn-primary w-full">Done</button>
+          </div>
+        )}
+      </Modal>
+
+      {/* TNT Numbers */}
+      <Modal open={!!tntSession} onClose={() => setTntSession(null)} title={tntSession ? `TNT - ${tntSession.course_name}` : ''} size="md">
+        {tntSession && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                Add tentative numbers for each salesperson —{" "}
+                <span className="font-semibold text-gray-700">{fmtDate(tntSession.session_date)}</span>
+                {tntSession.timing ? ` at ${tntSession.timing}` : ''}
+                {tntSession.batch_name ? ` · ${tntSession.batch_name}` : ''}
+              </p>
+            </div>
+
+            {tntLoading ? (
+              <p className="text-xs text-gray-400 text-center py-8">Loading salespersons...</p>
+            ) : tntRows.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No salespersons to add numbers for.</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {tntRows.map((r, idx) => (
+                  <div key={r.user_id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="flex-1 min-w-0 text-[13px] font-medium text-gray-900 truncate">{r.name}</span>
+                    <input
+                      type="number" min="0" value={r.count}
+                      onChange={(e) => setTntRows((rows) => rows.map((x) => x.user_id === r.user_id ? { ...x, count: e.target.value } : x))}
+                      className="w-20 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => setTntSession(null)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={saveTNT} disabled={tntLoading || saving} className="btn-primary flex-1">{saving ? 'Saving...' : 'Save Numbers'}</button>
+            </div>
           </div>
         )}
       </Modal>
