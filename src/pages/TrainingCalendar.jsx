@@ -90,6 +90,9 @@ export default function TrainingCalendar() {
   const [inviteChannel, setInviteChannel] = useState('whatsapp');
   const [tntSession, setTntSession] = useState(null);
   const [tntRows, setTntRows] = useState([]);
+  const [tntTeam, setTntTeam] = useState([]);
+  const [tntSel, setTntSel] = useState('');
+  const [tntNum, setTntNum] = useState('');
   const [tntLoading, setTntLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -217,15 +220,13 @@ export default function TrainingCalendar() {
     setTntSession(s);
     setTntLoading(true);
     setTntRows([]);
+    setTntTeam([]);
+    setTntSel('');
+    setTntNum('');
     try {
       const team = await api.dashboard.team({ month });
-      const existing = {};
-      (s.nominations || []).forEach((n) => { existing[n.user_id] = n.tentative_count; });
-      setTntRows(team.map((t) => ({
-        user_id: t.id,
-        name: t.name,
-        count: existing[t.id] ?? 0,
-      })));
+      setTntTeam(team);
+      setTntRows((s.nominations || []).map((n) => ({ user_id: n.user_id, name: n.user_name, count: n.tentative_count })));
     } catch (e) {
       toast.error('Could not load salespersons');
       setTntSession(null);
@@ -233,10 +234,31 @@ export default function TrainingCalendar() {
       setTntLoading(false);
     }
   }
+  function addTNT() {
+    if (!tntSel) return toast.error('Select a sales POC');
+    const num = Number(tntNum);
+    if (isNaN(num) || num < 0) return toast.error('Enter a valid number');
+    const selName = tntTeam.find((t) => t.id === Number(tntSel))?.name || '';
+    setTntRows((rows) => {
+      const exists = rows.find((r) => r.user_id === Number(tntSel));
+      if (exists) return rows.map((r) => r.user_id === Number(tntSel) ? { ...r, count: num } : r);
+      if (num === 0) return rows;
+      return [...rows, { user_id: Number(tntSel), name: selName, count: num }];
+    });
+    setTntSel('');
+    setTntNum('');
+  }
+  function removeTNT(userId) {
+    setTntRows((rows) => rows.filter((r) => r.user_id !== userId));
+  }
   async function saveTNT() {
     try {
       setSaving(true);
-      await api.calendar.saveNominations(tntSession.id, tntRows.map((r) => ({ user_id: r.user_id, tentative_count: Number(r.count) || 0 })));
+      const entries = tntRows.map((r) => ({ user_id: r.user_id, tentative_count: Number(r.count) || 0 }));
+      const cleared = tntTeam
+        .filter((t) => !tntRows.some((r) => r.user_id === t.id))
+        .map((t) => ({ user_id: t.id, tentative_count: 0 }));
+      await api.calendar.saveNominations(tntSession.id, [...entries, ...cleared]);
       toast.success('TNT numbers saved');
       setTntSession(null);
       load();
@@ -806,34 +828,63 @@ export default function TrainingCalendar() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-500">
-                Add tentative numbers for each salesperson —{" "}
                 <span className="font-semibold text-gray-700">{fmtDate(tntSession.session_date)}</span>
                 {tntSession.timing ? ` at ${tntSession.timing}` : ''}
                 {tntSession.batch_name ? ` · ${tntSession.batch_name}` : ''}
               </p>
+              <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-lg">
+                Total: {tntRows.reduce((s, r) => s + (Number(r.count) || 0), 0)}
+              </span>
             </div>
 
             {tntLoading ? (
               <p className="text-xs text-gray-400 text-center py-8">Loading salespersons...</p>
-            ) : tntRows.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-8">No salespersons to add numbers for.</p>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {tntRows.map((r, idx) => (
-                  <div key={r.user_id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                    <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
-                      {idx + 1}
-                    </span>
-                    <span className="flex-1 min-w-0 text-[13px] font-medium text-gray-900 truncate">{r.name}</span>
-                    <input
-                      type="number" min="0" value={r.count}
-                      onChange={(e) => setTntRows((rows) => rows.map((x) => x.user_id === r.user_id ? { ...x, count: e.target.value } : x))}
-                      className="w-20 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
-                      placeholder="0"
-                    />
+              <>
+                {tntRows.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex items-center justify-between px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      <span>Sales POC</span>
+                      <span>Number</span>
+                    </div>
+                    {tntRows.map((r) => (
+                      <div key={r.user_id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                        <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
+                          {r.name.charAt(0)}
+                        </span>
+                        <span className="flex-1 min-w-0 text-[13px] font-medium text-gray-900 truncate">{r.name}</span>
+                        <input
+                          type="number" min="0" value={r.count}
+                          onChange={(e) => setTntRows((rows) => rows.map((x) => x.user_id === r.user_id ? { ...x, count: e.target.value } : x))}
+                          className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                        />
+                        <button onClick={() => removeTNT(r.user_id)} title="Remove" className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-6">No numbers added yet.</p>
+                )}
+
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sales POC</label>
+                    <select value={tntSel} onChange={(e) => setTntSel(e.target.value)} className="input-field">
+                      <option value="">Select sales POC</option>
+                      {tntTeam.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-24">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Number</label>
+                    <input type="number" min="0" value={tntNum} onChange={(e) => setTntNum(e.target.value)} className="input-field text-center" placeholder="0" />
+                  </div>
+                  <button onClick={addTNT} className="px-4 py-2.5 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">Add</button>
+                </div>
+              </>
             )}
 
             <div className="flex gap-2">
