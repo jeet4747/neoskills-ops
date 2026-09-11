@@ -20,7 +20,7 @@ export default function Sidebar({ open, onClose }) {
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
-    { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops'] },
+    { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/attendance', icon: Clock, label: 'Attendance', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/hiring', icon: Briefcase, label: 'Hiring', roles: ['hr'], ids: [19] },
