@@ -265,46 +265,59 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {targets.length > 0 && (
-        <Card>
-          <CardHeader>
-            <h3 className="font-semibold text-gray-900">Team Targets — {currentMonthLabel}</h3>
-          </CardHeader>
-          <CardBody className="p-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-              {targets.map((t) => {
-                const teamMember = team.find((p) => p.id === t.user_id);
-                const achieved = teamMember ? teamMember.deals_closed : 0;
-                const pct = Math.min(100, Math.round((achieved / t.target_amount) * 100));
-                return (
-                  <div key={t.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
-                        {t.user_name?.charAt(0).toUpperCase()}
+      {(targets.length > 0 || team.length > 0) && (() => {
+        const targetMap = {};
+        targets.forEach((t) => { targetMap[t.user_id] = t; });
+        const rows = team.length ? team.map((p) => ({
+          id: p.id, name: p.name, achieved: p.deals_closed || 0,
+          target: targetMap[p.id] ? Number(targetMap[p.id].target_amount) : null,
+          hasTarget: !!targetMap[p.id],
+        })) : targets.map((t) => ({
+          id: t.user_id, name: t.user_name, achieved: 0,
+          target: Number(t.target_amount), hasTarget: true,
+        }));
+        return (
+          <Card>
+            <CardHeader>
+              <h3 className="font-semibold text-gray-900">Team Targets — {currentMonthLabel}</h3>
+            </CardHeader>
+            <CardBody className="p-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
+                {rows.map((r) => {
+                  const pct = r.hasTarget && r.target ? Math.min(100, Math.round((r.achieved / r.target) * 100)) : 0;
+                  return (
+                    <div key={r.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
+                          {r.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{r.name}</p>
+                        </div>
+                        {pct >= 100 && <span className="text-xs ml-auto">🎉</span>}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{t.user_name}</p>
-                      </div>
-                      {pct >= 100 && <span className="text-xs ml-auto">🎉</span>}
+                      {r.hasTarget ? (
+                        <>
+                          <div className="flex items-end justify-between mb-1.5">
+                            <p className="text-lg font-bold text-gray-900">{r.achieved} <span className="text-xs font-normal text-gray-400">/ {r.target}</span></p>
+                            <p className={`text-xs font-bold ${pct >= 100 ? 'text-emerald-600' : 'text-primary-600'}`}>{pct}%</p>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#10B981' : '#003B7A' }} />
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400">No target set this month</p>
+                      )}
                     </div>
-                    <div className="flex items-end justify-between mb-1.5">
-                      <p className="text-lg font-bold text-gray-900">{achieved} <span className="text-xs font-normal text-gray-400">/ {t.target_amount}</span></p>
-                      <p className={`text-xs font-bold ${pct >= 100 ? 'text-emerald-600' : 'text-primary-600'}`}>{pct}%</p>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="h-2 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: pct >= 100 ? '#10B981' : '#003B7A',
-                        }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardBody>
-        </Card>
-      )}
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
