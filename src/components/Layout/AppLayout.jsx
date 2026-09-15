@@ -4,6 +4,7 @@ import { Menu, Trophy } from 'lucide-react';
 import Sidebar from './Sidebar';
 import NotificationsBell from './NotificationsBell';
 import PushPrompt from './PushPrompt';
+import FestivePopup from './FestivePopup';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,6 +40,7 @@ export default function AppLayout() {
         </main>
       </div>
       <PushPrompt />
+      <FestivePopup />
     </div>
   );
 }
