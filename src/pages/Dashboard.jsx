@@ -268,7 +268,9 @@ export default function Dashboard() {
       {(targets.length > 0 || team.length > 0) && (() => {
         const targetMap = {};
         targets.forEach((t) => { targetMap[t.user_id] = t; });
-        const rows = team.length ? team.map((p) => ({
+        const rows = team.length ? team
+          .filter((p) => p.role === 'sales' || !!targetMap[p.id])
+          .map((p) => ({
           id: p.id, name: p.name, achieved: p.deals_closed || 0,
           target: targetMap[p.id] ? Number(targetMap[p.id].target_amount) : null,
           hasTarget: !!targetMap[p.id],
