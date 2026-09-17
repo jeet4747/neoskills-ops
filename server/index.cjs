@@ -2045,17 +2045,17 @@ app.post('/api/receipts', auth(['admin', 'manager', 'ops']), async (req, res) =>
          items, company, tax_rate, discount, subtotal, tax_amount, total_amount,
          received_amount, balance_amount, payment_mode, transaction_id,
          bank_account_name, bank_account_number, bank_name, bank_ifsc, notes,
-         created_by
+         receipt_date, created_by
        ) VALUES (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15,
-         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+         $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
        ) RETURNING *`,
       [number, prefix, seq, b.enrollment_id || null,
        b.student_name, b.student_phone, b.student_email, b.student_city, b.course_name,
        items, b.company || 'neoskills', b.tax_rate || 0, b.discount || 0, b.subtotal || 0, b.tax_amount || 0, b.total_amount || 0,
        b.received_amount || 0, b.balance_amount || 0, b.payment_mode, b.transaction_id,
        b.bank_account_name, b.bank_account_number, b.bank_name, b.bank_ifsc, b.notes,
-       req.user.id]
+       b.receipt_date || new Date().toISOString().slice(0, 10), req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -2090,13 +2090,14 @@ app.put('/api/receipts/:id', auth(['admin', 'manager', 'ops']), async (req, res)
          tax_rate = $9, discount = $10, subtotal = $11, tax_amount = $12, total_amount = $13,
          received_amount = $14, balance_amount = $15, payment_mode = $16, transaction_id = $17,
          bank_account_name = $18, bank_account_number = $19, bank_name = $20, bank_ifsc = $21,
-         notes = $22, receipt_number = $23, prefix = $24, sequence = $25
-       WHERE id = $26 RETURNING *`,
+         notes = $22, receipt_date = COALESCE($23, receipt_date),
+         receipt_number = $24, prefix = $25, sequence = $26
+       WHERE id = $27 RETURNING *`,
       [b.enrollment_id || null, b.student_name, b.student_phone, b.student_email,
        b.student_city, b.course_name, items, newCompany, b.tax_rate || 0, b.discount || 0, b.subtotal || 0,
        b.tax_amount || 0, b.total_amount || 0, b.received_amount || 0, b.balance_amount || 0,
        b.payment_mode, b.transaction_id, b.bank_account_name, b.bank_account_number,
-       b.bank_name, b.bank_ifsc, b.notes, number, prefix, seq, req.params.id]
+       b.bank_name, b.bank_ifsc, b.notes, b.receipt_date || null, number, prefix, seq, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (e) {
@@ -2119,10 +2120,17 @@ app.get('/api/receipts/:id/pdf', auth(['admin', 'manager', 'ops']), async (req, 
     const result = await query('SELECT * FROM receipts WHERE id = $1', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
     const r = result.rows[0];
+    const receiptDate = (() => {
+      if (!r.receipt_date) return new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const parts = String(r.receipt_date).split('-');
+      if (parts.length !== 3) return r.receipt_date;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${parts[2]} ${months[parseInt(parts[1], 10) - 1] || parts[1]} ${parts[0]}`;
+    })();
     const pdf = await generateInvoice({
       ...r,
       items: r.items,
-      date: new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      date: receiptDate,
     });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Receipt-${r.receipt_number}.pdf"`);
@@ -3246,6 +3254,7 @@ async function init() {
         bank_name TEXT,
         bank_ifsc TEXT,
         notes TEXT,
+        receipt_date TEXT,
         created_by INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -3530,6 +3539,7 @@ async function init() {
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_future'`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
       await query(`ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS whatsapp_group_link TEXT`);
+      await query(`ALTER TABLE receipts ADD COLUMN IF NOT EXISTS receipt_date TEXT`);
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS collection_month TEXT`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS connected_calls INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS nominations INTEGER DEFAULT 0`);

@@ -44,6 +44,7 @@ function emptyForm() {
     bank_name: '',
     bank_ifsc: '',
     notes: '',
+    receipt_date: new Date().toISOString().slice(0, 10),
     prefix: 'NEO',
   };
 }
@@ -466,19 +467,25 @@ export default function Receipts() {
                 </button>
               </CardHeader>
               <CardBody className="space-y-3">
-                <div>
-                  <label className="text-xs text-gray-500 font-medium mb-1 block">Company on receipt</label>
-                  <select className="input-field" value={form.company} onChange={(e) => handleCompanyChange(e.target.value)}>
-                    {brands.length ? brands.map((b) => (
-                      <option key={b.key} value={b.key}>{b.name}</option>
-                    )) : (
-                      <>
-                        <option value="neoskills">Neoskills Learning Solutions</option>
-                        <option value="careervue">CareerVUE</option>
-                        <option value="frolics">Frolics Solutions</option>
-                      </>
-                    )}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Receipt date</label>
+                    <input type="date" className="input-field" value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Company on receipt</label>
+                    <select className="input-field" value={form.company} onChange={(e) => handleCompanyChange(e.target.value)}>
+                      {brands.length ? brands.map((b) => (
+                        <option key={b.key} value={b.key}>{b.name}</option>
+                      )) : (
+                        <>
+                          <option value="neoskills">Neoskills Learning Solutions</option>
+                          <option value="careervue">CareerVUE</option>
+                          <option value="frolics">Frolics Solutions</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
