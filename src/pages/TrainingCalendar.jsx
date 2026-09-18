@@ -373,7 +373,7 @@ export default function TrainingCalendar() {
                       <p className="text-[13px] font-medium text-gray-900 truncate">{ce.student_name || ce.enrollment_name}</p>
                       <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
                         {ce.poc_name && <span>POC: {ce.poc_name}</span>}
-                        {ce.student_phone && <span>{ce.student_phone}</span>}
+                        {(ce.student_email || ce.student_phone) && <span className={ce.student_email ? 'truncate max-w-[170px]' : ''}>{ce.student_email || ce.student_phone}</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -609,7 +609,7 @@ export default function TrainingCalendar() {
                         <p className="text-xs font-medium text-gray-900 truncate">{se.student_name || se.enrollment_name}</p>
                         <div className="flex items-center gap-2 text-[10px] text-gray-400">
                           {se.poc_name && <span>POC: {se.poc_name}</span>}
-                          {se.student_phone && <span>{se.student_phone}</span>}
+                          {(se.student_email || se.student_phone) && <span className={se.student_email ? 'truncate max-w-[170px]' : ''}>{se.student_email || se.student_phone}</span>}
                         </div>
                       </div>
                       <button onClick={() => removeEnrollment(se.enrollment_id)}
