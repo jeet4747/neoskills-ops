@@ -4,13 +4,13 @@ import { api } from '../../services/api';
 import Modal from '../ui/Modal';
 
 const ACTION_SET = {
-  punch_in: { key: 'punch_in', label: 'Punch In', icon: LogIn },
+  punch_in: { key: 'punch_in', label: 'Login', icon: LogIn },
   late_login: { key: 'late_login', label: 'Late Login', icon: AlertTriangle },
   on_break: { key: 'on_break', label: 'On Break', icon: Coffee },
   on_leave: { key: 'on_leave', label: 'On Leave', icon: Plane },
   resume: { key: 'resume', label: 'Back to Work', icon: PlayCircle },
   early_logout: { key: 'early_logout', label: 'Early Logout', icon: DoorOpen },
-  punch_out: { key: 'punch_out', label: 'Punch Out', icon: LogOut },
+  punch_out: { key: 'punch_out', label: 'Logout', icon: LogOut },
 };
 
 const AVAILABLE = {
@@ -24,11 +24,11 @@ const AVAILABLE = {
 
 const STATUS_LABELS = {
   late_login: 'Late Login',
-  punch_in: 'Punched In',
+  punch_in: 'Logged In',
   on_break: 'On Break',
   on_leave: 'On Leave',
   early_logout: 'Early Logout',
-  punch_out: 'Punched Out',
+  punch_out: 'Logged Out',
 };
 
 const STATUS_STYLES = {
@@ -122,7 +122,7 @@ export default function PunchButton({ user, onChange }) {
   const isOnAbsence = status === 'on_break' || status === 'on_leave';
   const buttonLabel = displayStatus
     ? (isOnAbsence && punch.break_start ? `${STATUS_LABELS[displayStatus]} since ${fmtPunchTime(punch.break_start)}` : STATUS_LABELS[displayStatus])
-    : 'Punch In';
+    : 'Login';
   const buttonIcon = displayStatus
     ? (displayStatus === 'late_login' ? AlertTriangle : displayStatus === 'on_break' ? Coffee : displayStatus === 'on_leave' ? Plane : displayStatus === 'early_logout' ? DoorOpen : LogOut)
     : LogIn;
@@ -162,7 +162,7 @@ export default function PunchButton({ user, onChange }) {
         </div>
       )}
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={outAction === 'early_logout' ? 'Early Logout' : 'Punch Out'} size="sm">
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={outAction === 'early_logout' ? 'Early Logout' : 'Logout'} size="sm">
         <form onSubmit={submitOut} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Connected Calls</label>
@@ -177,7 +177,7 @@ export default function PunchButton({ user, onChange }) {
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>
             <button type="submit" disabled={formBusy} className="btn-primary flex-1">
-              {formBusy ? 'Saving...' : (outAction === 'early_logout' ? 'Early Logout' : 'Punch Out')}
+              {formBusy ? 'Saving...' : (outAction === 'early_logout' ? 'Early Logout' : 'Logout')}
             </button>
           </div>
         </form>

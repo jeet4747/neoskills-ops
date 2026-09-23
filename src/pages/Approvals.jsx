@@ -144,7 +144,7 @@ export default function Approvals() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="input-field pl-9" placeholder="Search by student, course or salesperson..."
+          <input className="input-field pl-9" placeholder="Search by student, course or sale POC..."
             value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
       </div>
@@ -179,7 +179,7 @@ export default function Approvals() {
                         <span className="capitalize">{p.payment_mode}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400 text-xs block">Salesperson</span>
+                        <span className="text-gray-400 text-xs block">Sale POC</span>
                         <span>{p.salesperson_name}</span>
                       </div>
                       <div>
@@ -295,7 +295,7 @@ export default function Approvals() {
                 <p className="font-bold text-amber-600">₹{Number(selected.pending_amount).toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Salesperson</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Sale POC</p>
                 <p>{selected.salesperson_name}</p>
               </div>
               <div>

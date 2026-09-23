@@ -119,11 +119,11 @@ export default function Attendance() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-[11px] text-gray-400">Punch In</p>
+                <p className="text-[11px] text-gray-400">Login</p>
                 <p className="text-lg font-bold text-gray-900">{fmt(punch.punch_in)}</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                <p className="text-[11px] text-gray-400">Punch Out</p>
+                <p className="text-[11px] text-gray-400">Logout</p>
                 <p className="text-lg font-bold text-gray-900">{punch.punch_out ? fmt(punch.punch_out) : '—'}</p>
               </div>
               <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
@@ -290,7 +290,7 @@ export default function Attendance() {
                         </div>
                       ) : (
                         <p className="mt-3 text-xs text-gray-400">
-                          {r.status === 'on_leave' ? 'Marked as leave for this day.' : 'No punch-in recorded.'}
+                          {r.status === 'on_leave' ? 'Marked as leave for this day.' : 'No login recorded.'}
                         </p>
                       )}
                     </div>
