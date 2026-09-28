@@ -59,6 +59,8 @@ export default function PunchButton({ user, onChange }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showLateForm, setShowLateForm] = useState(false);
+  const [loginTime, setLoginTime] = useState('');
   const [outAction, setOutAction] = useState('punch_out');
   const [calls, setCalls] = useState('');
   const [noms, setNoms] = useState('');
@@ -83,18 +85,29 @@ export default function PunchButton({ user, onChange }) {
 
   function refresh() { if (onChange) onChange(); }
 
-  async function runAction(action) {
+  async function runAction(action, extra) {
     setOpen(false);
     setBusy(true);
     try {
       const s = await api.attendance.action({
         action: action === 'late_login' ? 'punch_in' : action,
         late_login: action === 'late_login',
+        ...(extra || {}),
       });
       setPunch(s);
       refresh();
     } catch (e) { alert(e.message); }
     finally { setBusy(false); }
+  }
+
+  async function submitLate(ev) {
+    ev.preventDefault();
+    if (!loginTime) return;
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const iso = new Date(`${localDate}T${loginTime}`).toISOString();
+    setShowLateForm(false);
+    await runAction('late_login', { login_time: iso });
   }
 
   async function submitOut(ev) {
@@ -112,6 +125,11 @@ export default function PunchButton({ user, onChange }) {
   }
 
   function onPick(action) {
+    if (action === 'late_login') {
+      const n = new Date();
+      setLoginTime(`${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`);
+      setShowLateForm(true); setOpen(false); return;
+    }
     if ((action === 'punch_out' || action === 'early_logout') && user.id !== 19) { setOutAction(action); setShowForm(true); setOpen(false); return; }
     runAction(action);
   }
@@ -178,6 +196,22 @@ export default function PunchButton({ user, onChange }) {
             <button type="button" onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>
             <button type="submit" disabled={formBusy} className="btn-primary flex-1">
               {formBusy ? 'Saving...' : (outAction === 'early_logout' ? 'Early Logout' : 'Logout')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showLateForm} onClose={() => setShowLateForm(false)} title="Late Login" size="sm">
+        <form onSubmit={submitLate} className="space-y-4">
+          <p className="text-xs text-gray-500 text-center">What time are you logging in today?</p>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Login time</label>
+            <input type="time" required className="input-field" value={loginTime} onChange={(e) => setLoginTime(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setShowLateForm(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" disabled={busy || !loginTime} className="btn-primary flex-1">
+              {busy ? 'Saving...' : 'Confirm Login'}
             </button>
           </div>
         </form>

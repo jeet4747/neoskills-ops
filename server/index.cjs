@@ -2698,7 +2698,7 @@ app.post('/api/attendance/action', auth(), async (req, res) => {
   try {
     if (ATTENDANCE_EXCLUDED_IDS.includes(req.user.id))
       return res.status(403).json({ error: 'Not available' });
-    const { action, connected_calls, nominations, summary, late_login } = req.body || {};
+    const { action, connected_calls, nominations, summary, late_login, login_time } = req.body || {};
     const d = new Date().toISOString().slice(0, 10);
     const now = new Date().toISOString();
     const cols = 'id, punch_in, punch_out, status, break_start, break_end, total_break_minutes, connected_calls, nominations, summary, late_login';
@@ -2713,8 +2713,13 @@ app.post('/api/attendance/action', auth(), async (req, res) => {
                    break_end = NULL,
                    total_break_minutes = COALESCE(attendance.total_break_minutes, 0),
                    late_login = COALESCE(attendance.late_login, false) OR $4
-             RETURNING ${cols}`;
-      params = [req.user.id, d, now, !!late_login];
+              RETURNING ${cols}`;
+      let loginTs = now;
+      if (login_time) {
+        const t = new Date(login_time);
+        if (!Number.isNaN(t.getTime()) && t.getTime() <= Date.now() + 5 * 60 * 1000) loginTs = t.toISOString();
+      }
+      params = [req.user.id, d, loginTs, !!late_login];
     } else if (action === 'on_break' || action === 'on_leave') {
       sql = `INSERT INTO attendance (user_id, date, status, break_start)
              VALUES ($1, $2, $3, $4)
