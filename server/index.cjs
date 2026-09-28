@@ -2766,6 +2766,35 @@ app.post('/api/attendance/action', auth(), async (req, res) => {
   }
 });
 
+app.put('/api/attendance/update', auth(), async (req, res) => {
+  try {
+    if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not authorized' });
+    const { user_id, date, punch_in, punch_out, status, late_login } = req.body || {};
+    if (!user_id || !/^\d{4}-\d{2}-\d{2}$/.test(date || ''))
+      return res.status(400).json({ error: 'user_id and date are required' });
+    const allowed = ['punch_in', 'on_break', 'on_leave', 'early_logout', 'punch_out'];
+    let st = allowed.includes(status) ? status : null;
+    if (!st && punch_in) st = punch_out ? 'punch_out' : 'punch_in';
+    if (!punch_in && st !== 'on_leave')
+      return res.status(400).json({ error: 'Login time is required (or set status to On Leave)' });
+    const result = await query(
+      `INSERT INTO attendance (user_id, date, punch_in, punch_out, status, late_login)
+       VALUES ($1, $2::date, $3::timestamptz, $4::timestamptz, $5, $6)
+       ON CONFLICT (user_id, date) DO UPDATE
+         SET punch_in = EXCLUDED.punch_in,
+             punch_out = EXCLUDED.punch_out,
+             status = EXCLUDED.status,
+             late_login = EXCLUDED.late_login
+       RETURNING user_id, date, punch_in, punch_out, status, late_login`,
+      [user_id, date, punch_in || null, punch_out || null, st, !!late_login]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/attendance/monthly', auth(), async (req, res) => {
   try {
     if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))

@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX, Users } from 'lucide-react';
+import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX, Users, Pencil } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
+import Modal from '../components/ui/Modal';
 import PunchButton from '../components/Attendance/PunchButton';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -55,12 +57,52 @@ function shiftDay(d, delta) {
 
 export default function Attendance() {
   const { user } = useAuth();
+  const toast = useToast();
   const isGridAllowed = user?.id === 4 || user?.id === 13;
   const today = new Date().toISOString().slice(0, 10);
   const [punch, setPunch] = useState(null);
   const [date, setDate] = useState(today);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editForm, setEditForm] = useState({ punch_in: '', punch_out: '', status: '', late_login: false });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function toTimeStr(t) {
+    if (!t) return '';
+    const d = new Date(t);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function openEdit(r) {
+    setEditRow(r);
+    setEditForm({
+      punch_in: toTimeStr(r.punch_in),
+      punch_out: toTimeStr(r.punch_out),
+      status: r.status || (r.punch_in ? 'punch_in' : ''),
+      late_login: !!r.late_login,
+    });
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    const iso = (v) => (v ? new Date(`${date}T${v}`).toISOString() : null);
+    setSavingEdit(true);
+    try {
+      await api.attendance.update({
+        user_id: editRow.user_id,
+        date,
+        punch_in: iso(editForm.punch_in),
+        punch_out: iso(editForm.punch_out),
+        status: editForm.status,
+        late_login: editForm.late_login,
+      });
+      toast.success(`Attendance updated for ${editRow.name}`);
+      setEditRow(null);
+      loadDaily();
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingEdit(false); }
+  }
 
   async function loadOwn() {
     try { setPunch(await api.attendance.status()); }
@@ -270,6 +312,10 @@ export default function Attendance() {
                           {r.status === 'on_leave' ? <Plane size={10} /> : isAbsent ? <UserX size={10} /> : null}
                           {meta.label}
                         </span>
+                        <button onClick={() => openEdit(r)} title="Edit attendance"
+                          className="p-1.5 text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors shrink-0">
+                          <Pencil size={13} />
+                        </button>
                       </div>
                       {r.punch_in ? (
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -301,6 +347,49 @@ export default function Attendance() {
           </CardBody>
         </Card>
       )}
+
+      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={editRow ? `Edit Attendance — ${editRow.name}` : 'Edit Attendance'} size="sm">
+        {editRow && (
+          <form onSubmit={saveEdit} className="space-y-4">
+            <p className="text-xs text-gray-400 text-center">{dateLabel(date)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Login time</label>
+                <input type="time" className="input-field" value={editForm.punch_in}
+                  onChange={(e) => setEditForm({ ...editForm, punch_in: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Logout time</label>
+                <input type="time" className="input-field" value={editForm.punch_out}
+                  onChange={(e) => setEditForm({ ...editForm, punch_out: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+              <select className="input-field" value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+                <option value="">Auto (from times)</option>
+                <option value="punch_in">Working</option>
+                <option value="on_break">On Break</option>
+                <option value="on_leave">On Leave</option>
+                <option value="early_logout">Early Logout</option>
+                <option value="punch_out">Worked</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={editForm.late_login}
+                onChange={(e) => setEditForm({ ...editForm, late_login: e.target.checked })} />
+              Mark as late login
+            </label>
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={() => setEditRow(null)} className="btn-secondary flex-1">Cancel</button>
+              <button type="submit" disabled={savingEdit} className="btn-primary flex-1">
+                {savingEdit ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
