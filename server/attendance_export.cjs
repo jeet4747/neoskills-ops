@@ -27,6 +27,14 @@ const thinBorder = {
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
+// Attendance is always displayed in IST regardless of server timezone (Render runs UTC).
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+function istDateStr() {
+  const x = new Date(Date.now() + IST_OFFSET_MS);
+  return `${x.getUTCFullYear()}-${pad2(x.getUTCMonth() + 1)}-${pad2(x.getUTCDate())}`;
+}
+
 function fmtDateObj(d) {
   if (!d) return '';
   const x = d instanceof Date ? d : new Date(d);
@@ -35,12 +43,17 @@ function fmtDateObj(d) {
 
 function fmtTime(t) {
   if (!t) return '';
-  const x = new Date(t);
-  let h = x.getHours();
-  const m = pad2(x.getMinutes());
+  const x = new Date(new Date(t).getTime() + IST_OFFSET_MS);
+  let h = x.getUTCHours();
+  const m = pad2(x.getUTCMinutes());
   const ap = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${m} ${ap}`;
+}
+
+function istMinutesOfDay(t) {
+  const x = new Date(new Date(t).getTime() + IST_OFFSET_MS);
+  return x.getUTCHours() * 60 + x.getUTCMinutes();
 }
 
 function minutesToTime(mins) {
@@ -145,7 +158,7 @@ function tryDataBar(ws, ref, color) {
 }
 
 async function buildAttendanceWorkbook(month, rows, users) {
-  const todayStr = fmtDateObj(new Date());
+  const todayStr = istDateStr();
   const wb = new ExcelJS.Workbook();
   wb.creator = 'NeoOps';
   wb.created = new Date();
@@ -169,8 +182,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
     if (r.status === 'on_leave') s.leave += 1;
     if (r.punch_in) {
       s.present += 1;
-      const pi = new Date(r.punch_in);
-      s.loginMins.push(pi.getHours() * 60 + pi.getMinutes());
+      s.loginMins.push(istMinutesOfDay(r.punch_in));
       if (!r.punch_out) {
         if (fmtDateObj(r.date) < todayStr) s.missingLogout += 1;
       }
@@ -201,7 +213,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
   a.getCell('B2').font = { bold: true, size: 18, color: { argb: 'FF111827' } };
   a.getRow(2).height = 26;
   a.mergeCells('B3:I3');
-  a.getCell('B3').value = `NeoSkill Learning Solutions · Generated ${fmtDateObj(new Date())}`;
+  a.getCell('B3').value = `NeoSkill Learning Solutions · Generated ${istDateStr()}`;
   a.getCell('B3').font = { size: 10, color: { argb: GRAY } };
 
   sectionHeader(a, 'B5:I5', 'KEY METRICS');
@@ -338,7 +350,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
     ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FF111827' } };
     ws.getRow(1).height = 22;
     ws.mergeCells('A2:J2');
-    ws.getCell('A2').value = `Role: ${s.role || '-'} · Generated ${fmtDateObj(new Date())}`;
+    ws.getCell('A2').value = `Role: ${s.role || '-'} · Generated ${istDateStr()}`;
     ws.getCell('A2').font = { size: 10, color: { argb: GRAY } };
 
     const labels = ['Days Present', 'Leave Days', 'Working Hours', 'Connected Calls', 'Break (min)', 'Nominations', 'Avg Login'];
@@ -382,12 +394,15 @@ async function buildAttendanceWorkbook(month, rows, users) {
     let callsTotal = 0;
     let nomsTotal = 0;
     for (const rec of records) {
-      const d = rec.date instanceof Date ? rec.date : new Date(rec.date);
+      const ds = fmtDateObj(rec.date);
+      const [dy, dm, dd] = ds.split('-').map(Number);
+      const weekday = DAY_NAMES[new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1)).getUTCDay()];
+      const weekend = new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1)).getUTCDay();
       const wm = workedMinutesOf(rec, todayStr);
       const row = ws.getRow(rowIdx);
-      row.getCell(1).value = d;
+      row.getCell(1).value = new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1));
       row.getCell(1).numFmt = 'yyyy-mm-dd';
-      row.getCell(2).value = DAY_NAMES[d.getDay()];
+      row.getCell(2).value = weekday;
       row.getCell(3).value = fmtTime(rec.punch_in);
       row.getCell(4).value = fmtTime(rec.punch_out);
       row.getCell(5).value = wm === null ? '' : Math.round((wm / 60) * 10) / 10;
@@ -404,7 +419,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
       row.getCell(10).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
       if (rec.status === 'on_leave') {
         for (let c = 1; c <= 10; c += 1) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAF5FF' } };
-      } else if (d.getDay() === 0 || d.getDay() === 6) {
+      } else if (weekend === 0 || weekend === 6) {
         for (let c = 1; c <= 10; c += 1) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
       }
       if (wm !== null) hoursTotal += wm / 60;
