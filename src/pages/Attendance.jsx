@@ -55,44 +55,6 @@ function shiftDay(d, delta) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-const EXPORT_STATUS_TEXT = {
-  punch_in: 'Working',
-  punch_out: 'Worked',
-  on_break: 'On Break',
-  on_leave: 'On Leave',
-  early_logout: 'Early Logout',
-};
-
-function csvEsc(v) {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function csvDate(t) {
-  if (!t) return '';
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function csvTime(t) {
-  if (!t) return '';
-  const d = new Date(t);
-  let h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, '0');
-  const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  return `${h}:${m} ${ap}`;
-}
-
-function downloadCsv(filename, lines) {
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 export default function Attendance() {
   const { user } = useAuth();
   const toast = useToast();
@@ -111,40 +73,8 @@ export default function Attendance() {
   async function exportMonthly() {
     setExporting(true);
     try {
-      const data = await api.attendance.monthly(exportMonth);
-      const lines = [];
-      lines.push(['Date', 'Name', 'Role', 'Login', 'Logout', 'Break (min)', 'Connected Calls', 'Status', 'Late Login', 'Notes'].map(csvEsc).join(','));
-      for (const r of data) {
-        lines.push([
-          csvDate(r.date),
-          r.name,
-          r.role || '',
-          csvTime(r.punch_in),
-          csvTime(r.punch_out),
-          Number(r.total_break_minutes || 0),
-          Number(r.connected_calls || 0),
-          EXPORT_STATUS_TEXT[r.status] || (r.punch_in ? 'Working' : r.status || ''),
-          r.late_login ? 'Yes' : 'No',
-          r.summary || '',
-        ].map(csvEsc).join(','));
-      }
-      lines.push('');
-      lines.push('Summary');
-      lines.push(['Name', 'Days Present', 'Leave Days', 'Break (min)', 'Connected Calls'].map(csvEsc).join(','));
-      const byUser = new Map();
-      for (const r of data) {
-        const u = byUser.get(r.name) || { present: 0, leave: 0, brk: 0, calls: 0 };
-        if (r.punch_in) u.present += 1;
-        if (r.status === 'on_leave') u.leave += 1;
-        u.brk += Number(r.total_break_minutes || 0);
-        u.calls += Number(r.connected_calls || 0);
-        byUser.set(r.name, u);
-      }
-      for (const [name, u] of byUser) {
-        lines.push([name, u.present, u.leave, u.brk, u.calls].map(csvEsc).join(','));
-      }
-      downloadCsv(`attendance-${exportMonth}.csv`, lines);
-      toast.success(`Attendance for ${exportMonth} exported`);
+      await api.attendance.exportMonth(exportMonth);
+      toast.success(`Attendance report for ${exportMonth} downloaded`);
     } catch (e) { toast.error(e.message); }
     finally { setExporting(false); }
   }

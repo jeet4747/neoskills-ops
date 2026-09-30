@@ -12,6 +12,7 @@ const { generateInvoice } = require('./invoice.cjs');
 const { buildGst, fiscalYearParts, toWords } = require('./gst.cjs');
 const { generateGstInvoice } = require('./gst_invoice.cjs');
 const { BRANDS } = require('./brands.cjs');
+const { buildAttendanceWorkbook } = require('./attendance_export.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -2811,6 +2812,38 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
       [m, ATTENDANCE_EXCLUDED_IDS]
     );
     res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/attendance/export', auth(), async (req, res) => {
+  try {
+    if (!ATTENDANCE_MONTHLY_IDS.includes(req.user.id))
+      return res.status(403).json({ error: 'Not authorized' });
+    const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month || '')
+      ? req.query.month
+      : new Date().toISOString().slice(0, 7);
+    const [rowsRes, usersRes] = await Promise.all([
+      query(
+        `SELECT a.date, a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.status, a.late_login,
+                a.total_break_minutes, a.connected_calls, a.nominations, a.summary
+         FROM attendance a JOIN users u ON u.id = a.user_id
+         WHERE to_char(a.date, 'YYYY-MM') = $1 AND a.user_id <> ALL($2)
+         ORDER BY a.date, u.name`,
+        [month, ATTENDANCE_EXCLUDED_IDS]
+      ),
+      query(
+        `SELECT id, name, role FROM users
+         WHERE status = 'active' AND id <> ALL($1)
+         ORDER BY name`,
+        [ATTENDANCE_EXCLUDED_IDS]
+      ),
+    ]);
+    const buffer = await buildAttendanceWorkbook(month, rowsRes.rows, usersRes.rows);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="attendance-${month}.xlsx"`);
+    res.send(buffer);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

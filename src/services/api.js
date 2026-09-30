@@ -268,6 +268,28 @@ export const api = {
     today: () => request('/attendance/today'),
     daily: (date) => request(`/attendance/daily${date ? `?date=${date}` : ''}`),
     monthly: (month) => request(`/attendance/monthly${month ? `?month=${month}` : ''}`),
+    exportMonth: async (month) => {
+      const token = getToken();
+      const res = await fetch(`${BASE}/attendance/export?month=${encodeURIComponent(month)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        let data = {};
+        try { data = await res.json(); } catch { /* not json */ }
+        throw new Error(data.error || 'Export failed');
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `attendance-${month}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
     dailyReport: (from, to) => request(`/attendance/daily-report${from && to ? `?from=${from}&to=${to}` : ''}`),
   },
   hiring: {
