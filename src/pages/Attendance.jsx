@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX, Users, Pencil } from 'lucide-react';
+import { CalendarDays, Clock, Coffee, Hourglass, ChevronLeft, ChevronRight, Plane, UserX, Users, Pencil, Download } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -55,6 +55,44 @@ function shiftDay(d, delta) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
+const EXPORT_STATUS_TEXT = {
+  punch_in: 'Working',
+  punch_out: 'Worked',
+  on_break: 'On Break',
+  on_leave: 'On Leave',
+  early_logout: 'Early Logout',
+};
+
+function csvEsc(v) {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function csvDate(t) {
+  if (!t) return '';
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function csvTime(t) {
+  if (!t) return '';
+  const d = new Date(t);
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ap}`;
+}
+
+function downloadCsv(filename, lines) {
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export default function Attendance() {
   const { user } = useAuth();
   const toast = useToast();
@@ -67,6 +105,49 @@ export default function Attendance() {
   const [editRow, setEditRow] = useState(null);
   const [editForm, setEditForm] = useState({ punch_in: '', punch_out: '', status: '', late_login: false });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [exportMonth, setExportMonth] = useState(today.slice(0, 7));
+  const [exporting, setExporting] = useState(false);
+
+  async function exportMonthly() {
+    setExporting(true);
+    try {
+      const data = await api.attendance.monthly(exportMonth);
+      const lines = [];
+      lines.push(['Date', 'Name', 'Role', 'Login', 'Logout', 'Break (min)', 'Connected Calls', 'Status', 'Late Login', 'Notes'].map(csvEsc).join(','));
+      for (const r of data) {
+        lines.push([
+          csvDate(r.date),
+          r.name,
+          r.role || '',
+          csvTime(r.punch_in),
+          csvTime(r.punch_out),
+          Number(r.total_break_minutes || 0),
+          Number(r.connected_calls || 0),
+          EXPORT_STATUS_TEXT[r.status] || (r.punch_in ? 'Working' : r.status || ''),
+          r.late_login ? 'Yes' : 'No',
+          r.summary || '',
+        ].map(csvEsc).join(','));
+      }
+      lines.push('');
+      lines.push('Summary');
+      lines.push(['Name', 'Days Present', 'Leave Days', 'Break (min)', 'Connected Calls'].map(csvEsc).join(','));
+      const byUser = new Map();
+      for (const r of data) {
+        const u = byUser.get(r.name) || { present: 0, leave: 0, brk: 0, calls: 0 };
+        if (r.punch_in) u.present += 1;
+        if (r.status === 'on_leave') u.leave += 1;
+        u.brk += Number(r.total_break_minutes || 0);
+        u.calls += Number(r.connected_calls || 0);
+        byUser.set(r.name, u);
+      }
+      for (const [name, u] of byUser) {
+        lines.push([name, u.present, u.leave, u.brk, u.calls].map(csvEsc).join(','));
+      }
+      downloadCsv(`attendance-${exportMonth}.csv`, lines);
+      toast.success(`Attendance for ${exportMonth} exported`);
+    } catch (e) { toast.error(e.message); }
+    finally { setExporting(false); }
+  }
 
   function toTimeStr(t) {
     if (!t) return '';
@@ -243,7 +324,16 @@ export default function Attendance() {
                 <CalendarDays size={16} className="text-primary-600" />
                 <h3 className="font-semibold text-gray-900">Daily Attendance</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <input type="month" className="input-field text-sm w-36" value={exportMonth} max={today.slice(0, 7)}
+                    onChange={(e) => setExportMonth(e.target.value)} aria-label="Export month" />
+                  <button onClick={exportMonthly} disabled={exporting || !exportMonth}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white text-xs font-medium rounded-xl hover:bg-primary-700 disabled:opacity-60 transition-colors">
+                    <Download size={14} />
+                    {exporting ? 'Exporting...' : 'Export'}
+                  </button>
+                </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setDate((d) => shiftDay(d, -1))} className="p-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Previous day">
                     <ChevronLeft size={16} />

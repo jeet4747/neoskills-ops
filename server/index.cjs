@@ -2802,7 +2802,7 @@ app.get('/api/attendance/monthly', auth(), async (req, res) => {
     const { month } = req.query;
     const m = month || new Date().toISOString().slice(0, 7);
     const result = await query(
-      `SELECT a.id, a.date, a.user_id, u.name, a.punch_in, a.punch_out, a.status,
+      `SELECT a.id, a.date, a.user_id, u.name, u.role, a.punch_in, a.punch_out, a.status,
               a.break_start, a.break_end, a.total_break_minutes,
               a.connected_calls, a.nominations, a.summary, a.late_login
        FROM attendance a JOIN users u ON u.id = a.user_id
