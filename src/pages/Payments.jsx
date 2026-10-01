@@ -10,6 +10,7 @@ import Modal from '../components/ui/Modal';
 import { PAYMENT_MODES } from '../config/constants';
 import { compressImage } from '../utils/imageCompress';
 import { getReceiptUrls } from '../utils/receipts';
+import { istMonth } from '../utils/ist';
 
 export default function Payments() {
   const { user } = useAuth();
@@ -28,7 +29,7 @@ export default function Payments() {
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      months.push({ value: istMonth(d), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
     }
     return months;
   });
@@ -36,7 +37,7 @@ export default function Payments() {
   const [form, setForm] = useState({
     enrollment_id: '', student_id: '', amount_paid: '',
     payment_mode: 'upi', bank_account_id: '', transaction_id: '',
-    collection_month: new Date().toISOString().slice(0, 7),
+    collection_month: istMonth(),
   });
   const [receiptFiles, setReceiptFiles] = useState([]);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
@@ -144,7 +145,7 @@ export default function Payments() {
 
       toast.success(`Payment of ₹${Number(form.amount_paid).toLocaleString()} recorded and sent for approval`);
       setShowAdd(false);
-      setForm({ enrollment_id: '', student_id: '', amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', collection_month: new Date().toISOString().slice(0, 7) });
+      setForm({ enrollment_id: '', student_id: '', amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', collection_month: istMonth() });
       setSelectedEnrollment(null);
       setReceiptFiles([]);
       setEnrollSearch('');
@@ -157,7 +158,7 @@ export default function Payments() {
   function handleEnrollmentChange(enrollmentId) {
     const enrollment = enrollments.find((en) => en.id === parseInt(enrollmentId));
     setSelectedEnrollment(enrollment);
-    setForm({ ...form, enrollment_id: enrollmentId, student_id: enrollment?.student_id || '', collection_month: (enrollment?.created_at ? new Date(enrollment.created_at).toISOString().slice(0, 7) : '') || new Date().toISOString().slice(0, 7) });
+    setForm({ ...form, enrollment_id: enrollmentId, student_id: enrollment?.student_id || '', collection_month: istMonth() });
     setEnrollSearch('');
   }
 
@@ -331,7 +332,7 @@ export default function Payments() {
               <input type="month" className="input-field" value={form.collection_month}
                 onChange={(e) => setForm({ ...form, collection_month: e.target.value })} />
               <p className="text-xs text-gray-400 mt-1">
-                {selectedEnrollment?.created_at ? `Defaults to recorded month (${new Date(selectedEnrollment.created_at).toISOString().slice(0, 7)})` : 'Defaults to the recorded month of the selected enrollment'}
+                Defaults to this month — the month the money is actually received. Change it only if this collection should count towards a different month.
               </p>
             </div>
           </div>

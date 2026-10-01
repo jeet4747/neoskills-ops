@@ -10,13 +10,14 @@ import { Card, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { INDIAN_STATES } from '../constants/states';
+import { istDate } from '../utils/ist';
 
 const EMPTY_ITEM = { description: '', participants: 1, unit_price: '' };
 
 function emptyForm() {
   return {
     id: null,
-    invoice_date: new Date().toISOString().slice(0, 10),
+    invoice_date: istDate(),
     reference: '',
     student_name: '',
     company: '',

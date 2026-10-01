@@ -8,6 +8,7 @@ import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import { PAYMENT_MODES, CATEGORIES } from '../config/constants';
+import { istDate, istMonth } from '../utils/ist';
 
 function fmtINR(n) {
   const num = Number(n || 0);
@@ -37,13 +38,13 @@ export default function Enrollments() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [filterMonth, setFilterMonth] = useState(() => istMonth());
   const [monthOptions, setMonthOptions] = useState(() => {
     const months = [];
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      months.push({ value: istMonth(d), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
     }
     return months;
   });
@@ -54,11 +55,11 @@ export default function Enrollments() {
     category: 'Training',
     course_name: '',
     training_fee: '', exam_fee: '',
-    training_month: new Date().toISOString().slice(0, 7),
+    training_month: istMonth(),
     support_included: false,
     payment_account: '', payment_mode: 'upi',
     payment_received: '', transaction_id: '',
-    payment_date: new Date().toISOString().slice(0, 10),
+    payment_date: istDate(),
   });
   const [receiptFiles, setReceiptFiles] = useState([]);
 
@@ -201,11 +202,11 @@ export default function Enrollments() {
     setForm({
       candidate_name: '', email: '', phone: '', telecrm_link: '',
       category: 'Training', course_name: '',
-      training_fee: '', exam_fee: '', training_month: new Date().toISOString().slice(0, 7),
+      training_fee: '', exam_fee: '', training_month: istMonth(),
       support_included: false,
       payment_account: '', payment_mode: 'upi',
       payment_received: '', transaction_id: '',
-      payment_date: new Date().toISOString().slice(0, 10),
+      payment_date: istDate(),
     });
     setReceiptFiles([]);
     setErrors({});
@@ -256,8 +257,8 @@ export default function Enrollments() {
     setPaying(enrollment);
     setPayForm({
       amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '',
-      payment_date: new Date().toISOString().slice(0, 10),
-      collection_month: (enrollment.created_at ? new Date(enrollment.created_at).toISOString().slice(0, 7) : '') || new Date().toISOString().slice(0, 7),
+      payment_date: istDate(),
+      collection_month: istMonth(),
     });
     setPayReceiptFiles([]);
     setPayErrors({});
@@ -293,7 +294,7 @@ export default function Enrollments() {
       }
       toast.success(`Payment of ₹${amount.toLocaleString()} recorded and sent for ops approval`);
       setPaying(null);
-      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: new Date().toISOString().slice(0, 10), collection_month: '' });
+      setPayForm({ amount_paid: '', payment_mode: 'upi', bank_account_id: '', transaction_id: '', payment_date: istDate(), collection_month: '' });
       setPayReceiptFiles([]);
       load();
     } catch (e) { toast.error(e.message); }
@@ -992,7 +993,7 @@ export default function Enrollments() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Month</label>
                 <input type="month" className="input-field" value={payForm.collection_month}
                   onChange={(e) => setPayForm({ ...payForm, collection_month: e.target.value })} />
-                <p className="text-xs text-gray-400 mt-1">Defaults to the recorded month ({paying.created_at ? new Date(paying.created_at).toISOString().slice(0, 7) : 'this month'}). This is the month the collection counts towards.</p>
+                <p className="text-xs text-gray-400 mt-1">Defaults to this month — the month the money was received. This is the month the collection counts towards.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Received Date</label>

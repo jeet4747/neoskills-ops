@@ -14,6 +14,10 @@ const { generateGstInvoice } = require('./gst_invoice.cjs');
 const { BRANDS } = require('./brands.cjs');
 const { buildAttendanceWorkbook } = require('./attendance_export.cjs');
 
+// Collection months should reflect when money was actually received (IST),
+// never the server's timezone (Render runs UTC) or the batch's training month.
+const istMonthStr = (d) => new Date(d ?? Date.now()).toLocaleString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'neosecret2026';
@@ -528,10 +532,13 @@ app.post('/api/enrollments/combined', auth(), async (req, res) => {
       const pending = Math.max(0, parseFloat(total_amount) - (paidSoFar + paid));
 
       const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
+      const cm = /^\d{4}-\d{2}/.test(String(payment_date || ''))
+        ? String(payment_date).slice(0, 7)
+        : istMonthStr();
       const pay = await client.query(
         `INSERT INTO payments (enrollment_id, student_id, sales_user_id, amount_paid, pending_amount, payment_mode, bank_account_id, transaction_id, status, collection_month, approved_by, approved_at, payment_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, training_month || new Date().toISOString().slice(0, 7), req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
+        [enrollment.id, student.id, req.user.id, paid, pending, payment_mode, bank_account_id || null, transaction_id || null, payStatus, cm, req.user.role === 'admin' ? req.user.id : null, payStatus === 'approved' ? new Date() : null, payment_date || null]
       );
 
       const enrollStatus = payStatus === 'approved' ? (pending <= 0 ? 'completed' : 'active') : 'waiting_approval';
@@ -1738,12 +1745,12 @@ app.post('/api/payments', auth(), async (req, res) => {
     }
     const pending = Math.max(0, total - (paidSoFar + paid));
 
-    const recordedMonth = (enroll.rows[0].created_at ? new Date(enroll.rows[0].created_at).toISOString().slice(0, 7) : '');
+    const payDateMonth = String(payment_date || '').slice(0, 7);
     const cm = /^\d{4}-\d{2}$/.test(collection_month || '')
       ? collection_month
-      : /^\d{4}-\d{2}$/.test(recordedMonth)
-        ? recordedMonth
-        : new Date().toISOString().slice(0, 7);
+      : /^\d{4}-\d{2}$/.test(payDateMonth)
+        ? payDateMonth
+        : istMonthStr();
 
     const payStatus = req.user.role === 'admin' ? 'approved' : 'pending_approval';
     const result = await query(

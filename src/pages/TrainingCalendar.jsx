@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import { istDate, istMonth } from '../utils/ist';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const STATUSES = [
@@ -28,17 +29,17 @@ function getMonthLabel(m) {
   return `${MONTHS[parseInt(mo, 10) - 1]} ${y}`;
 }
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return istMonth();
 }
 function prevMonth(m) {
   const d = new Date(m + '-01');
   d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 7);
+  return istMonth(d);
 }
 function nextMonth(m) {
   const d = new Date(m + '-01');
   d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 7);
+  return istMonth(d);
 }
 function fmtDate(d) {
   if (!d) return '';
@@ -130,7 +131,7 @@ export default function TrainingCalendar() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ session_date: new Date().toISOString().slice(0, 10), course_name: '', timing: '', timingCustom: '', status: 'in_future', zoom_link: '', whatsapp_group_link: '' });
+    setForm({ session_date: istDate(), course_name: '', timing: '', timingCustom: '', status: 'in_future', zoom_link: '', whatsapp_group_link: '' });
     setShowForm(true);
   }
   function openEdit(s) {

@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import { istMonth } from '../utils/ist';
 
 const ROLE_META = {
   admin: { label: 'Admin', icon: Shield },
@@ -39,7 +40,7 @@ export default function Team() {
   const [savingId, setSavingId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState([]);
   const [newMember, setNewMember] = useState({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123' });
 
@@ -51,7 +52,7 @@ export default function Team() {
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push(d.toISOString().slice(0, 7));
+      months.push(istMonth(d));
     }
     setMonthOptions(months);
   }, []);

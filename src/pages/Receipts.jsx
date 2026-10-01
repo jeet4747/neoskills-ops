@@ -9,6 +9,7 @@ import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+import { istDate, istMonth } from '../utils/ist';
 
 const EMPTY_ITEM = { description: '', qty: 1, rate: '', amount: 0 };
 
@@ -44,7 +45,7 @@ function emptyForm() {
     bank_name: '',
     bank_ifsc: '',
     notes: '',
-    receipt_date: new Date().toISOString().slice(0, 10),
+    receipt_date: istDate(),
     prefix: 'NEO',
   };
 }
@@ -63,7 +64,7 @@ export default function Receipts() {
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      months.push({ value: istMonth(d), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
     }
     return months;
   });

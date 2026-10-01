@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import PunchButton from '../components/Attendance/PunchButton';
+import { istDate } from '../utils/ist';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -59,7 +60,7 @@ export default function Attendance() {
   const { user } = useAuth();
   const toast = useToast();
   const isGridAllowed = user?.id === 4 || user?.id === 13;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDate();
   const [punch, setPunch] = useState(null);
   const [date, setDate] = useState(today);
   const [rows, setRows] = useState([]);

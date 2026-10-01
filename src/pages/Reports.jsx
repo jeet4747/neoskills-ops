@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import { CATEGORIES } from '../config/constants';
+import { istMonth } from '../utils/ist';
 
 const EMPTY_FILTERS = { category: '', status: '', from: '', to: '', sales_user_id: '' };
 
@@ -20,13 +21,13 @@ export default function Reports() {
   const [salespeople, setSalespeople] = useState([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState(() => {
     const months = [];
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      months.push({ value: istMonth(d), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
     }
     return months;
   });

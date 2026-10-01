@@ -9,6 +9,7 @@ import { Card, CardHeader, CardBody } from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
 import PunchButton from '../components/Attendance/PunchButton';
+import { istMonth } from '../utils/ist';
 
 const COLORS = ['#003B7A', '#FFC300', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#84CC16'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -51,7 +52,7 @@ export default function Dashboard() {
   const showHRPanel = isHR && !canSell;
 
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [team, setTeam] = useState([]);
@@ -70,19 +71,19 @@ export default function Dashboard() {
   const [hrData, setHrData] = useState(null);
 
   useEffect(() => {
-    setSelectedMonth(new Date().toISOString().slice(0, 7));
+    setSelectedMonth(istMonth());
     const months = [];
     for (let i = 0; i < 12; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push(d.toISOString().slice(0, 7));
+      months.push(istMonth(d));
     }
     setMonthOptions(months);
   }, []);
 
   useEffect(() => {
     const onFocus = () => {
-      const cm = new Date().toISOString().slice(0, 7);
+      const cm = istMonth();
       setSelectedMonth((m) => (m !== cm ? cm : m));
     };
     window.addEventListener('focus', onFocus);

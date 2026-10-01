@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui/Card';
+import { istMonth } from '../utils/ist';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 
@@ -24,13 +25,13 @@ export default function SalespersonDetail() {
   const [enrollments, setEnrollments] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState(() => {
     const months = [];
     for (let i = 0; i < 14; i++) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      months.push({ value: d.toISOString().slice(0, 7), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
+      months.push({ value: istMonth(d), label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) });
     }
     return months;
   });
