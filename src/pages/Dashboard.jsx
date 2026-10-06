@@ -33,14 +33,6 @@ function fmtINR(n) {
   return `${sign}₹${abs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
-const STATUS_COLORS = {
-  backlog: 'bg-red-50 text-red-600',
-  todo: 'bg-blue-50 text-blue-600',
-  in_progress: 'bg-amber-50 text-amber-600',
-  in_review: 'bg-purple-50 text-purple-600',
-  done: 'bg-emerald-50 text-emerald-600',
-};
-
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();

@@ -7,10 +7,8 @@ import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
 
 const COLUMNS = [
-  { key: 'backlog', label: 'Backlog', color: 'bg-red-50', dot: 'bg-red-400' },
   { key: 'todo', label: 'To Do', color: 'bg-blue-50', dot: 'bg-blue-500' },
   { key: 'in_progress', label: 'In Progress', color: 'bg-amber-50', dot: 'bg-amber-500' },
-  { key: 'in_review', label: 'In Review', color: 'bg-purple-50', dot: 'bg-purple-500' },
   { key: 'done', label: 'Done', color: 'bg-emerald-50', dot: 'bg-emerald-500' },
 ];
 

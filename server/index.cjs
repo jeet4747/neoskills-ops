@@ -1037,7 +1037,7 @@ app.put('/api/tasks/:id', auth(), async (req, res) => {
 app.put('/api/tasks/:id/status', auth(), async (req, res) => {
   try {
     const { status } = req.body;
-    const valid = ['backlog', 'todo', 'in_progress', 'in_review', 'done'];
+    const valid = ['todo', 'in_progress', 'done'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     const existing = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Task not found' });
@@ -1057,15 +1057,7 @@ app.put('/api/tasks/:id/status', auth(), async (req, res) => {
       );
       sendPushNotification(task.assignee_id, 'Task Completed', `"${task.title}" marked as done.`, notifRes.rows[0].id);
     }
-    if (status === 'in_review' && task.created_by && task.created_by !== req.user.id) {
-      const notifRes = await query(
-        `INSERT INTO notifications (user_id, type, title, message)
-         VALUES ($1, 'task_in_review', 'Task In Review', $2) RETURNING id`,
-        [task.created_by, `"${task.title}" has been moved to In Review by ${req.user.name}.`]
-      );
-      sendPushNotification(task.created_by, 'Task In Review', `"${task.title}" moved to In Review.`, notifRes.rows[0].id);
-    }
-    const statusLabels = { backlog: 'Backlog', todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done' };
+    const statusLabels = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' };
     await query(
       'INSERT INTO task_activities (task_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
       [req.params.id, req.user.id, 'moved', `Moved from "${statusLabels[task.status]}" to "${statusLabels[status]}"`]
@@ -3457,7 +3449,7 @@ async function init() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        status TEXT DEFAULT 'todo' CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done')),
+        status TEXT DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
         priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
         assignee_id INTEGER REFERENCES users(id),
         created_by INTEGER REFERENCES users(id),
@@ -3604,8 +3596,9 @@ async function init() {
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
       await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
       await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'todo'`);
+      await query(`UPDATE tasks SET status = 'todo' WHERE status IN ('backlog', 'in_review')`);
       await query(`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check`);
-      await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done'))`);
+      await query(`ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('todo', 'in_progress', 'done'))`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS training_month TEXT`);
       await query(`UPDATE enrollments SET training_month = to_char(created_at, 'YYYY-MM') WHERE training_month IS NULL OR training_month = ''`);
       await query(`ALTER TABLE batches ADD COLUMN IF NOT EXISTS zoom_link TEXT`);
