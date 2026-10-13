@@ -27,7 +27,7 @@ export default function GSTSettings() {
       try {
         const s = await api.gstSettings.get();
         const merged = { ...EMPTY, ...s };
-        merged.terms = JSON.parse(s.terms || '[]');
+        merged.terms = Array.isArray(s.terms) ? s.terms : JSON.parse(s.terms || '[]');
         setForm(merged);
         setTermsText(merged.terms.join('\n'));
       } catch (e) { toast.error('Failed to load settings'); }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase, ReceiptText, Settings2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -31,6 +31,8 @@ export default function Sidebar({ open, onClose }) {
     { to: '/payments', icon: Banknote, label: 'Payments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/training-calendar', icon: Layers, label: 'Batches & Calendar', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/receipts', icon: FileText, label: 'Receipts', roles: ['admin', 'manager', 'ops', 'hr'] },
+    { to: '/gst-invoices', icon: ReceiptText, label: 'GST Invoices', roles: ['admin', 'manager', 'ops'] },
+    { to: '/gst-settings', icon: Settings2, label: 'GST Settings', roles: ['admin', 'manager', 'ops'] },
     { to: '/bank-accounts', icon: Building2, label: 'Bank Accounts', roles: ['admin', 'manager', 'ops'] },
     { to: '/team', icon: Users, label: 'Team', roles: ['admin', 'manager'] },
     { to: '/users', icon: UserPlus, label: 'Pending Users', roles: ['manager', 'admin'] },

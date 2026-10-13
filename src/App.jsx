@@ -19,6 +19,8 @@ import TrainingCalendar from './pages/TrainingCalendar';
 import Broadcast from './pages/Broadcast';
 import Attendance from './pages/Attendance';
 import Hiring from './pages/Hiring';
+import GSTInvoices from './pages/GSTInvoices';
+import GSTSettings from './pages/GSTSettings';
 import AppLayout from './components/Layout/AppLayout';
 
 function ProtectedRoute({ children, roles, ids }) {
@@ -107,6 +109,22 @@ export default function App() {
           element={
             <ProtectedRoute roles={['admin', 'manager', 'ops']}>
               <BankAccounts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="gst-invoices"
+          element={
+            <ProtectedRoute roles={['admin', 'manager', 'ops']}>
+              <GSTInvoices />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="gst-settings"
+          element={
+            <ProtectedRoute roles={['admin', 'manager', 'ops']}>
+              <GSTSettings />
             </ProtectedRoute>
           }
         />
