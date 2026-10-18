@@ -25,17 +25,22 @@ export default function Approvals() {
   const [filterBank, setFilterBank] = useState('');
   const [bankAccounts, setBankAccounts] = useState([]);
   const [editForm, setEditForm] = useState(null);
+  const [salespeople, setSalespeople] = useState([]);
+
+  const canChangePoc = user?.role === 'admin' || user?.role === 'ops';
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [pending, accounts] = await Promise.all([
+      const [pending, accounts, users] = await Promise.all([
         api.approvals.pending(),
         api.bankAccounts.list(),
+        api.users.list(),
       ]);
       setPayments(pending);
       setBankAccounts(accounts);
+      setSalespeople(users.filter((u) => u.role === 'sales' || u.can_sell || u.role === 'admin'));
     } catch (e) { toast.error('Failed to load pending approvals'); }
     finally { setLoading(false); }
   }
@@ -48,6 +53,7 @@ export default function Approvals() {
       payment_mode: p.payment_mode || 'upi',
       bank_account_id: p.bank_account_id ? String(p.bank_account_id) : '',
       transaction_id: p.transaction_id || '',
+      sales_user_id: p.sales_user_id ? String(p.sales_user_id) : '',
     });
     setShowDetail(true);
   }
@@ -60,13 +66,17 @@ export default function Approvals() {
     setActionLoading(true);
     try {
       if (editForm) {
-        const updated = await api.payments.update(payment.id, {
+        const payload = {
           amount_paid: parseFloat(editForm.amount_paid) || Number(payment.amount_paid),
           payment_date: editForm.payment_date || null,
           payment_mode: editForm.payment_mode,
           bank_account_id: editForm.bank_account_id ? parseInt(editForm.bank_account_id) : null,
           transaction_id: editForm.transaction_id,
-        });
+        };
+        if (canChangePoc && editForm.sales_user_id && parseInt(editForm.sales_user_id) !== payment.sales_user_id) {
+          payload.sales_user_id = parseInt(editForm.sales_user_id);
+        }
+        const updated = await api.payments.update(payment.id, payload);
         payment = { ...payment, ...updated };
       }
       await api.approvals.approve(payment.id);
@@ -287,6 +297,24 @@ export default function Approvals() {
                   onChange={(e) => setEditForm({ ...editForm, transaction_id: e.target.value })}
                   placeholder="e.g. UTR/ref number" />
               </div>
+              {canChangePoc && (
+                <div className="col-span-1 sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Sale POC</label>
+                  <select className="input-field" value={editForm.sales_user_id}
+                    onChange={(e) => setEditForm({ ...editForm, sales_user_id: e.target.value })}>
+                    <option value="">Select POC…</option>
+                    {[
+                      ...salespeople,
+                      ...(selected.sales_user_id && !salespeople.some((u) => u.id === selected.sales_user_id)
+                        ? [{ id: selected.sales_user_id, name: selected.salesperson_name }]
+                        : []),
+                    ].map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Reassigns this payment and its enrollment to the selected POC.</p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-xl p-3 text-sm">

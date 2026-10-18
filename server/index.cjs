@@ -1806,7 +1806,7 @@ app.get('/api/payments', auth(), async (req, res) => {
 
 app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
-    const { amount_paid, payment_mode, payment_date, bank_account_id, transaction_id, collection_month } = req.body;
+    const { amount_paid, payment_mode, payment_date, bank_account_id, transaction_id, collection_month, sales_user_id } = req.body;
     const existing = await query('SELECT * FROM payments WHERE id = $1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Payment not found' });
     const payment = existing.rows[0];
@@ -1831,16 +1831,29 @@ app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res)
     }
     const pending = Math.max(0, total - (paidSoFar + amount));
 
+    // POC reassignment is restricted to admin and ops
+    const pocChangeAllowed = req.user.role === 'admin' || req.user.role === 'ops';
+    let salesUserId = payment.sales_user_id;
+    if (pocChangeAllowed && sales_user_id !== undefined && sales_user_id !== '' && parseInt(sales_user_id, 10) !== payment.sales_user_id) {
+      const target = await query('SELECT id FROM users WHERE id = $1', [parseInt(sales_user_id, 10)]);
+      if (!target.rows.length) return res.status(400).json({ error: 'Selected POC not found' });
+      salesUserId = target.rows[0].id;
+    }
+
     const result = await query(
-      `UPDATE payments SET amount_paid = $1, pending_amount = $2, payment_mode = $3, payment_date = $4, bank_account_id = $5, transaction_id = $6, collection_month = $7
-       WHERE id = $8 RETURNING *`,
+      `UPDATE payments SET amount_paid = $1, pending_amount = $2, payment_mode = $3, payment_date = $4, bank_account_id = $5, transaction_id = $6, collection_month = $7, sales_user_id = $8
+       WHERE id = $9 RETURNING *`,
       [amount, pending, payment_mode !== undefined ? payment_mode : payment.payment_mode,
        payment_date !== undefined ? payment_date : payment.payment_date,
        bank_account_id !== undefined ? bank_account_id : payment.bank_account_id,
        transaction_id !== undefined ? transaction_id : payment.transaction_id,
        collection_month !== undefined && /^\d{4}-\d{2}$/.test(collection_month) ? collection_month : payment.collection_month,
+       salesUserId,
        payment.id]
     );
+    if (salesUserId !== payment.sales_user_id) {
+      await query('UPDATE enrollments SET sales_user_id = $1 WHERE id = $2', [salesUserId, payment.enrollment_id]);
+    }
     await refreshEnrollmentStatus(payment.enrollment_id);
     res.json(result.rows[0]);
   } catch (e) {
