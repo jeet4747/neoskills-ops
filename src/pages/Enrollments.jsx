@@ -31,8 +31,10 @@ export default function Enrollments() {
   const { user } = useAuth();
   const toast = useToast();
   const isOps = user && (user.role === 'admin' || user.role === 'manager' || user.role === 'ops');
+  const canChangePoc = user?.role === 'admin';
   const [enrollments, setEnrollments] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
+  const [salespeople, setSalespeople] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -107,6 +109,14 @@ export default function Enrollments() {
     } catch (e) { toast.error('Failed to load enrollments'); }
     finally { setLoading(false); }
   }
+
+  // POC dropdown is admin-only; /api/users is not readable by sales, so fetch it separately.
+  useEffect(() => {
+    if (!canChangePoc) return;
+    api.users.list()
+      .then((u) => setSalespeople(u.filter((x) => x.role === 'sales' || x.can_sell || x.role === 'admin')))
+      .catch(() => {});
+  }, [canChangePoc]);
 
   function isImage(file) {
     return file && file.type.startsWith('image/');
@@ -229,6 +239,7 @@ export default function Enrollments() {
       source: enrollment.source || 'Website',
       batch_name: enrollment.batch_name || '',
       deal_type: enrollment.deal_type || 'bundle',
+      sales_user_id: enrollment.sales_user_id ? String(enrollment.sales_user_id) : '',
     });
   }
 
@@ -950,6 +961,34 @@ export default function Enrollments() {
                 </div>
               </div>
             </section>
+
+            {canChangePoc && (
+              <section>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Ownership</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Sales POC</label>
+                    <select className="input-field" value={editForm.sales_user_id || ''}
+                      onChange={(e) => setEditForm({ ...editForm, sales_user_id: e.target.value })}>
+                      <option value="">Select POC…</option>
+                      {[
+                        ...salespeople,
+                        ...(editing.sales_user_id && !salespeople.some((u) => u.id === editing.sales_user_id)
+                          ? [{ id: editing.sales_user_id, name: editing.salesperson_name }]
+                          : []),
+                      ].map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <p className="text-xs text-gray-400 pb-3">
+                      Moving the POC transfers this enrollment and every payment on it to the new person, removing it from the current one.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             <div className="flex items-center justify-between pt-4 border-t">
               <p className="text-xs text-gray-400">Changes to candidate details and fees</p>

@@ -717,7 +717,15 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
     if (!isManager && enroll.sales_user_id !== req.user.id)
       return res.status(403).json({ error: 'You can only edit your own enrollments' });
 
-    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, training_month, support_included, source, batch_name, telecrm_link } = req.body;
+    const { student_id, course_name, deal_type, category, training_fee, exam_fee, total_amount, training_month, support_included, source, batch_name, telecrm_link, sales_user_id } = req.body;
+
+    // POC reassignment (full enrollment shift) is restricted to admins
+    let salesUserId = enroll.sales_user_id;
+    if (req.user.role === 'admin' && sales_user_id !== undefined && sales_user_id !== '' && parseInt(sales_user_id, 10) !== enroll.sales_user_id) {
+      const target = await query('SELECT id FROM users WHERE id = $1', [parseInt(sales_user_id, 10)]);
+      if (!target.rows.length) return res.status(400).json({ error: 'Selected POC not found' });
+      salesUserId = target.rows[0].id;
+    }
 
     const newTotal = total_amount !== undefined
       ? parseFloat(total_amount)
@@ -727,8 +735,8 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
       `UPDATE enrollments SET
          course_name = $1, deal_type = $2, category = $3,
          training_fee = $4, exam_fee = $5, total_amount = $6,
-         support_included = $7, source = $8, batch_name = $9, telecrm_link = $10, training_month = $11
-       WHERE id = $12 RETURNING *`,
+         support_included = $7, source = $8, batch_name = $9, telecrm_link = $10, training_month = $11, sales_user_id = $12
+       WHERE id = $13 RETURNING *`,
       [
         course_name || enroll.course_name,
         deal_type || enroll.deal_type,
@@ -741,9 +749,15 @@ app.put('/api/enrollments/:id', auth(), async (req, res) => {
         batch_name !== undefined ? batch_name : enroll.batch_name,
         telecrm_link !== undefined ? telecrm_link : enroll.telecrm_link,
         training_month !== undefined ? training_month : enroll.training_month,
+        salesUserId,
         req.params.id,
       ]
     );
+
+    // Move every payment on this enrollment too, so nothing stays with the old POC
+    if (salesUserId !== enroll.sales_user_id) {
+      await query('UPDATE payments SET sales_user_id = $1 WHERE enrollment_id = $2', [salesUserId, req.params.id]);
+    }
 
     let studentResult = null;
     if (student_id) {
