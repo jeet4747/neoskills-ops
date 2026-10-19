@@ -27,7 +27,7 @@ export default function Approvals() {
   const [editForm, setEditForm] = useState(null);
   const [salespeople, setSalespeople] = useState([]);
 
-  const canChangePoc = user?.role === 'admin' || user?.role === 'ops';
+  const canChangePoc = user?.role === 'admin';
 
   useEffect(() => { load(); }, []);
 
@@ -312,7 +312,7 @@ export default function Approvals() {
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-400 mt-1">Reassigns this payment and its enrollment to the selected POC.</p>
+                  <p className="text-xs text-gray-400 mt-1">Moves this whole enrollment (and every payment on it) to the selected POC, removing it from the current one.</p>
                 </div>
               )}
             </div>

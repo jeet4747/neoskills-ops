@@ -1831,8 +1831,8 @@ app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res)
     }
     const pending = Math.max(0, total - (paidSoFar + amount));
 
-    // POC reassignment is restricted to admin and ops
-    const pocChangeAllowed = req.user.role === 'admin' || req.user.role === 'ops';
+    // POC reassignment (full enrollment shift) is restricted to admins only
+    const pocChangeAllowed = req.user.role === 'admin';
     let salesUserId = payment.sales_user_id;
     if (pocChangeAllowed && sales_user_id !== undefined && sales_user_id !== '' && parseInt(sales_user_id, 10) !== payment.sales_user_id) {
       const target = await query('SELECT id FROM users WHERE id = $1', [parseInt(sales_user_id, 10)]);
@@ -1852,7 +1852,10 @@ app.put('/api/payments/:id', auth(['admin', 'manager', 'ops']), async (req, res)
        payment.id]
     );
     if (salesUserId !== payment.sales_user_id) {
+      // Shift the whole enrollment to the new POC: the sale owner and every
+      // payment on it, so nothing stays attributed to the old POC.
       await query('UPDATE enrollments SET sales_user_id = $1 WHERE id = $2', [salesUserId, payment.enrollment_id]);
+      await query('UPDATE payments SET sales_user_id = $1 WHERE enrollment_id = $2', [salesUserId, payment.enrollment_id]);
     }
     await refreshEnrollmentStatus(payment.enrollment_id);
     res.json(result.rows[0]);
