@@ -29,6 +29,7 @@ export default function EnrollmentDetail() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [viewPayment, setViewPayment] = useState(null);
+  const [receiptLoadingId, setReceiptLoadingId] = useState(null);
   const [showEditTelecrm, setShowEditTelecrm] = useState(false);
   const [telecrmInput, setTelecrmInput] = useState('');
   const [savingTelecrm, setSavingTelecrm] = useState(false);
@@ -87,6 +88,16 @@ export default function EnrollmentDetail() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Screenshots are not part of the list payload; load them only for this payment.
+  async function openReceipts(r) {
+    setReceiptLoadingId(r.id);
+    try {
+      const data = await api.payments.receipts(r.id);
+      setViewPayment({ ...r, receipt_urls: data.receipt_urls });
+    } catch (e) { toast.error('Failed to load receipt'); }
+    finally { setReceiptLoadingId(null); }
   }
 
   function openEditBank(payment) {
@@ -162,14 +173,12 @@ export default function EnrollmentDetail() {
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'salesperson_name', label: 'Recorded by' },
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleDateString() },
-    { key: 'receipt_url', label: 'Receipt', render: (r) => {
-      const urls = getReceiptUrls(r);
-      return urls.length ? (
-        <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
-          <Download size={12} /> View ({urls.length})
-        </button>
-      ) : '-';
-    } },
+    { key: 'receipt_count', label: 'Receipt', render: (r) => r.receipt_count ? (
+      <button onClick={() => openReceipts(r)} disabled={receiptLoadingId === r.id}
+        className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs disabled:opacity-50">
+        <Download size={12} /> {receiptLoadingId === r.id ? 'Loading…' : `View (${r.receipt_count})`}
+      </button>
+    ) : '-' },
   ];
 
   if (loading) {

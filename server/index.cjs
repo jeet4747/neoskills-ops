@@ -1774,8 +1774,19 @@ app.post('/api/payments', auth(), async (req, res) => {
 app.get('/api/payments', auth(), async (req, res) => {
   try {
     const role = req.user.role;
+    // Never select receipt_url / receipt_urls here: they hold base64 screenshots
+    // (~62 MB for the whole table). Return only a count and fetch images on demand.
     let sql = `
-      SELECT p.*, s.name as student_name, s.email as student_email, e.course_name, u.name as salesperson_name,
+      SELECT p.id, p.enrollment_id, p.student_id, p.sales_user_id, p.amount_paid, p.pending_amount,
+             p.payment_mode, p.bank_account_id, p.transaction_id, p.status, p.approved_by, p.approved_at,
+             p.rejection_reason, p.created_at, p.payment_date, p.collection_month,
+             CASE
+               WHEN jsonb_typeof(p.receipt_urls) = 'array' AND jsonb_array_length(p.receipt_urls) > 0
+                 THEN jsonb_array_length(p.receipt_urls)
+               WHEN p.receipt_url IS NOT NULL THEN 1
+               ELSE 0
+             END AS receipt_count,
+             s.name as student_name, s.email as student_email, e.course_name, u.name as salesperson_name,
              ba.account_name as bank_account_name
       FROM payments p
       JOIN students s ON p.student_id = s.id
@@ -1806,6 +1817,11 @@ app.get('/api/payments', auth(), async (req, res) => {
     if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
       conditions.push(`p.collection_month = $${params.length + 1}`);
       params.push(req.query.month);
+    }
+
+    if (req.query.enrollment_id) {
+      conditions.push(`p.enrollment_id = $${params.length + 1}`);
+      params.push(parseInt(req.query.enrollment_id));
     }
 
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
@@ -1940,6 +1956,26 @@ app.get('/api/approvals/count', auth(['admin', 'manager', 'ops']), async (req, r
       `SELECT COUNT(*) as count FROM payments WHERE status = 'pending_approval'${adminHidden}`
     );
     res.json({ count: parseInt(result.rows[0].count) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Single payment's screenshots, fetched only when the user opens a receipt.
+app.get('/api/payments/:id/receipts', auth(), async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT id, sales_user_id, receipt_url, receipt_urls FROM payments WHERE id = $1',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Payment not found' });
+    const p = result.rows[0];
+    if (req.user.role === 'sales' && p.sales_user_id !== req.user.id)
+      return res.status(403).json({ error: 'Not allowed' });
+    const urls = Array.isArray(p.receipt_urls) && p.receipt_urls.length
+      ? p.receipt_urls
+      : (p.receipt_url ? [p.receipt_url] : []);
+    res.json({ receipt_urls: urls });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

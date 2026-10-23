@@ -42,6 +42,7 @@ export default function Payments() {
   const [receiptFiles, setReceiptFiles] = useState([]);
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
   const [viewPayment, setViewPayment] = useState(null);
+  const [receiptLoadingId, setReceiptLoadingId] = useState(null);
   const [errors, setErrors] = useState({});
   const isManager = user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops';
 
@@ -83,14 +84,12 @@ export default function Payments() {
       </span>
     ) : '-' },
     { key: 'status', label: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'receipt_url', label: 'Receipt', render: (r) => {
-      const urls = getReceiptUrls(r);
-      return urls.length ? (
-        <button onClick={() => setViewPayment(r)} className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs">
-          <Download size={12} /> View ({urls.length})
-        </button>
-      ) : '-';
-    } },
+    { key: 'receipt_count', label: 'Receipt', render: (r) => r.receipt_count ? (
+      <button onClick={() => openReceipts(r)} disabled={receiptLoadingId === r.id}
+        className="text-primary-600 hover:underline inline-flex items-center gap-1 text-xs disabled:opacity-50">
+        <Download size={12} /> {receiptLoadingId === r.id ? 'Loading…' : `View (${r.receipt_count})`}
+      </button>
+    ) : '-' },
   ];
 
   useEffect(() => { load(); }, [filterMonth]);
@@ -109,6 +108,16 @@ export default function Payments() {
       setBankAccounts(b);
     } catch (e) { toast.error('Failed to load payments'); }
     finally { setLoading(false); }
+  }
+
+  // Screenshots are not part of the list payload; load them only for this payment.
+  async function openReceipts(r) {
+    setReceiptLoadingId(r.id);
+    try {
+      const data = await api.payments.receipts(r.id);
+      setViewPayment({ ...r, receipt_urls: data.receipt_urls });
+    } catch (e) { toast.error('Failed to load receipt'); }
+    finally { setReceiptLoadingId(null); }
   }
 
   function validate() {

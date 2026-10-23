@@ -93,6 +93,7 @@ export const api = {
     },
     create: (data) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/payments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    receipts: (id) => request(`/payments/${id}/receipts`),
     uploadReceipt: (id, files) => {
       const form = new FormData();
       (Array.isArray(files) ? files : [files]).forEach((f) => form.append('receipts', f));
