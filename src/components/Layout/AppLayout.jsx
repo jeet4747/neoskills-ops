@@ -5,9 +5,33 @@ import Sidebar from './Sidebar';
 import NotificationsBell from './NotificationsBell';
 import PushPrompt from './PushPrompt';
 import MotivationPopup from './MotivationPopup';
+import DiwaliWishes from '../festive/DiwaliWishes';
+import { useAuth } from '../../context/AuthContext';
+import { isDiwaliPeriod, diwaliSeenKey, MOTIVATION_SESSION_KEY } from '../../utils/festive';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
+  const festive = isDiwaliPeriod();
+  const [diwaliOpen, setDiwaliOpen] = useState(() => {
+    if (typeof window === 'undefined' || !isDiwaliPeriod()) return false;
+    try {
+      return !localStorage.getItem(diwaliSeenKey(user?.id));
+    } catch {
+      return false;
+    }
+  });
+
+  function closeDiwali() {
+    try {
+      localStorage.setItem(diwaliSeenKey(user?.id), '1');
+      // Don't stack the motivation popup behind the wishes on the same visit.
+      sessionStorage.setItem(MOTIVATION_SESSION_KEY, '1');
+    } catch {
+      /* storage can be blocked in private mode */
+    }
+    setDiwaliOpen(false);
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100">
@@ -31,16 +55,27 @@ export default function AppLayout() {
             </div>
           </div>
           <div className="flex-1" />
+          {festive && (
+            <button
+              type="button"
+              onClick={() => setDiwaliOpen(true)}
+              title="View Diwali wishes"
+              className="hidden md:inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+            >
+              🪔 Happy Diwali
+            </button>
+          )}
           <NotificationsBell />
         </header>
-        <main className="flex-1 overflow-y-auto p-5 lg:p-8 bg-gray-100">
+        <main className={`flex-1 overflow-y-auto p-5 lg:p-8 ${festive ? 'diwali-shell' : 'bg-gray-100'}`}>
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
         </main>
       </div>
       <PushPrompt />
-      <MotivationPopup />
+      {!diwaliOpen && <MotivationPopup />}
+      <DiwaliWishes open={diwaliOpen} onClose={closeDiwali} />
     </div>
   );
 }

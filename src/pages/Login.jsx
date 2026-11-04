@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Trophy } from 'lucide-react';
+import DiwaliLights from '../components/festive/DiwaliLights';
+import DiwaliDecor from '../components/festive/DiwaliDecor';
+import { isDiwaliPeriod } from '../utils/festive';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -10,6 +12,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const festive = isDiwaliPeriod();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,17 +29,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-100">
+    <div className={`min-h-screen flex ${festive ? 'diwali-shell' : 'bg-gray-100'}`}>
       <div className="hidden lg:flex w-1/2 gradient-primary items-center justify-center p-12 relative overflow-hidden">
+        {festive && <DiwaliDecor />}
+        {festive && <DiwaliLights className="absolute inset-x-0 top-0 w-full opacity-90" height={72} />}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl" />
           <div className="absolute bottom-20 right-20 w-96 h-96 bg-accent-500 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10 text-center max-w-md">
-          <div className="w-16 h-16 bg-accent-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-            <Trophy size={32} className="text-primary-900" />
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-3">NeoOps</h1>
+          <img
+            src="/icons/icon-192.png"
+            alt="NeoOps"
+            className={`w-20 h-20 rounded-2xl mx-auto mb-6 shadow-xl ${festive ? 'ring-1 ring-amber-300/50' : ''}`}
+          />
+          {festive && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-200">
+              🪔 15 Days of Light
+            </span>
+          )}
+          <h1 className="mt-4 text-4xl font-bold text-white mb-3">NeoOps</h1>
           <p className="text-xl text-white/70 mb-2">Sales Command Center</p>
           <p className="text-white/40 text-sm">Track performance. Close deals. Grow revenue.</p>
         </div>
@@ -45,15 +57,18 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="lg:hidden text-center mb-8">
-            <div className="w-12 h-12 bg-primary-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <Trophy size={24} className="text-white" />
-            </div>
+            <img src="/icons/icon-192.png" alt="NeoOps" className="w-14 h-14 rounded-2xl mx-auto mb-3 shadow-sm" />
             <h1 className="text-xl font-bold text-primary-600">NeoOps</h1>
             <p className="text-sm text-gray-400">Sales Command Center</p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 space-y-5">
             <div>
+              {festive && (
+                <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
+                  🪔 Shubh Deepavali
+                </span>
+              )}
               <h2 className="text-xl font-bold text-gray-900">Welcome back</h2>
               <p className="text-sm text-gray-400 mt-1">Sign in to your account</p>
             </div>

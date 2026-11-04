@@ -110,3 +110,55 @@
   animation: shimmer 1.5s infinite;
   border-radius: 8px;
 }
+
+/* ---------- Diwali (1–15 Nov) festive treatment ---------- */
+.diwali-shell {
+  background-color: #fdf8ef;
+  background-image:
+    radial-gradient(900px 520px at 100% -10%, rgba(255, 195, 0, 0.16), transparent 62%),
+    radial-gradient(820px 520px at -10% 108%, rgba(255, 138, 0, 0.13), transparent 62%),
+    radial-gradient(620px 420px at 0% 0%, rgba(255, 61, 129, 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+.diwali-flicker {
+  transform-origin: 50% 85%;
+  animation: diwaliFlicker 2.6s ease-in-out infinite;
+}
+.diwali-glow {
+  animation: diwaliGlow 3.4s ease-in-out infinite;
+}
+.diwali-float {
+  animation: diwaliFloat 5.5s ease-in-out infinite;
+}
+.diwali-twinkle {
+  animation: diwaliTwinkle 3.2s ease-in-out infinite;
+}
+
+@keyframes diwaliFlicker {
+  0%, 100% { opacity: 0.92; transform: scale(1); }
+  35% { opacity: 1; transform: scale(1.05); }
+  60% { opacity: 0.88; transform: scale(0.98); }
+  80% { opacity: 0.98; transform: scale(1.02); }
+}
+@keyframes diwaliGlow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+@keyframes diwaliFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+@keyframes diwaliTwinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diwali-flicker,
+  .diwali-glow,
+  .diwali-float,
+  .diwali-twinkle {
+    animation: none;
+  }
+}
