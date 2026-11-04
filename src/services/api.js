@@ -12,17 +12,20 @@ async function request(path, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
-  if (res.status === 401) {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-    throw new Error('Unauthorized');
-  }
   const text = await res.text();
   let data;
   try {
     data = text ? JSON.parse(text) : {};
   } catch (e) {
     data = { error: `Server error (${res.status}). Please try again.` };
+  }
+  if (res.status === 401) {
+    // The login endpoint uses 401 for wrong credentials. Show the real reason
+    // instead of the generic "Unauthorized" so people know to retry the password.
+    if (path === '/auth/login') throw new Error(data.error || 'Invalid email or password');
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
   }
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -34,6 +37,7 @@ export const auth = {
   register: (name, email, password) =>
     request('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
   me: () => request('/auth/me'),
+  changePassword: (data) => request('/auth/change-password', { method: 'PUT', body: JSON.stringify(data) }),
   pendingUsers: () => request('/auth/pending-users'),
   approveUser: (id, action) =>
     request(`/auth/approve/${id}`, { method: 'POST', body: JSON.stringify({ action }) }),
@@ -177,6 +181,7 @@ export const api = {
     },
     create: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    resetPassword: (id, password) => request(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
     teamAnalytics: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return request(`/team/analytics${q ? `?${q}` : ''}`);

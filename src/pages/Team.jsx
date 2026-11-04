@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users as UsersIcon, Shield, DollarSign, Clock, UserPlus, TrendingUp, Medal, AlertCircle } from 'lucide-react';
+import { Search, Users as UsersIcon, Shield, DollarSign, Clock, UserPlus, TrendingUp, Medal, AlertCircle, KeyRound } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -43,6 +43,9 @@ export default function Team() {
   const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState([]);
   const [newMember, setNewMember] = useState({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123' });
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetPassword, setResetPassword] = useState('neoskills@123');
+  const [resetting, setResetting] = useState(false);
 
   const isAdmin = me?.role === 'admin';
   const isManager = isAdmin || me?.role === 'manager' || me?.role === 'ops';
@@ -77,6 +80,26 @@ export default function Team() {
       toast.error(e.message);
     } finally {
       setSavingId(null);
+    }
+  }
+
+  function openReset(u) {
+    setResetTarget(u);
+    setResetPassword('neoskills@123');
+  }
+
+  async function handleResetPassword() {
+    if (!resetTarget) return;
+    if (resetPassword.length < 6) return toast.error('Password must be at least 6 characters');
+    setResetting(true);
+    try {
+      await api.users.resetPassword(resetTarget.id, resetPassword);
+      toast.success(`Password reset for ${resetTarget.name}. Share the new password with them.`);
+      setResetTarget(null);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -337,6 +360,7 @@ export default function Team() {
                     <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Collected</th>
                     <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Pending</th>
                     <th className="px-5 py-3.5 text-left font-medium text-gray-400 text-xs uppercase tracking-wider">Joined</th>
+                    {isAdmin && <th className="px-5 py-3.5 text-right font-medium text-gray-400 text-xs uppercase tracking-wider">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -394,11 +418,24 @@ export default function Team() {
                       <td className="px-5 py-3.5 font-medium text-gray-900">₹{Number(u.collected || 0).toLocaleString()}</td>
                       <td className="px-5 py-3.5 text-amber-600 font-medium">₹{Number(u.pending || 0).toLocaleString()}</td>
                       <td className="px-5 py-3.5 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                      {isAdmin && (
+                        <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          {String(u.id) !== String(me?.id) && (
+                            <button
+                              onClick={() => openReset(u)}
+                              title={`Reset password for ${u.name}`}
+                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            >
+                              <KeyRound size={16} />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {!filtered.length && (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-gray-400 text-sm">
+                      <td colSpan={isAdmin ? 8 : 7} className="px-5 py-12 text-center text-gray-400 text-sm">
                         No team members found
                       </td>
                     </tr>
@@ -445,6 +482,29 @@ export default function Team() {
           </div>
           <button onClick={handleAdd} disabled={adding} className="btn-primary w-full flex items-center justify-center gap-2">
             <UserPlus size={16} /> {adding ? 'Adding…' : 'Add Member'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Reset password modal */}
+      <Modal open={!!resetTarget} onClose={() => !resetting && setResetTarget(null)} title="Reset Password" size="sm">
+        <div className="space-y-3">
+          <p className="text-sm text-gray-500">
+            Set a new password for <span className="font-medium text-gray-700">{resetTarget?.name}</span>
+            {resetTarget?.email ? ` (${resetTarget.email})` : ''}. Share it with them — they can change it themselves from the sidebar.
+          </p>
+          <div>
+            <label className="text-xs text-gray-500 font-medium mb-1 block">New password *</label>
+            <input
+              className="input-field"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              autoFocus
+            />
+            <p className="text-[11px] text-gray-400 mt-1">At least 6 characters. Default: neoskills@123</p>
+          </div>
+          <button onClick={handleResetPassword} disabled={resetting} className="btn-primary w-full flex items-center justify-center gap-2">
+            <KeyRound size={16} /> {resetting ? 'Resetting…' : 'Reset Password'}
           </button>
         </div>
       </Modal>

@@ -2,15 +2,17 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase, ReceiptText, Settings2,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase, ReceiptText, Settings2, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import ChangePasswordModal from '../ChangePasswordModal';
 
 export default function Sidebar({ open, onClose }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [pendingCount, setPendingCount] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (user?.role === 'manager' || user?.role === 'admin' || user?.role === 'ops') {
@@ -108,6 +110,13 @@ export default function Sidebar({ open, onClose }) {
             </div>
           </div>
           <button
+            onClick={() => setShowPassword(true)}
+            className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-white/50 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+          >
+            <KeyRound size={16} />
+            Change Password
+          </button>
+          <button
             onClick={logout}
             className="flex items-center gap-2 w-full px-3.5 py-2.5 text-sm text-white/50 hover:text-red-300 hover:bg-white/10 rounded-xl transition-all"
           >
@@ -116,6 +125,7 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
       </aside>
+      <ChangePasswordModal open={showPassword} onClose={() => setShowPassword(false)} />
     </>
   );
 }

@@ -157,6 +157,27 @@ app.get('/api/auth/me', auth(), (req, res) => {
   res.json(req.user);
 });
 
+app.put('/api/auth/change-password', auth(), async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword)
+      return res.status(400).json({ error: 'Current and new password are required' });
+    if (String(newPassword).length < 6)
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    if (currentPassword === newPassword)
+      return res.status(400).json({ error: 'New password must be different from the current password' });
+    const result = await query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
+    const match = await bcrypt.compare(currentPassword, result.rows[0].password);
+    if (!match) return res.status(400).json({ error: 'Current password is incorrect' });
+    const hash = await bcrypt.hash(newPassword, 10);
+    await query('UPDATE users SET password = $1 WHERE id = $2', [hash, req.user.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/auth/pending-users', auth(['admin', 'manager', 'ops']), async (req, res) => {
   try {
     const result = await query(
@@ -252,6 +273,23 @@ app.put('/api/users/:id', auth(['admin']), async (req, res) => {
     const result = await query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, role, status, can_sell`, params);
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/users/:id/password', auth(['admin']), async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || String(password).length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const hash = await bcrypt.hash(password, 10);
+    const result = await query(
+      'UPDATE users SET password = $1 WHERE id = $2 RETURNING id, name, email',
+      [hash, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, user: result.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
