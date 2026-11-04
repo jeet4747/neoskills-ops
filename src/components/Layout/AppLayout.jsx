@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, Trophy } from 'lucide-react';
 import Sidebar from './Sidebar';
@@ -6,13 +6,15 @@ import NotificationsBell from './NotificationsBell';
 import PushPrompt from './PushPrompt';
 import MotivationPopup from './MotivationPopup';
 import DiwaliWishes from '../festive/DiwaliWishes';
+import DiwaliEntryCelebration from '../festive/DiwaliEntryCelebration';
 import { useAuth } from '../../context/AuthContext';
-import { isDiwaliPeriod, diwaliSeenKey, MOTIVATION_SESSION_KEY } from '../../utils/festive';
+import { isDiwaliPeriod, diwaliSeenKey, MOTIVATION_SESSION_KEY, DIWALI_CELEBRATED_KEY } from '../../utils/festive';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
   const festive = isDiwaliPeriod();
+  const [celebrate, setCelebrate] = useState(false);
   const [diwaliOpen, setDiwaliOpen] = useState(() => {
     if (typeof window === 'undefined' || !isDiwaliPeriod()) return false;
     try {
@@ -21,6 +23,25 @@ export default function AppLayout() {
       return false;
     }
   });
+
+  useEffect(() => {
+    if (!festive || diwaliOpen || typeof window === 'undefined') return undefined;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    try {
+      if (sessionStorage.getItem(DIWALI_CELEBRATED_KEY)) return undefined;
+    } catch {
+      /* storage can be blocked in private mode */
+    }
+    const timer = setTimeout(() => {
+      try {
+        sessionStorage.setItem(DIWALI_CELEBRATED_KEY, '1');
+      } catch {
+        /* storage can be blocked in private mode */
+      }
+      setCelebrate(true);
+    }, 550);
+    return () => clearTimeout(timer);
+  }, [festive, diwaliOpen]);
 
   function closeDiwali() {
     try {
@@ -76,6 +97,7 @@ export default function AppLayout() {
       <PushPrompt />
       {!diwaliOpen && <MotivationPopup />}
       <DiwaliWishes open={diwaliOpen} onClose={closeDiwali} />
+      <DiwaliEntryCelebration active={celebrate} />
     </div>
   );
 }

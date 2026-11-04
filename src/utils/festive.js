@@ -5,6 +5,7 @@ export const DIWALI_START = new Date('2026-11-01T00:00:00+05:30');
 export const DIWALI_END = new Date('2026-11-16T00:00:00+05:30'); // exclusive
 
 export const MOTIVATION_SESSION_KEY = 'ns_team_target_popup';
+export const DIWALI_CELEBRATED_KEY = `ns_diwali_${DIWALI_YEAR}_celebrated`;
 
 export function isDiwaliPeriod(now = new Date()) {
   const t = now.getTime();

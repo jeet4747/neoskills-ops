@@ -162,3 +162,117 @@
     animation: none;
   }
 }
+
+/* Non-blocking welcome celebration: fireworks, sweets and a marquee ribbon */
+.dw-ribbon {
+  animation: dwRibbon 7.2s ease forwards;
+}
+.dw-marquee {
+  animation: dwMarquee 11s linear infinite;
+}
+.dw-rocket {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 90px;
+  border-radius: 9999px;
+  opacity: 0;
+  transform-origin: bottom center;
+  animation: dwRocket 0.5s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+.dw-core {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  opacity: 0;
+  animation: dwCore 1s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+.dw-ring {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 9999px;
+  opacity: 0;
+  animation: dwRing 1.15s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+.dw-spark {
+  position: absolute;
+  left: -2.5px;
+  top: -2.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  opacity: 0;
+  animation: dwBurst 1.5s cubic-bezier(0.16, 0.84, 0.32, 1) forwards;
+  animation-delay: var(--delay, 0s);
+}
+.dw-drop {
+  position: absolute;
+  top: -6vh;
+  line-height: 1;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation-name: dwFall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.12));
+}
+
+@keyframes dwRibbon {
+  0% { opacity: 0; transform: translateY(-14px); }
+  10% { opacity: 1; transform: translateY(0); }
+  82% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+@keyframes dwMarquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes dwRocket {
+  0% { opacity: 0; transform: translateY(150px) scaleY(0.5); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(20px) scaleY(1); }
+}
+@keyframes dwCore {
+  0% { transform: scale(0.2); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes dwRing {
+  0% { transform: scale(0.2); opacity: 0.85; }
+  100% { transform: scale(10); opacity: 0; }
+}
+@keyframes dwBurst {
+  0% { transform: rotate(var(--angle)) translateY(0) scale(0.4); opacity: 0; }
+  10% { opacity: 1; }
+  55% { opacity: 1; }
+  100% { transform: rotate(var(--angle)) translateY(calc(-1 * var(--dist))) scale(1); opacity: 0; }
+}
+@keyframes dwFall {
+  0% { transform: translate3d(0, -12vh, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.95; }
+  78% { opacity: 0.9; }
+  100% { transform: translate3d(var(--drift), 112vh, 0) rotate(var(--spin)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dw-ribbon,
+  .dw-marquee,
+  .dw-rocket,
+  .dw-core,
+  .dw-ring,
+  .dw-spark,
+  .dw-drop {
+    animation: none;
+  }
+}
