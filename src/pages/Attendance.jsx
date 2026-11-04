@@ -17,6 +17,7 @@ const STATUS_META = {
   on_break: { label: 'On Break', color: 'bg-amber-50 text-amber-600' },
   on_leave: { label: 'On Leave', color: 'bg-purple-50 text-purple-600' },
   early_logout: { label: 'Early Logout', color: 'bg-orange-50 text-orange-600' },
+  holiday: { label: 'Holiday', color: 'bg-amber-50 text-amber-600' },
   punch_out: { label: 'Worked', color: 'bg-gray-100 text-gray-600' },
 };
 
@@ -141,6 +142,7 @@ export default function Attendance() {
     let present = 0, leave = 0, absent = 0;
     for (const r of rows) {
       if (r.status === 'on_leave') leave += 1;
+      else if (r.status === 'holiday') continue;
       else if (r.punch_in) present += 1;
       else absent += 1;
     }
@@ -210,7 +212,8 @@ export default function Attendance() {
                 {rows.map((r) => {
                   let label = 'Absent', dot = 'bg-gray-300', time = '';
                   const rowStatus = r.late_login ? 'late_login' : r.status;
-                  if (r.status === 'on_leave') { label = 'On Leave'; dot = 'bg-purple-500'; time = ''; }
+                  if (r.status === 'holiday') { label = 'Holiday'; dot = 'bg-amber-500'; time = ''; }
+                  else if (r.status === 'on_leave') { label = 'On Leave'; dot = 'bg-purple-500'; time = ''; }
                   else if (r.punch_in) {
                     label = 'Working';
                     dot = 'bg-emerald-500';
@@ -310,15 +313,18 @@ export default function Attendance() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {rows.map((r) => {
-                  const isAbsent = !r.punch_in && r.status !== 'on_leave';
+                  const isHoliday = r.status === 'holiday';
+                  const isAbsent = !r.punch_in && r.status !== 'on_leave' && !isHoliday;
                   const gridStatus = r.late_login ? 'late_login' : r.status;
-                  const meta = gridStatus === 'on_leave'
-                    ? STATUS_META.on_leave
-                    : isAbsent
-                      ? { label: 'Absent', color: 'bg-gray-100 text-gray-500' }
-                      : STATUS_META[gridStatus] || STATUS_META.punch_in;
+                  const meta = isHoliday
+                    ? STATUS_META.holiday
+                    : gridStatus === 'on_leave'
+                      ? STATUS_META.on_leave
+                      : isAbsent
+                        ? { label: 'Absent', color: 'bg-gray-100 text-gray-500' }
+                        : STATUS_META[gridStatus] || STATUS_META.punch_in;
                   return (
-                    <div key={r.user_id} className={`rounded-2xl p-4 border ${isAbsent || r.status === 'on_leave' ? 'bg-gray-50/70 border-gray-100' : 'bg-white border-gray-100'} shadow-sm`}>
+                    <div key={r.user_id} className={`rounded-2xl p-4 border ${isAbsent || r.status === 'on_leave' || isHoliday ? 'bg-gray-50/70 border-gray-100' : 'bg-white border-gray-100'} shadow-sm`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0">
                           <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${r.punch_in ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
@@ -357,7 +363,7 @@ export default function Attendance() {
                         </div>
                       ) : (
                         <p className="mt-3 text-xs text-gray-400">
-                          {r.status === 'on_leave' ? 'Marked as leave for this day.' : 'No login recorded.'}
+                          {r.status === 'on_leave' ? 'Marked as leave for this day.' : r.status === 'holiday' ? 'Company holiday.' : 'No login recorded.'}
                         </p>
                       )}
                     </div>
@@ -393,6 +399,7 @@ export default function Attendance() {
                 <option value="punch_in">Working</option>
                 <option value="on_break">On Break</option>
                 <option value="on_leave">On Leave</option>
+                <option value="holiday">Holiday</option>
                 <option value="early_logout">Early Logout</option>
                 <option value="punch_out">Worked</option>
               </select>

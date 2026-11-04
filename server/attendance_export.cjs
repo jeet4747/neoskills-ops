@@ -10,7 +10,20 @@ const STATUS_TEXT = {
   on_break: 'On Break',
   on_leave: 'On Leave',
   early_logout: 'Early Logout',
+  holiday: 'Holiday',
 };
+
+// Company holidays: these days are reported as Holiday and never counted as leave.
+const HOLIDAYS = {};
+
+// Report-only fixed logout. The live app keeps the real punch_out values; these
+// defaults are used by the exported sheet when a day has a login but no logout.
+// Shift ends here: Jeet (14) and Ritika (19) 20:00, Neha (5) 19:00,
+// everyone else 19:15.
+const DEFAULT_LOGOUT_MONTH = '2026-10';
+const DEFAULT_LOGOUT_MIN = 19 * 60 + 15;
+const DEFAULT_LOGOUT_BY_USER = { 14: 20 * 60, 19: 20 * 60, 5: 19 * 60 };
+const NO_DEFAULT_LOGOUT_USERS = new Set();
 
 const INDIGO = 'FF4F46E5';
 const INDIGO_LIGHT = 'FFEEF2FF';
@@ -33,6 +46,20 @@ const IST_OFFSET_MS = 330 * 60 * 1000;
 function istDateStr() {
   const x = new Date(Date.now() + IST_OFFSET_MS);
   return `${x.getUTCFullYear()}-${pad2(x.getUTCMonth() + 1)}-${pad2(x.getUTCDate())}`;
+}
+
+function weekdayOf(dateStr) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  return new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)).getUTCDay();
+}
+
+// Sundays are not working days, so they are left out of the report entirely.
+function isSunday(dateStr) {
+  return weekdayOf(dateStr) === 0;
+}
+
+function holidayName(dateStr) {
+  return HOLIDAYS[dateStr] || null;
 }
 
 function fmtDateObj(d) {
@@ -78,15 +105,39 @@ function escXml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function workedMinutesOf(r, todayStr) {
+function workedMinutesOf(r, todayStr, month) {
   if (!r.punch_in) return null;
-  const rowDate = fmtDateObj(r.date);
+  if (r.status === 'on_leave' || holidayName(fmtDateObj(r.date))) return null;
   let end = null;
-  if (r.punch_out) end = new Date(r.punch_out);
-  else if (rowDate === todayStr) end = new Date();
+  if (month === DEFAULT_LOGOUT_MONTH && r.status !== 'early_logout') end = defaultLogoutDate(r);
+  if (!end && r.punch_out) end = new Date(r.punch_out);
+  if (!end && fmtDateObj(r.date) === todayStr) end = new Date();
   if (!end) return null;
   const mins = Math.round((end - new Date(r.punch_in)) / 60000) - (Number(r.total_break_minutes) || 0);
   return Math.max(0, mins);
+}
+
+function defaultLogoutMinutes(r) {
+  if (NO_DEFAULT_LOGOUT_USERS.has(r.user_id)) return null;
+  return DEFAULT_LOGOUT_BY_USER[r.user_id] ?? DEFAULT_LOGOUT_MIN;
+}
+
+function defaultLogoutDate(r) {
+  const mins = defaultLogoutMinutes(r);
+  if (mins === null) return null;
+  const [y, m, d] = fmtDateObj(r.date).split('-').map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1) + mins * 60000 - IST_OFFSET_MS);
+}
+
+// Logout to print in the sheet: the fixed shift end for this month, else the real one.
+function effectiveLogout(r, month) {
+  if (!r.punch_in) return null;
+  if (r.status === 'on_leave' || holidayName(fmtDateObj(r.date))) return null;
+  if (month === DEFAULT_LOGOUT_MONTH && r.status !== 'early_logout') {
+    const fixed = defaultLogoutDate(r);
+    if (fixed) return fixed;
+  }
+  return r.punch_out ? new Date(r.punch_out) : null;
 }
 
 function barChartPng(title, items, color) {
@@ -169,7 +220,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
     if (!stats.has(id)) {
       stats.set(id, {
         id, name, role: role || '',
-        present: 0, leave: 0, calls: 0, noms: 0, brk: 0, hours: 0,
+        present: 0, leave: 0, holiday: 0, calls: 0, noms: 0, brk: 0, hours: 0,
         missingLogout: 0, loginMins: [], records: [],
       });
     }
@@ -177,20 +228,26 @@ async function buildAttendanceWorkbook(month, rows, users) {
   };
   for (const u of users) ensure(u.id, u.name, u.role);
   for (const r of rows) {
+    const ds = fmtDateObj(r.date);
+    if (isSunday(ds)) continue; // Sundays are dropped from the report
     const s = ensure(r.user_id, r.name, r.role);
     s.records.push(r);
-    if (r.status === 'on_leave') s.leave += 1;
-    if (r.punch_in) {
-      s.present += 1;
-      s.loginMins.push(istMinutesOfDay(r.punch_in));
-      if (!r.punch_out) {
-        if (fmtDateObj(r.date) < todayStr) s.missingLogout += 1;
+    if (holidayName(ds)) {
+      s.holiday += 1;
+    } else {
+      if (r.status === 'on_leave') s.leave += 1;
+      if (r.punch_in) {
+        s.present += 1;
+        s.loginMins.push(istMinutesOfDay(r.punch_in));
+        if (!r.punch_out && month !== DEFAULT_LOGOUT_MONTH) {
+          if (ds < todayStr) s.missingLogout += 1;
+        }
       }
     }
     s.calls += Number(r.connected_calls) || 0;
     s.noms += Number(r.nominations) || 0;
     s.brk += Number(r.total_break_minutes) || 0;
-    const wm = workedMinutesOf(r, todayStr);
+    const wm = workedMinutesOf(r, todayStr, month);
     if (wm !== null) s.hours += wm / 60;
   }
   const all = [...stats.values()];
@@ -353,7 +410,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
     ws.getCell('A2').value = `Role: ${s.role || '-'} · Generated ${istDateStr()}`;
     ws.getCell('A2').font = { size: 10, color: { argb: GRAY } };
 
-    const labels = ['Days Present', 'Leave Days', 'Working Hours', 'Connected Calls', 'Break (min)', 'Nominations', 'Avg Login'];
+    const labels = ['Days Present', 'Leave Days', 'Working Hours', 'Connected Calls', 'Break (min)', 'Nominations', 'Avg Login', 'Holidays'];
     const values = [
       s.present,
       s.leave,
@@ -362,6 +419,7 @@ async function buildAttendanceWorkbook(month, rows, users) {
       s.brk,
       s.noms,
       s.loginMins.length ? minutesToTime(Math.round(s.loginMins.reduce((t, m) => t + m, 0) / s.loginMins.length)) : '—',
+      s.holiday,
     ];
     labels.forEach((label, i) => {
       const c = i + 1;
@@ -395,29 +453,38 @@ async function buildAttendanceWorkbook(month, rows, users) {
     let nomsTotal = 0;
     for (const rec of records) {
       const ds = fmtDateObj(rec.date);
+      const holiday = holidayName(ds);
       const [dy, dm, dd] = ds.split('-').map(Number);
       const weekday = DAY_NAMES[new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1)).getUTCDay()];
       const weekend = new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1)).getUTCDay();
-      const wm = workedMinutesOf(rec, todayStr);
+      const wm = workedMinutesOf(rec, todayStr, month);
       const row = ws.getRow(rowIdx);
       row.getCell(1).value = new Date(Date.UTC(dy || 1970, (dm || 1) - 1, dd || 1));
       row.getCell(1).numFmt = 'yyyy-mm-dd';
       row.getCell(2).value = weekday;
       row.getCell(3).value = fmtTime(rec.punch_in);
-      row.getCell(4).value = fmtTime(rec.punch_out);
+      row.getCell(4).value = fmtTime(effectiveLogout(rec, month));
       row.getCell(5).value = wm === null ? '' : Math.round((wm / 60) * 10) / 10;
       row.getCell(5).numFmt = '0.0';
       row.getCell(6).value = Number(rec.total_break_minutes) || 0;
       row.getCell(7).value = Number(rec.connected_calls) || 0;
       row.getCell(8).value = Number(rec.nominations) || 0;
-      row.getCell(9).value = STATUS_TEXT[rec.status] || (rec.punch_in ? 'Working' : '');
+      row.getCell(9).value = holiday
+        ? `Holiday (${holiday})`
+        : rec.status === 'on_leave'
+          ? 'On Leave'
+          : (rec.punch_in && rec.status !== 'early_logout' && month === DEFAULT_LOGOUT_MONTH)
+            ? 'Worked'
+            : (STATUS_TEXT[rec.status] || (rec.punch_in ? 'Working' : ''));
       row.getCell(10).value = rec.summary || '';
       for (let c = 1; c <= 10; c += 1) {
         row.getCell(c).border = thinBorder;
         row.getCell(c).alignment = { horizontal: c >= 2 && c <= 9 ? 'center' : 'left', vertical: 'middle' };
       }
       row.getCell(10).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-      if (rec.status === 'on_leave') {
+      if (holiday) {
+        for (let c = 1; c <= 10; c += 1) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+      } else if (rec.status === 'on_leave') {
         for (let c = 1; c <= 10; c += 1) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAF5FF' } };
       } else if (weekend === 0 || weekend === 6) {
         for (let c = 1; c <= 10; c += 1) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
