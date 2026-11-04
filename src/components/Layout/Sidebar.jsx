@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, Banknote, CheckSquare,
-  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase, ReceiptText, Settings2, KeyRound,
+  FileBarChart, Building2, LogOut, X, UserPlus, Trophy, Users, FileText, Layers, Kanban, Radio, Clock, Briefcase, ReceiptText, Settings2, KeyRound, CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -24,6 +24,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/tasks', icon: Kanban, label: 'Kanban', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/attendance', icon: Clock, label: 'Attendance', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
+    { to: '/planned-leave', icon: CalendarDays, label: 'Planned Leave', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/enrollments', icon: GraduationCap, label: 'Enrollments', roles: ['sales', 'manager', 'admin', 'ops', 'hr'] },
     { to: '/hiring', icon: Briefcase, label: 'Hiring', roles: ['hr'], ids: [19] },
     {

@@ -18,6 +18,7 @@ import Tasks from './pages/Tasks';
 import TrainingCalendar from './pages/TrainingCalendar';
 import Broadcast from './pages/Broadcast';
 import Attendance from './pages/Attendance';
+import PlannedLeave from './pages/PlannedLeave';
 import Hiring from './pages/Hiring';
 import GSTInvoices from './pages/GSTInvoices';
 import GSTSettings from './pages/GSTSettings';
@@ -87,6 +88,7 @@ export default function App() {
         <Route path="batches" element={<Navigate to="/training-calendar" replace />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="planned-leave" element={<PlannedLeave />} />
         <Route
           path="hiring"
           element={

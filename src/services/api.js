@@ -298,6 +298,15 @@ export const api = {
     },
     dailyReport: (from, to) => request(`/attendance/daily-report${from && to ? `?from=${from}&to=${to}` : ''}`),
   },
+  plannedLeaves: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/planned-leaves${q ? `?${q}` : ''}`);
+    },
+    create: (data) => request('/planned-leaves', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/planned-leaves/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id) => request(`/planned-leaves/${id}`, { method: 'DELETE' }),
+  },
   hiring: {
     overview: () => request('/hiring/overview'),
     createCompany: (data) => request('/hiring/companies', { method: 'POST', body: JSON.stringify(data) }),

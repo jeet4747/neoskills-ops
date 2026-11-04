@@ -2716,6 +2716,8 @@ const ATTENDANCE_EOD_HOUR = 23;
 const ATTENDANCE_EOD_MINUTE = 59;
 const HIRING_IDS = [19];
 const BROADCAST_IDS = [14];
+const LEAVE_MANAGER_ROLES = ['admin', 'manager', 'hr'];
+const PLANNED_LEAVE_TYPES = ['planned', 'casual', 'sick', 'unpaid', 'other'];
 
 async function settleEodLeaves(dateStr) {
   const d = dateStr || new Date().toISOString().slice(0, 10);
@@ -2734,6 +2736,80 @@ async function settleEodLeaves(dateStr) {
     [d, ATTENDANCE_EXCLUDED_IDS]
   );
 }
+
+function isLeaveManager(user) {
+  return LEAVE_MANAGER_ROLES.includes(user?.role);
+}
+
+function isValidDateStr(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+function parseLeaveInput(body) {
+  const { user_id, start_date, end_date, leave_type = 'planned', reason } = body || {};
+  if (!isValidDateStr(start_date) || !isValidDateStr(end_date))
+    return { error: 'Valid start and end dates are required' };
+  if (end_date < start_date)
+    return { error: 'End date cannot be before the start date' };
+  const days = Math.round((new Date(`${end_date}T00:00:00Z`) - new Date(`${start_date}T00:00:00Z`)) / 86400000) + 1;
+  if (days > 120) return { error: 'A planned leave cannot be longer than 120 days' };
+  if (!PLANNED_LEAVE_TYPES.includes(leave_type))
+    return { error: 'Invalid leave type' };
+  const trimmedReason = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
+  return {
+    user_id: user_id ? parseInt(user_id, 10) : null,
+    start_date,
+    end_date,
+    leave_type,
+    reason: trimmedReason || null,
+  };
+}
+
+async function releasePlannedLeaveAttendance(run, leaveId) {
+  await run(
+    `DELETE FROM attendance
+     WHERE planned_leave_id = $1 AND punch_in IS NULL AND status = 'on_leave'`,
+    [leaveId]
+  );
+}
+
+async function applyPlannedLeaveAttendance(run, leave) {
+  await run(
+    `INSERT INTO attendance (user_id, date, status, planned_leave_id)
+     SELECT $1::integer, d::date, 'on_leave', $4::integer
+     FROM generate_series($2::date, $3::date, interval '1 day') AS d
+     ON CONFLICT (user_id, date) DO UPDATE
+       SET status = 'on_leave',
+           planned_leave_id = $4::integer
+       WHERE attendance.punch_in IS NULL
+         AND COALESCE(attendance.status, '') <> 'holiday'`,
+    [leave.user_id, leave.start_date, leave.end_date, leave.id]
+  );
+}
+
+async function findPlannedLeaveOverlap(run, userId, startDate, endDate, excludeId = 0) {
+  const result = await run(
+    `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date,
+            to_char(end_date, 'YYYY-MM-DD') AS end_date
+     FROM planned_leaves
+     WHERE user_id = $1 AND id <> $2
+       AND start_date <= $4::date AND end_date >= $3::date
+     LIMIT 1`,
+    [userId, excludeId, startDate, endDate]
+  );
+  return result.rows[0] || null;
+}
+
+const PLANNED_LEAVE_SELECT = `
+  SELECT pl.id, pl.user_id, pl.leave_type, pl.reason, pl.created_by, pl.created_at,
+         to_char(pl.start_date, 'YYYY-MM-DD') AS start_date,
+         to_char(pl.end_date, 'YYYY-MM-DD') AS end_date,
+         u.name, u.role, cb.name AS created_by_name
+  FROM planned_leaves pl
+  JOIN users u ON u.id = pl.user_id
+  LEFT JOIN users cb ON cb.id = pl.created_by`;
 
 function hiringOnly(req, res, next) {
   if (!HIRING_IDS.includes(req.user.id))
@@ -3009,6 +3085,137 @@ app.get('/api/attendance/daily-report', auth(), async (req, res) => {
     sql += ` ORDER BY a.date DESC, u.name`;
     const result = await query(sql, params);
     res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/planned-leaves', auth(), async (req, res) => {
+  try {
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : istMonthStr();
+    const params = [`${month}-01`];
+    let where = `pl.start_date < ($1::date + INTERVAL '1 month') AND pl.end_date >= $1::date`;
+    if (isLeaveManager(req.user)) {
+      const filterId = parseInt(req.query.user_id, 10);
+      if (filterId) {
+        params.push(filterId);
+        where += ` AND pl.user_id = $${params.length}`;
+      }
+    } else {
+      params.push(req.user.id);
+      where += ` AND pl.user_id = $${params.length}`;
+    }
+    const result = await query(
+      `${PLANNED_LEAVE_SELECT} WHERE ${where} ORDER BY pl.start_date, pl.end_date, u.name`,
+      params
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planned-leaves', auth(), async (req, res) => {
+  try {
+    const input = parseLeaveInput(req.body);
+    if (input.error) return res.status(400).json({ error: input.error });
+    const targetId = isLeaveManager(req.user) && input.user_id ? input.user_id : req.user.id;
+    const target = await query(
+      "SELECT id FROM users WHERE id = $1 AND status IN ('active', 'on_leave')",
+      [targetId]
+    );
+    if (!target.rows.length) return res.status(404).json({ error: 'Team member not found' });
+    const overlap = await findPlannedLeaveOverlap(query, targetId, input.start_date, input.end_date);
+    if (overlap)
+      return res.status(409).json({
+        error: `Overlaps an existing planned leave (${overlap.start_date} to ${overlap.end_date})`,
+      });
+
+    const created = await withTransaction(async (run) => {
+      const inserted = await run(
+        `INSERT INTO planned_leaves (user_id, start_date, end_date, leave_type, reason, created_by)
+         VALUES ($1, $2::date, $3::date, $4, $5, $6)
+         RETURNING id`,
+        [targetId, input.start_date, input.end_date, input.leave_type, input.reason, req.user.id]
+      );
+      const leave = {
+        id: inserted.rows[0].id,
+        user_id: targetId,
+        start_date: input.start_date,
+        end_date: input.end_date,
+      };
+      await applyPlannedLeaveAttendance(run, leave);
+      const row = await run(`${PLANNED_LEAVE_SELECT} WHERE pl.id = $1`, [leave.id]);
+      return row.rows[0];
+    });
+    res.status(201).json(created);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/planned-leaves/:id', auth(), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Invalid planned leave' });
+    const existing = await query('SELECT * FROM planned_leaves WHERE id = $1', [id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Planned leave not found' });
+    const leave = existing.rows[0];
+    if (!isLeaveManager(req.user) && leave.user_id !== req.user.id)
+      return res.status(403).json({ error: 'Not authorized' });
+
+    const input = parseLeaveInput(req.body);
+    if (input.error) return res.status(400).json({ error: input.error });
+    const targetId = isLeaveManager(req.user) && input.user_id ? input.user_id : leave.user_id;
+    const target = await query(
+      "SELECT id FROM users WHERE id = $1 AND status IN ('active', 'on_leave')",
+      [targetId]
+    );
+    if (!target.rows.length) return res.status(404).json({ error: 'Team member not found' });
+    const overlap = await findPlannedLeaveOverlap(query, targetId, input.start_date, input.end_date, id);
+    if (overlap)
+      return res.status(409).json({
+        error: `Overlaps an existing planned leave (${overlap.start_date} to ${overlap.end_date})`,
+      });
+
+    const updated = await withTransaction(async (run) => {
+      await releasePlannedLeaveAttendance(run, id);
+      await run(
+        `UPDATE planned_leaves
+         SET user_id = $1, start_date = $2::date, end_date = $3::date,
+             leave_type = $4, reason = $5, updated_at = NOW()
+         WHERE id = $6`,
+        [targetId, input.start_date, input.end_date, input.leave_type, input.reason, id]
+      );
+      await applyPlannedLeaveAttendance(run, {
+        id,
+        user_id: targetId,
+        start_date: input.start_date,
+        end_date: input.end_date,
+      });
+      const row = await run(`${PLANNED_LEAVE_SELECT} WHERE pl.id = $1`, [id]);
+      return row.rows[0];
+    });
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/planned-leaves/:id', auth(), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'Invalid planned leave' });
+    const existing = await query('SELECT user_id FROM planned_leaves WHERE id = $1', [id]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Planned leave not found' });
+    if (!isLeaveManager(req.user) && existing.rows[0].user_id !== req.user.id)
+      return res.status(403).json({ error: 'Not authorized' });
+
+    await withTransaction(async (run) => {
+      await releasePlannedLeaveAttendance(run, id);
+      await run('DELETE FROM planned_leaves WHERE id = $1', [id]);
+    });
+    res.json({ message: 'Planned leave removed' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3625,6 +3832,20 @@ async function init() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (session_id, enrollment_id)
       );
+      CREATE TABLE IF NOT EXISTS planned_leaves (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        leave_type TEXT NOT NULL DEFAULT 'planned',
+        reason TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CHECK (end_date >= start_date)
+      );
+      CREATE INDEX IF NOT EXISTS idx_planned_leaves_user_dates
+        ON planned_leaves (user_id, start_date, end_date);
       CREATE TABLE IF NOT EXISTS attendance (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
@@ -3720,6 +3941,7 @@ async function init() {
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS break_end TIMESTAMPTZ`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS total_break_minutes INTEGER DEFAULT 0`);
       await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS late_login BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS planned_leave_id INTEGER`);
       await query(`ALTER TABLE batches DROP CONSTRAINT IF EXISTS batches_status_check`);
       await query(`ALTER TABLE batches ADD CONSTRAINT batches_status_check CHECK (status IN ('active', 'planned', 'started', 'completed'))`);
       await query(`UPDATE payments SET collection_month = to_char(created_at, 'YYYY-MM') WHERE collection_month IS NULL`);
