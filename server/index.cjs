@@ -3095,15 +3095,14 @@ app.get('/api/planned-leaves', auth(), async (req, res) => {
     const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : istMonthStr();
     const params = [`${month}-01`];
     let where = `pl.start_date < ($1::date + INTERVAL '1 month') AND pl.end_date >= $1::date`;
+    // The leave calendar is shared: everyone can see who is on leave.
+    // Only managers can narrow it down to one team member.
     if (isLeaveManager(req.user)) {
       const filterId = parseInt(req.query.user_id, 10);
       if (filterId) {
         params.push(filterId);
         where += ` AND pl.user_id = $${params.length}`;
       }
-    } else {
-      params.push(req.user.id);
-      where += ` AND pl.user_id = $${params.length}`;
     }
     const result = await query(
       `${PLANNED_LEAVE_SELECT} WHERE ${where} ORDER BY pl.start_date, pl.end_date, u.name`,

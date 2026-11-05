@@ -14,6 +14,7 @@ import { istDate, istMonth } from '../utils/ist';
 const MANAGER_ROLES = ['admin', 'manager', 'hr'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const LEAVE_TYPES = {
   planned: { label: 'Planned', chip: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
@@ -109,6 +110,7 @@ export default function PlannedLeave() {
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterUser, setFilterUser] = useState('');
+  const [dayDate, setDayDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm(user?.id, today));
@@ -156,6 +158,31 @@ export default function PlannedLeave() {
       .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
     return { totalDays, people, upcoming, mine };
   }, [leaves, month, today, user?.id]);
+
+  const dayLeaves = useMemo(() => {
+    if (!dayDate) return [];
+    return leaves
+      .filter((l) => l.start_date <= dayDate && l.end_date >= dayDate)
+      .sort((a, b) => {
+        if (a.user_id === user?.id) return -1;
+        if (b.user_id === user?.id) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+  }, [leaves, dayDate, user?.id]);
+
+  function openDay(date) {
+    setDayDate(date);
+  }
+
+  function closeDay() {
+    setDayDate(null);
+  }
+
+  function planFromDay() {
+    const date = dayDate;
+    setDayDate(null);
+    openCreate(date);
+  }
 
   function openCreate(date) {
     setEditing(null);
@@ -299,7 +326,7 @@ export default function PlannedLeave() {
                 <button
                   type="button"
                   key={date}
-                  onClick={() => openCreate(date)}
+                  onClick={() => openDay(date)}
                   className={`min-h-[74px] sm:min-h-[104px] rounded-xl border p-1.5 sm:p-2 text-left align-top transition-colors ${
                     isToday
                       ? 'border-primary-400 bg-primary-50/40 ring-1 ring-primary-300'
@@ -336,7 +363,7 @@ export default function PlannedLeave() {
               );
             })}
           </div>
-          <p className="mt-3 text-[11px] text-gray-400">Tip: click any date to plan a leave for that day.</p>
+          <p className="mt-3 text-[11px] text-gray-400">Tip: click any date to see who is on leave that day.</p>
         </CardBody>
       </Card>
 
@@ -436,6 +463,72 @@ export default function PlannedLeave() {
           </div>
         )}
       </Card>
+
+      {/* Day detail: everyone on leave for the clicked date */}
+      <Modal
+        open={Boolean(dayDate)}
+        onClose={closeDay}
+        title={dayDate ? `${WEEKDAYS[parseDay(dayDate).getDay()]}, ${fmtDate(dayDate, true)}` : 'Day details'}
+      >
+        {dayLeaves.length === 0 ? (
+          <div className="text-center py-4">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500">
+              <CalendarDays size={22} />
+            </div>
+            <p className="text-sm font-medium text-gray-700">Nobody is on leave</p>
+            <p className="mt-1 text-xs text-gray-400">Everyone is available on this date.</p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                <span className="font-semibold text-gray-900">{dayLeaves.length}</span>{' '}
+                {dayLeaves.length === 1 ? 'person' : 'people'} on leave
+              </p>
+              <span className="rounded-full bg-purple-50 px-2.5 py-1 text-[11px] font-medium text-purple-600">
+                On Leave
+              </span>
+            </div>
+            <div className="space-y-2">
+              {dayLeaves.map((leave) => {
+                const meta = LEAVE_TYPES[leave.leave_type] || LEAVE_TYPES.planned;
+                return (
+                  <div key={leave.id} className="flex items-start gap-3 rounded-xl border border-gray-100 p-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-xs font-bold text-primary-700">
+                      {leave.name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {leave.user_id === user?.id ? 'You' : leave.name}
+                        </p>
+                        <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-medium ${meta.chip}`}>
+                          {meta.label}
+                        </span>
+                        {isManager && leave.user_id !== user?.id && (
+                          <span className="text-[10px] text-gray-400">
+                            {ROLE_LABELS[leave.role] || leave.role}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-400">
+                        {fmtRange(leave.start_date, leave.end_date)}
+                        {leave.reason ? ` · ${leave.reason}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        <div className="mt-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-gray-100 pt-4">
+          <button onClick={closeDay} className="btn-secondary text-sm">Close</button>
+          <button onClick={planFromDay} className="btn-primary inline-flex items-center justify-center gap-2 text-sm">
+            <Plus size={16} /> Plan a leave for this day
+          </button>
+        </div>
+      </Modal>
 
       <Modal open={showModal} onClose={closeModal} title={editing ? 'Edit planned leave' : 'Plan a leave'}>
         <form onSubmit={save} className="space-y-4">
