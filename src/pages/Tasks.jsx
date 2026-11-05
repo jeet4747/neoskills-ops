@@ -317,8 +317,8 @@ export default function Tasks() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-50">
-                        <div className="flex min-w-0 items-center gap-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mt-2 pt-2 border-t border-gray-50">
+                        <div className="flex min-w-0 items-center gap-1.5" title={task.assignee_name ? `Assigned to ${task.assignee_name}` : 'Unassigned'}>
                           {task.assignee_name ? (
                             <div className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[10px] font-bold shrink-0">
                               {task.assignee_name.charAt(0).toUpperCase()}
@@ -331,9 +331,9 @@ export default function Tasks() {
                           </span>
                         </div>
                         {task.created_by_name && (
-                          <div className="flex shrink-0 items-center gap-1" title={`Created by ${task.created_by_name}`}>
-                            <span className="text-[9px] uppercase tracking-wide text-gray-400">by</span>
-                            <span className="max-w-[84px] truncate text-xs text-gray-400">{task.created_by_name}</span>
+                          <div className="flex min-w-0 items-center gap-1" title={`Created by ${task.created_by_name}`}>
+                            <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-gray-400">Created by</span>
+                            <span className="max-w-[90px] truncate text-xs font-medium text-gray-600">{task.created_by_name}</span>
                           </div>
                         )}
                       </div>
