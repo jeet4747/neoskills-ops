@@ -317,14 +317,26 @@ export default function Tasks() {
                           </span>
                         )}
                       </div>
-                      {task.assignee_name && (
-                        <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
-                          <div className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {task.assignee_name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="text-xs text-gray-500 truncate">{task.assignee_name}</span>
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-50">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {task.assignee_name ? (
+                            <div className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {task.assignee_name.charAt(0).toUpperCase()}
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full border border-dashed border-gray-300 shrink-0" />
+                          )}
+                          <span className={`text-xs truncate ${task.assignee_name ? 'text-gray-500' : 'text-gray-400 italic'}`}>
+                            {task.assignee_name || 'Unassigned'}
+                          </span>
                         </div>
-                      )}
+                        {task.created_by_name && (
+                          <div className="flex shrink-0 items-center gap-1" title={`Created by ${task.created_by_name}`}>
+                            <span className="text-[9px] uppercase tracking-wide text-gray-400">by</span>
+                            <span className="max-w-[84px] truncate text-xs text-gray-400">{task.created_by_name}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {colTasks.length === 0 && (
@@ -439,6 +451,12 @@ export default function Tasks() {
                 <Badge status={detail.priority}>{PRIORITY_LABELS[detail.priority]}</Badge>
                 <span className="text-xs text-gray-400">•</span>
                 <span className="text-xs text-gray-500">{detail.assignee_name || 'Unassigned'}</span>
+                {detail.created_by_name && (
+                  <>
+                    <span className="text-xs text-gray-400">•</span>
+                    <span className="text-xs text-gray-500">Created by {detail.created_by_name}</span>
+                  </>
+                )}
                 {detail.due_date && (
                   <>
                     <span className="text-xs text-gray-400">•</span>
