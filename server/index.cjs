@@ -3130,7 +3130,8 @@ app.post('/api/planned-leaves', auth(), async (req, res) => {
         error: `Overlaps an existing planned leave (${overlap.start_date} to ${overlap.end_date})`,
       });
 
-    const created = await withTransaction(async (run) => {
+    const created = await withTransaction(async (client) => {
+      const run = (sql, params) => client.query(sql, params);
       const inserted = await run(
         `INSERT INTO planned_leaves (user_id, start_date, end_date, leave_type, reason, created_by)
          VALUES ($1, $2::date, $3::date, $4, $5, $6)
@@ -3177,7 +3178,8 @@ app.put('/api/planned-leaves/:id', auth(), async (req, res) => {
         error: `Overlaps an existing planned leave (${overlap.start_date} to ${overlap.end_date})`,
       });
 
-    const updated = await withTransaction(async (run) => {
+    const updated = await withTransaction(async (client) => {
+      const run = (sql, params) => client.query(sql, params);
       await releasePlannedLeaveAttendance(run, id);
       await run(
         `UPDATE planned_leaves
@@ -3210,7 +3212,8 @@ app.delete('/api/planned-leaves/:id', auth(), async (req, res) => {
     if (!isLeaveManager(req.user) && existing.rows[0].user_id !== req.user.id)
       return res.status(403).json({ error: 'Not authorized' });
 
-    await withTransaction(async (run) => {
+    await withTransaction(async (client) => {
+      const run = (sql, params) => client.query(sql, params);
       await releasePlannedLeaveAttendance(run, id);
       await run('DELETE FROM planned_leaves WHERE id = $1', [id]);
     });
