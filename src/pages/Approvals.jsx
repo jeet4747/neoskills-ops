@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Download, FileDown, Search, Filter, DollarSign } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Download, FileDown, Search, Filter, DollarSign, ExternalLink } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -142,6 +142,30 @@ export default function Approvals() {
       || /\.(jpe?g|png|gif|webp)(\?.*)?$/i.test(url || '');
   }
 
+  function telecrmHref(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function TelecrmLink({ link, compact = false }) {
+    const href = telecrmHref(link);
+    if (!href) return <span className="text-xs text-gray-400">Not provided</span>;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" title={link}
+        onClick={(e) => e.stopPropagation()}
+        className={`inline-flex items-center gap-1.5 text-primary-600 hover:underline ${compact ? 'max-w-[240px] truncate text-xs' : 'break-all text-sm'}`}>
+        {compact ? 'Open TeleCRM link' : link}
+        <ExternalLink size={compact ? 12 : 14} className="shrink-0" />
+      </a>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -207,6 +231,12 @@ export default function Approvals() {
                         </div>
                       )}
                     </div>
+                    {p.telecrm_link && (
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <span className="text-gray-400">TeleCRM:</span>
+                        <TelecrmLink link={p.telecrm_link} compact />
+                      </div>
+                    )}
                     {getReceiptUrls(p).length > 0 && (
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         {getReceiptUrls(p).map((u, i) => isImageUrl(u) && (
@@ -259,6 +289,10 @@ export default function Approvals() {
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Course</p>
                 <p className="font-semibold text-gray-900">{selected.course_name}</p>
+              </div>
+              <div className="col-span-2 rounded-lg bg-gray-50 p-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1.5">TeleCRM Link</p>
+                <TelecrmLink link={selected.telecrm_link} />
               </div>
             </div>
 

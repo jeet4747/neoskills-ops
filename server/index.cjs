@@ -1971,7 +1971,7 @@ app.get('/api/approvals/pending', auth(['admin', 'manager', 'ops']), async (req,
     const adminHidden = role === 'ops' ? " AND p.sales_user_id NOT IN (SELECT id FROM users WHERE role = 'admin')" : '';
     const result = await query(
       `SELECT p.*, s.name as student_name, s.email as student_email, s.phone as student_phone,
-              e.course_name, u.name as salesperson_name, ba.account_name as bank_account_name
+              e.course_name, e.telecrm_link, u.name as salesperson_name, ba.account_name as bank_account_name
        FROM payments p
        JOIN students s ON p.student_id = s.id
        JOIN enrollments e ON p.enrollment_id = e.id
