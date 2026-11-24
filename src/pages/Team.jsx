@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users as UsersIcon, Shield, DollarSign, Clock, UserPlus, TrendingUp, Medal, AlertCircle, KeyRound } from 'lucide-react';
+import { Search, Users as UsersIcon, Shield, DollarSign, Clock, UserPlus, TrendingUp, Medal, AlertCircle, KeyRound, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -42,7 +42,9 @@ export default function Team() {
   const [adding, setAdding] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(istMonth());
   const [monthOptions, setMonthOptions] = useState([]);
-  const [newMember, setNewMember] = useState({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123' });
+  const [newMember, setNewMember] = useState({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123', joined_date: '' });
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removing, setRemoving] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
   const [resetPassword, setResetPassword] = useState('neoskills@123');
   const [resetting, setResetting] = useState(false);
@@ -110,12 +112,40 @@ export default function Team() {
       const created = await api.users.create(newMember);
       toast.success(`${created.name} added (${created.email})`);
       setShowAdd(false);
-      setNewMember({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123' });
+      setNewMember({ name: '', email: '', role: 'sales', status: 'active', password: 'neoskills@123', joined_date: '' });
       await load();
     } catch (e) {
       toast.error(e.message);
     } finally {
       setAdding(false);
+    }
+  }
+
+  function joinedValue(u) {
+    return u.joined_date || (u.created_at || '').slice(0, 10);
+  }
+
+  function formatJoined(u) {
+    const value = joinedValue(u);
+    if (!value) return '-';
+    const d = new Date(`${value}T00:00:00Z`);
+    return Number.isNaN(d.getTime())
+      ? value
+      : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  async function handleRemove() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await api.users.remove(removeTarget.id);
+      toast.success(`${removeTarget.name} removed from the team`);
+      setRemoveTarget(null);
+      await load();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -417,17 +447,37 @@ export default function Team() {
                       <td className="px-5 py-3.5 text-gray-600">{u.enrollments || 0}</td>
                       <td className="px-5 py-3.5 font-medium text-gray-900">₹{Number(u.collected || 0).toLocaleString()}</td>
                       <td className="px-5 py-3.5 text-amber-600 font-medium">₹{Number(u.pending || 0).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                      <td className="px-5 py-3.5 text-gray-500" onClick={(e) => e.stopPropagation()}>
+                        {isAdmin ? (
+                          <input
+                            type="date"
+                            aria-label={`Joined date for ${u.name}`}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:border-primary-400 disabled:opacity-50"
+                            value={joinedValue(u)}
+                            disabled={savingId === u.id}
+                            onChange={(e) => handleUpdate(u, { joined_date: e.target.value })}
+                          />
+                        ) : formatJoined(u)}
+                      </td>
                       {isAdmin && (
                         <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                           {String(u.id) !== String(me?.id) && (
-                            <button
-                              onClick={() => openReset(u)}
-                              title={`Reset password for ${u.name}`}
-                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                            >
-                              <KeyRound size={16} />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => openReset(u)}
+                                title={`Reset password for ${u.name}`}
+                                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                              >
+                                <KeyRound size={16} />
+                              </button>
+                              <button
+                                onClick={() => setRemoveTarget(u)}
+                                title={`Remove ${u.name} from the team`}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           )}
                         </td>
                       )}
@@ -476,6 +526,12 @@ export default function Team() {
             </div>
           </div>
           <div>
+            <label className="text-xs text-gray-500 font-medium mb-1 block">Joined Date</label>
+            <input type="date" className="input-field" value={newMember.joined_date}
+              onChange={(e) => setNewMember({ ...newMember, joined_date: e.target.value })} />
+            <p className="text-[11px] text-gray-400 mt-1">Leave blank to use today&apos;s date.</p>
+          </div>
+          <div>
             <label className="text-xs text-gray-500 font-medium mb-1 block">Password</label>
             <input className="input-field" value={newMember.password} onChange={(e) => setNewMember({ ...newMember, password: e.target.value })} />
             <p className="text-[11px] text-gray-400 mt-1">Default: neoskills@123 — share with the member.</p>
@@ -506,6 +562,22 @@ export default function Team() {
           <button onClick={handleResetPassword} disabled={resetting} className="btn-primary w-full flex items-center justify-center gap-2">
             <KeyRound size={16} /> {resetting ? 'Resetting…' : 'Reset Password'}
           </button>
+        </div>
+      </Modal>
+
+      {/* Remove employee confirmation */}
+      <Modal open={!!removeTarget} onClose={() => !removing && setRemoveTarget(null)} title="Remove Team Member" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Remove <span className="font-semibold text-gray-900">{removeTarget?.name}</span> from the team?
+            They will be signed out and hidden from the team list. Their past enrollments, payments and attendance stay intact.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setRemoveTarget(null)} disabled={removing} className="btn-secondary">Cancel</button>
+            <button onClick={handleRemove} disabled={removing} className="btn-danger flex items-center gap-2">
+              <Trash2 size={15} /> {removing ? 'Removing…' : 'Remove Employee'}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

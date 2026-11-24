@@ -22,6 +22,19 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'neosecret2026';
 
+// Removed employees keep their historical records, but their existing tokens
+// must stop working immediately. Populated from the DB on startup.
+const removedUserIds = new Set();
+
+function normalizeJoinedDate(value) {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  const text = String(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return { ok: false };
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) return { ok: false };
+  return { ok: true, value: text };
+}
+
 const COMPANY_PREFIX = { neoskills: 'NEO', careervue: 'CV', frolics: 'FRO' };
 
 app.use(cors({ origin: true }));
@@ -74,6 +87,8 @@ function auth(roles = []) {
       return res.status(401).json({ error: 'No token' });
     try {
       const user = jwt.verify(header.split(' ')[1], JWT_SECRET);
+      if (removedUserIds.has(user.id))
+        return res.status(401).json({ error: 'Employee has been removed' });
       if (roles.length && !roles.includes(user.role))
         return res.status(403).json({ error: 'Forbidden' });
       req.user = user;
@@ -205,6 +220,7 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
     const result = await query(`
       SELECT
         u.id, u.name, u.email, u.role, u.status, u.phone, u.city, u.can_sell, u.created_at,
+        to_char(COALESCE(u.joined_date, u.created_at::date), 'YYYY-MM-DD') AS joined_date,
         (SELECT COUNT(*) FROM enrollments e WHERE e.sales_user_id = u.id) as enrollments,
         (SELECT COALESCE(SUM(p.amount_paid), 0) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'approved') as collected,
         (SELECT COALESCE(SUM(
@@ -216,6 +232,7 @@ app.get('/api/users', auth(['admin', 'manager', 'ops']), async (req, res) => {
          FROM enrollments e WHERE e.sales_user_id = u.id) as pending,
         (SELECT COUNT(*) FROM payments p WHERE p.sales_user_id = u.id AND p.status = 'pending_approval') as pending_approvals
       FROM users u
+      WHERE u.removed_at IS NULL
       ORDER BY u.role, u.name
     `);
     res.json(result.rows);
@@ -237,16 +254,20 @@ app.get('/api/users/list', auth(), async (req, res) => {
 
 app.post('/api/users', auth(['admin']), async (req, res) => {
   try {
-    const { name, email, password, role = 'sales', status = 'active', phone, city } = req.body;
+    const { name, email, password, role = 'sales', status = 'active', phone, city, joined_date } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
     if (!['sales', 'manager', 'admin', 'ops'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
     if (!['active', 'pending', 'rejected', 'on_leave', 'inactive'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const joined = normalizeJoinedDate(joined_date);
+    if (!joined.ok) return res.status(400).json({ error: 'Invalid joined date' });
     const existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     if (existing.rows.length) return res.status(409).json({ error: 'Email already registered' });
     const hash = await bcrypt.hash(password || 'neoskills@123', 10);
     const result = await query(
-      'INSERT INTO users (name, email, password, role, status, phone, city) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, status',
-      [name, email, hash, role, status, phone || null, city || null]
+      `INSERT INTO users (name, email, password, role, status, phone, city, joined_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, name, email, role, status, to_char(joined_date, 'YYYY-MM-DD') AS joined_date`,
+      [name, email, hash, role, status, phone || null, city || null, joined.value]
     );
     res.status(201).json(result.rows[0]);
   } catch (e) {
@@ -256,11 +277,16 @@ app.post('/api/users', auth(['admin']), async (req, res) => {
 
 app.put('/api/users/:id', auth(['admin']), async (req, res) => {
   try {
-    const { role, status, can_sell } = req.body;
+    const { role, status, can_sell, joined_date } = req.body;
     if (role && !['sales', 'manager', 'admin', 'ops'].includes(role))
       return res.status(400).json({ error: 'Invalid role' });
     if (status && !['active', 'pending', 'rejected', 'on_leave', 'inactive'].includes(status))
       return res.status(400).json({ error: 'Invalid status' });
+    let joined = null;
+    if (joined_date !== undefined) {
+      joined = normalizeJoinedDate(joined_date);
+      if (!joined.ok) return res.status(400).json({ error: 'Invalid joined date' });
+    }
     if (role && String(req.params.id) === String(req.user.id))
       return res.status(400).json({ error: 'You cannot change your own role' });
     const fields = [];
@@ -268,11 +294,40 @@ app.put('/api/users/:id', auth(['admin']), async (req, res) => {
     if (role) { fields.push(`role = $${params.length + 1}`); params.push(role); }
     if (status) { fields.push(`status = $${params.length + 1}`); params.push(status); }
     if (can_sell !== undefined) { fields.push(`can_sell = $${params.length + 1}`); params.push(!!can_sell); }
+    if (joined_date !== undefined) { fields.push(`joined_date = $${params.length + 1}`); params.push(joined.value); }
     if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
     params.push(req.params.id);
-    const result = await query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, role, status, can_sell`, params);
+    const result = await query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING id, name, email, role, status, can_sell, to_char(joined_date, 'YYYY-MM-DD') AS joined_date`, params);
     if (!result.rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
+  try {
+    if (String(req.params.id) === String(req.user.id))
+      return res.status(400).json({ error: 'You cannot remove yourself' });
+
+    const target = await query('SELECT id, name, role FROM users WHERE id = $1 AND removed_at IS NULL', [req.params.id]);
+    if (!target.rows.length) return res.status(404).json({ error: 'Team member not found' });
+    const member = target.rows[0];
+
+    if (member.role === 'admin') {
+      const admins = await query("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND status = 'active' AND removed_at IS NULL");
+      if (admins.rows[0].n <= 1) return res.status(400).json({ error: 'Cannot remove the last active admin' });
+    }
+
+    // Soft delete: keep every historical record linked to this user intact.
+    const result = await query(
+      `UPDATE users SET status = 'inactive', can_sell = false, removed_at = NOW()
+       WHERE id = $1 AND removed_at IS NULL
+       RETURNING id, name, email, status, removed_at`,
+      [req.params.id]
+    );
+    removedUserIds.add(Number(req.params.id));
+    res.json({ ok: true, user: result.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3921,6 +3976,11 @@ async function init() {
       await query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_urls JSONB`);
       await query(`ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS telecrm_link TEXT`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_date DATE`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`);
+      await query(`UPDATE users SET joined_date = created_at::date WHERE joined_date IS NULL`);
+      const removed = await query('SELECT id FROM users WHERE removed_at IS NOT NULL');
+      for (const row of removed.rows) removedUserIds.add(Number(row.id));
       await query(`UPDATE tasks SET status = 'todo' WHERE status = 'queued'`);
       await query(`ALTER TABLE tasks ALTER COLUMN status SET DEFAULT 'todo'`);
       await query(`UPDATE tasks SET status = 'todo' WHERE status IN ('backlog', 'in_review')`);
