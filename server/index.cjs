@@ -81,14 +81,25 @@ async function sendPushNotification(userId, title, body, notificationId) {
 }
 
 function auth(roles = []) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const header = req.headers.authorization;
     if (!header || !header.startsWith('Bearer '))
       return res.status(401).json({ error: 'No token' });
+    let user;
     try {
-      const user = jwt.verify(header.split(' ')[1], JWT_SECRET);
-      if (removedUserIds.has(user.id))
-        return res.status(401).json({ error: 'Employee has been removed' });
+      user = jwt.verify(header.split(' ')[1], JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    try {
+      // Cached removal is rechecked against the DB so a restored employee
+      // regains access immediately, without waiting for a server restart.
+      if (removedUserIds.has(user.id)) {
+        const check = await query('SELECT removed_at FROM users WHERE id = $1', [user.id]);
+        if (check.rows.length && check.rows[0].removed_at)
+          return res.status(401).json({ error: 'Employee has been removed' });
+        removedUserIds.delete(user.id);
+      }
       if (roles.length && !roles.includes(user.role))
         return res.status(403).json({ error: 'Forbidden' });
       req.user = user;
