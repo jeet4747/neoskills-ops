@@ -1,0 +1,167 @@
+.gst-doc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.gst-doc-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.gst-doc-toolbar select,
+.gst-doc-toolbar input[type='number'] {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #fff;
+  color: #111827;
+  font-size: 12px;
+}
+
+.gst-doc-toolbar input[type='color'] {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.gst-doc-toolbar input[type='file'] { display: none; }
+
+.gst-doc-shell {
+  max-height: calc(100vh - 260px);
+  overflow: auto;
+  padding: 14px;
+  border-radius: 12px;
+  background: #dfe5ec;
+}
+
+.gst-doc {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 14mm 13mm;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+  color: #1c2733;
+  font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+  font-size: var(--gst-fs, 13px);
+  line-height: 1.45;
+}
+
+.gst-doc * { box-sizing: border-box; }
+
+.gst-doc-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.gst-logo {
+  width: 190px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.gst-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.gst-company {
+  flex: 1;
+  text-align: right;
+  white-space: pre-wrap;
+  color: #6b7785;
+  min-height: 64px;
+}
+
+.gst-company b { color: #111827; }
+
+.gst-title {
+  background: var(--gst-p, #1f4e79);
+  color: #fff;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px;
+  margin: 14px 0;
+}
+
+.gst-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.gst-box { border: 1px solid #b9c7d6; min-height: 112px; }
+
+.gst-box h4 {
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--gst-tint, #eef3f8);
+  color: var(--gst-p, #1f4e79);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+}
+
+.gst-box .in { padding: 7px 10px; white-space: pre-wrap; min-height: 80px; }
+
+.gst-items { width: 100%; border-collapse: collapse; margin-top: 14px; table-layout: fixed; }
+
+.gst-items th {
+  background: var(--gst-p, #1f4e79);
+  color: #fff;
+  padding: 7px 8px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.gst-items td { border: 1px solid #b9c7d6; padding: 7px 8px; vertical-align: top; white-space: pre-wrap; }
+.gst-items .r { text-align: right; }
+.gst-items .c { text-align: center; }
+.gst-items .amount { font-weight: 700; }
+
+.gst-sum { display: grid; grid-template-columns: 1fr 255px; gap: 14px; margin-top: 14px; }
+
+.gst-words { background: var(--gst-tint, #eef3f8); padding: 10px; color: #6b7785; min-height: 92px; }
+.gst-words b { display: block; color: #111827; font-size: 14px; margin: 4px 0 8px; text-transform: capitalize; }
+
+.gst-tot > div { display: flex; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid #b9c7d6; }
+.gst-tot .g { background: var(--gst-p, #1f4e79); color: #fff; font-weight: 700; font-size: 15px; border: 0; }
+
+.gst-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+.gst-sig { text-align: right; }
+.gst-sig .line { margin-top: 66px; border-top: 1px solid #1c2733; padding-top: 4px; font-weight: 700; }
+
+.gst-terms { margin-top: 22px; border-top: 1px solid #b9c7d6; padding-top: 8px; }
+.gst-terms h4 { margin: 0 0 4px; color: var(--gst-p, #1f4e79); }
+.gst-terms .in { white-space: pre-wrap; }
+
+.gst-note { text-align: center; color: #6b7785; margin-top: 26px; font-size: 11px; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .gst-doc, .gst-doc * { visibility: visible !important; }
+  .gst-doc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: auto;
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+  .gst-doc-toolbar { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+}

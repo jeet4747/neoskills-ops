@@ -2381,7 +2381,8 @@ async function nextGstInvoiceNumber(prefix, fyLabel) {
 }
 
 function computeGstInvoice(b, settings) {
-  const rate = Number(settings.tax_rate) || 18;
+  const rate = Number(b.tax_rate) || Number(settings.tax_rate) || 18;
+  const inclusive = b.tax_mode === 'inclusive';
   const exportBill = String(b.state_code || '') === '99';
   const sameState = !exportBill && (String(b.state_code || '') === String(settings.state_code || ''));
   const items = (b.items || []).map((it) => {
@@ -2389,8 +2390,14 @@ function computeGstInvoice(b, settings) {
     const unit_price = Number(it.unit_price) || 0;
     return { description: it.description || '', participants, unit_price, amount: Math.round((participants * unit_price) * 100) / 100 };
   });
-  const taxable = items.reduce((s, it) => s + it.amount, 0);
-  const g = buildGst({ taxable, rate, sameState, exportBill });
+  const gross = items.reduce((s, it) => s + it.amount, 0);
+  const g = buildGst({
+    taxable: gross,
+    rate,
+    sameState,
+    exportBill,
+    inclusiveTotal: inclusive ? gross : null,
+  });
   return { items, ...g, rate, sameState, exportBill };
 }
 
@@ -2482,10 +2489,11 @@ app.post('/api/gst-invoices', auth(['admin', 'manager', 'ops']), async (req, res
          items, sac, gst_type, cgst_rate, cgst, sgst_rate, sgst, igst_rate, igst,
          subtotal, round_off, total_amount, amount_in_words,
          supplier_gstin, supplier_address, bank_account_name, bank_account_number, bank_ifsc,
+         doc_type, tax_mode, tax_rate, currency, theme_color, font_size, logo_data, terms_override,
          enrollment_id, created_by
        ) VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,
-         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
+         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43
        ) RETURNING *`,
       [number, b.prefix || settings.prefix, seq, fy.label, b.invoice_date || new Date(), b.reference,
        b.student_name, b.company, b.location, b.city, b.state, b.state_code, b.customer_gstin, b.poc, b.status || 'paid',
@@ -2493,6 +2501,8 @@ app.post('/api/gst-invoices', auth(['admin', 'manager', 'ops']), async (req, res
        c.cgstRate, c.cgst, c.sgstRate, c.sgst, c.igstRate, c.igst,
        c.subtotal, c.round_off, c.total, toWords(c.total),
        settings.gstin, settings.address, settings.bank_account_name, settings.bank_account_number, settings.bank_ifsc,
+       b.doc_type || 'Tax Invoice', b.tax_mode || 'exclusive', b.tax_rate || settings.tax_rate || 18,
+       b.currency || 'INR', b.theme_color || '#1f4e79', b.font_size || 13, b.logo_data || null, b.terms_override || null,
        b.enrollment_id || null, req.user.id]
     );
     res.status(201).json(result.rows[0]);
@@ -2512,13 +2522,18 @@ app.put('/api/gst-invoices/:id', auth(['admin', 'manager', 'ops']), async (req, 
          location = $5, city = $6, state = $7, state_code = $8, customer_gstin = $9,
          poc = $10, status = $11, items = $12::jsonb, sac = $13, gst_type = $14,
          cgst_rate = $15, cgst = $16, sgst_rate = $17, sgst = $18, igst_rate = $19, igst = $20,
-         subtotal = $21, round_off = $22, total_amount = $23, amount_in_words = $24
-       WHERE id = $25 RETURNING *`,
+         subtotal = $21, round_off = $22, total_amount = $23, amount_in_words = $24,
+         doc_type = $26, tax_mode = $27, tax_rate = $28, currency = $29,
+         theme_color = $30, font_size = $31, logo_data = $32, terms_override = $33
+       WHERE id = $34 RETURNING *`,
       [b.invoice_date || new Date(), b.reference, b.student_name, b.company,
        b.location, b.city, b.state, b.state_code, b.customer_gstin,
        b.poc, b.status || 'paid', JSON.stringify(c.items), b.sac || settings.sac, c.gst_type,
        c.cgstRate, c.cgst, c.sgstRate, c.sgst, c.igstRate, c.igst,
-       c.subtotal, c.round_off, c.total, toWords(c.total), req.params.id]
+       c.subtotal, c.round_off, c.total, toWords(c.total),
+       b.doc_type || 'Tax Invoice', b.tax_mode || 'exclusive', b.tax_rate || settings.tax_rate || 18,
+       b.currency || 'INR', b.theme_color || '#1f4e79', b.font_size || 13, b.logo_data || null, b.terms_override || null,
+       req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Invoice not found' });
     res.json(result.rows[0]);
@@ -2557,7 +2572,9 @@ app.get('/api/gst-invoices/:id/pdf', auth(['admin', 'manager', 'ops']), async (r
       bank_account_number: inv.bank_account_number || settings.bank_account_number,
       bank_ifsc: inv.bank_ifsc || settings.bank_ifsc,
       bank_account_type: settings.bank_account_type,
-      terms: settings.terms,
+      terms: inv.terms_override
+        ? String(inv.terms_override).split('\n').map((line) => line.replace(/^\s*\d+[.)]\s*/, '')).filter(Boolean)
+        : settings.terms,
     });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="GST-${inv.invoice_number}.pdf"`);
@@ -3782,6 +3799,14 @@ async function init() {
         bank_account_name TEXT,
         bank_account_number TEXT,
         bank_ifsc TEXT,
+        doc_type TEXT DEFAULT 'Tax Invoice',
+        tax_mode TEXT DEFAULT 'exclusive',
+        tax_rate NUMERIC(5,2) DEFAULT 18,
+        currency TEXT DEFAULT 'INR',
+        theme_color TEXT DEFAULT '#1f4e79',
+        font_size INTEGER DEFAULT 13,
+        logo_data TEXT,
+        terms_override TEXT,
         enrollment_id INTEGER REFERENCES enrollments(id),
         created_by INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
@@ -3989,6 +4014,14 @@ async function init() {
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_batches BOOLEAN DEFAULT false`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_date DATE`);
       await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS doc_type TEXT DEFAULT 'Tax Invoice'`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS tax_mode TEXT DEFAULT 'exclusive'`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5,2) DEFAULT 18`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS theme_color TEXT DEFAULT '#1f4e79'`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS font_size INTEGER DEFAULT 13`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS logo_data TEXT`);
+      await query(`ALTER TABLE gst_invoices ADD COLUMN IF NOT EXISTS terms_override TEXT`);
       await query(`UPDATE users SET joined_date = created_at::date WHERE joined_date IS NULL`);
       const removed = await query('SELECT id FROM users WHERE removed_at IS NOT NULL');
       for (const row of removed.rows) removedUserIds.add(Number(row.id));

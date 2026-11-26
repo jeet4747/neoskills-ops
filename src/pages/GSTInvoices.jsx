@@ -9,10 +9,28 @@ import { useAuth } from '../context/AuthContext';
 import { Card, CardBody } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
+import GstInvoiceDocument from '../components/GstInvoiceDocument';
 import { INDIAN_STATES } from '../constants/states';
 import { istDate } from '../utils/ist';
 
 const EMPTY_ITEM = { description: '', participants: 1, unit_price: '' };
+const DOC_DEFAULTS = {
+  docType: 'Tax Invoice',
+  taxMode: 'exclusive',
+  taxRate: 18,
+  currency: 'INR',
+  color: '#1f4e79',
+  fontSize: 13,
+  logo: '',
+  terms: '',
+};
+
+function settingsTermsText(settings) {
+  const list = Array.isArray(settings?.terms)
+    ? settings.terms
+    : (() => { try { return JSON.parse(settings?.terms || '[]'); } catch { return []; } })();
+  return list.join('\n');
+}
 
 function emptyForm() {
   return {
@@ -38,8 +56,9 @@ function emptyForm() {
 function round2(n) { return Math.round((Number(n) + Number.EPSILON) * 100) / 100; }
 const cNum = (n) => (n === '' || n == null ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
 
-function computeGst(form, settings) {
-  const rate = Number(settings.tax_rate) || 18;
+function computeGst(form, settings, doc = {}) {
+  const rate = Number(doc.taxRate ?? settings.tax_rate) || 18;
+  const inclusive = doc.taxMode === 'inclusive';
   const exportBill = String(form.state_code || '') === '99';
   const sameState = !exportBill && (String(form.state_code || '') === String(settings.state_code || ''));
   const items = (form.items || []).map((it) => {
@@ -47,29 +66,30 @@ function computeGst(form, settings) {
     const unit_price = Number(it.unit_price) || 0;
     return { ...it, participants, unit_price, amount: round2(participants * unit_price) };
   });
-  const subtotal = round2(items.reduce((s, it) => s + it.amount, 0));
+  const gross = round2(items.reduce((s, it) => s + it.amount, 0));
+  let taxable = gross;
+  let gst = 0;
+  if (!exportBill) gst = inclusive ? round2(gross - gross / (1 + rate / 100)) : round2(gross * (rate / 100));
+  if (inclusive) taxable = round2(gross - gst);
 
   let cgst = 0, sgst = 0, igst = 0;
-  if (!exportBill) {
-    const gst = round2(subtotal * (rate / 100));
-    if (sameState) {
-      cgst = round2(gst / 2);
-      sgst = round2(gst - cgst);
-    } else {
-      igst = gst;
-    }
+  if (sameState) {
+    cgst = round2(gst / 2);
+    sgst = round2(gst - cgst);
+  } else if (!exportBill) {
+    igst = gst;
   }
-  const sum = round2(subtotal + cgst + sgst + igst);
+  const sum = round2(taxable + cgst + sgst + igst);
   const total = Math.round(sum);
   const roundOff = round2(total - sum);
   return {
-    items, subtotal, total, roundOff,
+    items, subtotal: taxable, gross, total, roundOff,
     exportBill, sameState,
     cgst, sgst, igst,
     cgstRate: sameState ? round2(rate / 2) : 0,
     sgstRate: sameState ? round2(rate / 2) : 0,
     igstRate: !sameState && !exportBill ? rate : 0,
-    hasTax: !exportBill && subtotal > 0,
+    hasTax: !exportBill && gst > 0,
   };
 }
 
@@ -84,6 +104,7 @@ export default function GSTInvoices() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [settings, setSettings] = useState({ tax_rate: 18, state_code: '27', prefix: 'NS', sac: '999293', inclusive: true });
+  const [doc, setDoc] = useState({ ...DOC_DEFAULTS });
   const [enrollments, setEnrollments] = useState([]);
   const [enrollSearch, setEnrollSearch] = useState('');
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
@@ -106,10 +127,14 @@ export default function GSTInvoices() {
   }, [mode, page, search, load]);
 
   useEffect(() => {
-    api.gstSettings.get().then(setSettings).catch(() => {});
+    api.gstSettings.get().then((s) => {
+      setSettings(s);
+      setDoc((d) => ({ ...d, terms: d.terms || settingsTermsText(s) }));
+    }).catch(() => {});
   }, []);
 
-  function set(patch) { setForm((f) => ({ ...f, ...patch })); }
+  function set(patch) { setForm((f) => ({ ...f, ...(typeof patch === 'function' ? patch(f) : patch) })); }
+  function patchDoc(patch) { setDoc((d) => ({ ...d, ...patch })); }
 
   function updateItem(index, patch) {
     setForm((f) => {
@@ -125,8 +150,8 @@ export default function GSTInvoices() {
   function onCollectedChange(v) {
     set({ collected: v });
     if (v && Number(v) > 0) {
-      const rate = Number(settings.tax_rate) || 18;
-      updateItem(0, { unit_price: round2(Number(v) / (1 + rate / 100)) });
+      updateItem(0, { unit_price: round2(Number(v)) });
+      patchDoc({ taxMode: 'inclusive', taxRate: doc.taxRate || Number(settings.tax_rate) || 18 });
     }
   }
 
@@ -156,6 +181,7 @@ export default function GSTInvoices() {
 
   function handleNew() {
     setForm(emptyForm());
+    setDoc({ ...DOC_DEFAULTS, taxRate: Number(settings.tax_rate) || 18, terms: settingsTermsText(settings) });
     setMode('create');
   }
 
@@ -170,6 +196,14 @@ export default function GSTInvoices() {
         sac: form.sac || settings.sac,
         prefix: settings.prefix,
         state: form.state_name,
+        doc_type: doc.docType,
+        tax_mode: doc.taxMode,
+        tax_rate: doc.taxRate,
+        currency: doc.currency,
+        theme_color: doc.color,
+        font_size: doc.fontSize,
+        logo_data: doc.logo,
+        terms_override: doc.terms,
       };
       delete payload.id;
       if (form.id) {
@@ -188,7 +222,19 @@ export default function GSTInvoices() {
 
   async function handleEdit(r) {
     const items = Array.isArray(r.items) && r.items.length ? r.items : [{ ...EMPTY_ITEM }];
+    const savedRate = Number(r.igst_rate || 0) || Number(r.cgst_rate || 0) + Number(r.sgst_rate || 0);
     setForm({ ...emptyForm(), ...r, id: r.id, state_name: r.state || '', state_code: r.state_code || '', items, collected: '', collectedOn: false });
+    setDoc({
+      ...DOC_DEFAULTS,
+      docType: r.doc_type || 'Tax Invoice',
+      taxMode: r.tax_mode || 'exclusive',
+      taxRate: savedRate || Number(r.tax_rate) || Number(settings.tax_rate) || 18,
+      currency: r.currency || 'INR',
+      color: r.theme_color || '#1f4e79',
+      fontSize: Number(r.font_size) || 13,
+      logo: r.logo_data || '',
+      terms: r.terms_override || settingsTermsText(settings),
+    });
     setMode('create');
   }
 
@@ -209,7 +255,72 @@ export default function GSTInvoices() {
     finally { setDownloading(null); }
   }
 
-  const c = computeGst(form, settings);
+  const c = computeGst(form, settings, doc);
+
+  function handleSaveJson() {
+    const payload = {
+      dtype: doc.docType,
+      tmode: doc.taxMode,
+      trate: doc.taxRate,
+      cur: doc.currency,
+      col: doc.color,
+      fs: doc.fontSize,
+      logo: doc.logo,
+      company: [settings.entity_name, settings.address, settings.website, settings.phone, `GSTIN: ${settings.gstin || ''}`].filter(Boolean).join('\n'),
+      party: [form.student_name, form.company, form.location, `GSTIN: ${form.customer_gstin || '-'}`].filter(Boolean).join('\n'),
+      details: [`Invoice No.: ${form.invoice_number || ''}`, `Date: ${form.invoice_date || ''}`, `Reference: ${form.reference || ''}`].join('\n'),
+      bank: [settings.bank_account_name, settings.bank_account_number, settings.bank_ifsc].filter(Boolean).join('\n'),
+      terms: doc.terms,
+      items: c.items.map((it) => ({ desc: it.description || '', sac: form.sac || settings.sac, qty: it.participants, rate: it.unit_price })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(form.invoice_number || doc.docType).replace(/[^a-z0-9]+/gi, '_')}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function handleLoadJson(file) {
+    try {
+      const d = JSON.parse(await file.text());
+      const party = String(d.party || '');
+      const partyLines = party.split('\n');
+      const details = String(d.details || '');
+      const match = (re) => details.match(re)?.[1]?.trim() || '';
+      const dateValue = match(/Date:\s*(.+)/i);
+      const parsedDate = dateValue ? new Date(dateValue) : null;
+      patchDoc({
+        docType: d.dtype || doc.docType,
+        taxMode: d.tmode === 'inclusive' ? 'inclusive' : d.tmode === 'exclusive' ? 'exclusive' : doc.taxMode,
+        taxRate: Number(d.trate) || doc.taxRate,
+        currency: d.cur || doc.currency,
+        color: d.col || doc.color,
+        fontSize: Number(d.fs) || doc.fontSize,
+        logo: d.logo || doc.logo,
+        terms: d.terms || doc.terms,
+      });
+      set((f) => ({
+        ...f,
+        student_name: partyLines[0] || f.student_name,
+        company: partyLines[1] || f.company,
+        location: partyLines[2] || f.location,
+        customer_gstin: party.match(/GSTIN:\s*(.+)/i)?.[1]?.trim() || f.customer_gstin,
+        state_code: party.match(/State Code:\s*(\d+)/i)?.[1] || f.state_code,
+        reference: match(/Reference:\s*(.+)/i) || f.reference,
+        invoice_date: parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString().slice(0, 10) : f.invoice_date,
+        items: Array.isArray(d.items) && d.items.length
+          ? d.items.map((it) => ({
+            description: it.desc || it.description || '',
+            participants: Number(it.qty ?? it.participants) || 1,
+            unit_price: Number(String(it.rate ?? it.unit_price ?? '').replace(/[^0-9.-]/g, '')) || '',
+          }))
+          : f.items,
+      }));
+      toast.success('JSON loaded into invoice');
+    } catch (e) { toast.error('Invalid JSON file'); }
+  }
 
   const statusBadge = (s) => ({
     paid: <Badge status="approved">PAID</Badge>,
@@ -246,7 +357,7 @@ export default function GSTInvoices() {
     ) },
   ];
 
-  const showCollectedField = form.collectedOn || settings.inclusive;
+  const showCollectedField = form.collectedOn || settings.inclusive || doc.taxMode === 'inclusive';
 
   return (
     <div className="space-y-5">
@@ -355,13 +466,27 @@ export default function GSTInvoices() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <input className="input-field w-16 text-right" placeholder="No." type="number" value={item.participants}
                         onChange={(e) => updateItem(index, { participants: e.target.value })} />
-                      <input className="input-field flex-1 min-w-[120px] text-right" placeholder="Unit price (taxable ₹)" type="number" value={item.unit_price}
+                      <input className="input-field flex-1 min-w-[120px] text-right" placeholder={doc.taxMode === 'inclusive' ? 'Unit price (incl. tax ₹)' : 'Unit price (taxable ₹)'} type="number" value={item.unit_price}
                         onChange={(e) => updateItem(index, { unit_price: e.target.value })} />
                       <span className="w-24 text-right text-sm font-medium text-gray-700">₹{cNum((Number(item.participants) || 1) * (Number(item.unit_price) || 0))}</span>
                     </div>
                   </div>
                 ))}
                 <button onClick={addItem} className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1.5"><Plus size={15} /> Add line item</button>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody className="space-y-2">
+                <h3 className="font-semibold text-gray-900">Document terms</h3>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium mb-1 block">SAC / HSN</label>
+                  <input className="input-field" value={form.sac} onChange={(e) => set({ sac: e.target.value })} placeholder={settings.sac || '999293'} />
+                </div>
+                <textarea className="input-field min-h-[92px]" value={doc.terms}
+                  onChange={(e) => patchDoc({ terms: e.target.value })}
+                  placeholder="One term per line" />
+                <p className="text-[11px] text-gray-400">These terms appear on the invoice document. Leave blank to use GST settings.</p>
               </CardBody>
             </Card>
 
@@ -372,67 +497,20 @@ export default function GSTInvoices() {
             </div>
           </div>
 
-          <div className="xl:sticky xl:top-6">
+          <div>
             <Card>
               <CardBody className="p-3">
-                <h3 className="font-semibold text-gray-900 mb-2">Live Preview</h3>
-                <div className="border border-gray-200 rounded-xl bg-white overflow-hidden text-xs">
-                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{settings.entity_name || 'NeoSkills'}</p>
-                        <p className="text-gray-500 mt-0.5 max-w-[220px]">{settings.address}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900">TAX INVOICE</p>
-                        <p className="text-gray-500 mt-0.5">{form.id ? form.invoice_number : 'New invoice'}</p>
-                        <p className="text-gray-500">{form.invoice_date ? new Date(form.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="px-4 py-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-bold text-gray-900">{form.student_name || 'Customer name'}</p>
-                        {form.company && <p className="text-gray-500">{form.company}</p>}
-                        {form.location && <p className="text-gray-500">{form.location}</p>}
-                        {form.state_name && <p className="text-gray-500">{form.state_name}{form.state_code ? ` (${form.state_code})` : ''}</p>}
-                        {form.customer_gstin && <p className="text-gray-500">GSTIN: {form.customer_gstin}</p>}
-                      </div>
-                      <div className="text-right text-gray-500 shrink-0">GST: {settings.gstin}</div>
-                    </div>
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-gray-900 text-white">
-                          <th className="text-left px-2 py-1.5">DESCRIPTION</th>
-                          <th className="text-right px-2 py-1.5">NO.</th>
-                          <th className="text-right px-2 py-1.5">UNIT</th>
-                          <th className="text-right px-2 py-1.5">AMOUNT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {c.items.map((it, i) => (
-                          <tr key={i} className={i % 2 ? 'bg-gray-50' : ''}>
-                            <td className="px-2 py-1.5">{it.description || '—'}</td>
-                            <td className="px-2 py-1.5 text-right">{it.participants}</td>
-                            <td className="px-2 py-1.5 text-right">₹{cNum(it.unit_price)}</td>
-                            <td className="px-2 py-1.5 text-right font-medium">₹{cNum(it.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="flex justify-end mt-2">
-                      <div className="w-56 space-y-1">
-                        <div className="flex justify-between"><span className="text-gray-500">Sub-Total</span><span className="font-medium">₹{cNum(c.subtotal)}</span></div>
-                        {c.cgst > 0 && <div className="flex justify-between"><span className="text-gray-500">CGST ({c.cgstRate}%)</span><span>₹{cNum(c.cgst)}</span></div>}
-                        {c.sgst > 0 && <div className="flex justify-between"><span className="text-gray-500">SGST ({c.sgstRate}%)</span><span>₹{cNum(c.sgst)}</span></div>}
-                        {c.igst > 0 && <div className="flex justify-between"><span className="text-gray-500">IGST ({c.igstRate}%)</span><span>₹{cNum(c.igst)}</span></div>}
-                        {c.exportBill && <div className="flex justify-between"><span className="text-gray-500">IGST (0%) Export</span><span>₹0</span></div>}
-                        <div className="flex justify-between border-t border-gray-200 pt-1 font-bold text-gray-900"><span>Total</span><span>₹{cNum(c.total)}</span></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <GstInvoiceDocument
+                  form={form}
+                  settings={settings}
+                  totals={c}
+                  doc={doc}
+                  onDocChange={patchDoc}
+                  onSave={handleSave}
+                  saving={saving}
+                  onSaveJson={handleSaveJson}
+                  onLoadJson={handleLoadJson}
+                />
               </CardBody>
             </Card>
           </div>

@@ -47,7 +47,7 @@ function generateGstInvoice(data) {
   doc.font('DVB').fontSize(16).fillColor(DARK).text(data.entity_name || 'NeoSkills', m + 125, 22);
   doc.font('DV').fontSize(8).fillColor(GRAY);
   doc.text(data.supplier_address || '', m + 125, 46, { width: W - 170, lineGap: 2 });
-  doc.font('DVB').fontSize(9.5).fillColor(DARK).text('TAX INVOICE', doc.page.width - m - 180, 22, { width: 180, align: 'right' });
+  doc.font('DVB').fontSize(9.5).fillColor(DARK).text(String(data.doc_type || 'Tax Invoice').toUpperCase(), doc.page.width - m - 180, 22, { width: 180, align: 'right' });
 
   y = 130;
 
