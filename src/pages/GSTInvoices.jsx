@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, Search, FileText, Download, Pencil, Trash2, Save, X, ArrowLeft, Settings2,
+  Plus, Search, FileText, Download, Pencil, Trash2, Save, X, ArrowLeft, Settings2, Printer, Upload,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
@@ -111,6 +111,8 @@ export default function GSTInvoices() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(null);
+  const logoRef = useRef(null);
+  const jsonRef = useRef(null);
 
   const load = useCallback(async (p = 1, s = '') => {
     try {
@@ -135,6 +137,15 @@ export default function GSTInvoices() {
 
   function set(patch) { setForm((f) => ({ ...f, ...(typeof patch === 'function' ? patch(f) : patch) })); }
   function patchDoc(patch) { setDoc((d) => ({ ...d, ...patch })); }
+
+  function handleLogoFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => patchDoc({ logo: reader.result });
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
 
   function updateItem(index, patch) {
     setForm((f) => {
@@ -477,16 +488,87 @@ export default function GSTInvoices() {
             </Card>
 
             <Card>
-              <CardBody className="space-y-2">
-                <h3 className="font-semibold text-gray-900">Document terms</h3>
-                <div>
-                  <label className="text-xs text-gray-500 font-medium mb-1 block">SAC / HSN</label>
-                  <input className="input-field" value={form.sac} onChange={(e) => set({ sac: e.target.value })} placeholder={settings.sac || '999293'} />
+              <CardBody className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900">Document setup</h3>
+                  <span className="text-[11px] text-gray-400">Invoice / Proforma / Quotation</span>
                 </div>
-                <textarea className="input-field min-h-[92px]" value={doc.terms}
-                  onChange={(e) => patchDoc({ terms: e.target.value })}
-                  placeholder="One term per line" />
-                <p className="text-[11px] text-gray-400">These terms appear on the invoice document. Leave blank to use GST settings.</p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Document</label>
+                    <select className="input-field" value={doc.docType} onChange={(e) => patchDoc({ docType: e.target.value })}>
+                      <option value="Tax Invoice">Tax Invoice</option>
+                      <option value="Quotation">Quotation</option>
+                      <option value="Proforma Invoice">Proforma Invoice</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Tax</label>
+                    <select className="input-field" value={doc.taxMode} onChange={(e) => patchDoc({ taxMode: e.target.value })}>
+                      <option value="exclusive">Extra</option>
+                      <option value="inclusive">Included</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Rate %</label>
+                    <input className="input-field" type="number" min="0" max="100" step="0.01" value={doc.taxRate}
+                      onChange={(e) => patchDoc({ taxRate: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Currency</label>
+                    <select className="input-field" value={doc.currency} onChange={(e) => patchDoc({ currency: e.target.value })}>
+                      <option value="INR">INR</option><option value="USD">USD</option>
+                      <option value="EUR">EUR</option><option value="GBP">GBP</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Colour</label>
+                    <input className="input-field h-[38px] p-1" type="color" value={doc.color || '#1f4e79'}
+                      onChange={(e) => patchDoc({ color: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Font</label>
+                    <input className="input-field" type="number" min="10" max="18" step="1" value={doc.fontSize}
+                      onChange={(e) => patchDoc({ fontSize: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">SAC / HSN</label>
+                    <input className="input-field" value={form.sac} onChange={(e) => set({ sac: e.target.value })} placeholder={settings.sac || '999293'} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Logo</label>
+                    <label className="btn-secondary cursor-pointer flex items-center justify-center gap-1.5 h-[38px] text-xs">
+                      <Upload size={13} /> Upload
+                      <input ref={logoRef} type="file" accept="image/*" hidden onChange={handleLogoFile} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn-secondary text-xs flex items-center gap-1.5" onClick={handleSaveJson}>
+                    <Download size={13} /> Save JSON
+                  </button>
+                  <button type="button" className="btn-secondary text-xs flex items-center gap-1.5" onClick={() => jsonRef.current?.click()}>
+                    <Upload size={13} /> Load JSON
+                  </button>
+                  <input ref={jsonRef} type="file" accept="application/json,.json" hidden onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLoadJson(file);
+                    e.target.value = '';
+                  }} />
+                  <button type="button" className="btn-secondary text-xs flex items-center gap-1.5" onClick={() => window.print()}>
+                    <Printer size={13} /> Print / PDF
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 font-medium mb-1 block">Terms</label>
+                  <textarea className="input-field min-h-[92px]" value={doc.terms}
+                    onChange={(e) => patchDoc({ terms: e.target.value })}
+                    placeholder="One term per line" />
+                  <p className="text-[11px] text-gray-400 mt-1">Leave blank to use GST settings terms.</p>
+                </div>
               </CardBody>
             </Card>
 
@@ -500,17 +582,7 @@ export default function GSTInvoices() {
           <div>
             <Card>
               <CardBody className="p-3">
-                <GstInvoiceDocument
-                  form={form}
-                  settings={settings}
-                  totals={c}
-                  doc={doc}
-                  onDocChange={patchDoc}
-                  onSave={handleSave}
-                  saving={saving}
-                  onSaveJson={handleSaveJson}
-                  onLoadJson={handleLoadJson}
-                />
+                <GstInvoiceDocument form={form} settings={settings} totals={c} doc={doc} />
               </CardBody>
             </Card>
           </div>
