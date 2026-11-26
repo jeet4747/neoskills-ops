@@ -107,7 +107,7 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Sales Rep' : user?.role === 'manager' ? 'Manager' : user?.role === 'ops' ? 'Operations' : user?.role === 'hr' ? 'Human Resources' : 'Admin'}</p>
+              <p className="text-xs text-white/50 capitalize">{user?.role === 'sales' ? 'Counsellor' : user?.role === 'manager' ? 'Manager' : user?.role === 'ops' ? 'Operations' : user?.role === 'hr' ? 'Human Resources' : 'Admin'}</p>
             </div>
           </div>
           <button

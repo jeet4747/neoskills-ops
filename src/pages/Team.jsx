@@ -13,7 +13,7 @@ import { istMonth } from '../utils/ist';
 const ROLE_META = {
   admin: { label: 'Admin', icon: Shield },
   manager: { label: 'Manager' },
-  sales: { label: 'Sales Rep' },
+  sales: { label: 'Counsellor' },
   ops: { label: 'Operations' },
 };
 
@@ -26,6 +26,9 @@ const STATUS_OPTIONS = [
 ];
 
 const COLORS = ['#003B7A', '#FFC300', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#84CC16', '#14B8A6'];
+
+// Founder is not part of the team roster. Hidden here only — login/access unchanged.
+const HIDDEN_TEAM_MEMBER_IDS = [13];
 
 export default function Team() {
   const navigate = useNavigate();
@@ -66,7 +69,8 @@ export default function Team() {
 
   async function load() {
     try {
-      setUsers(await api.users.list());
+      const list = await api.users.list();
+      setUsers(list.filter((u) => !HIDDEN_TEAM_MEMBER_IDS.includes(u.id)));
       if (isManager) api.users.teamAnalytics({ month: selectedMonth }).then(setAnalytics).catch(() => {});
     } catch (e) { toast.error('Failed to load team'); }
     finally { setLoading(false); }
@@ -169,7 +173,9 @@ export default function Team() {
   };
 
   const t = analytics?.totals || {};
-  const chartData = (analytics?.users || []).map((u) => ({ name: u.name.split(' ')[0], collected: u.collected, pending: u.pending }));
+  const chartData = (analytics?.users || [])
+    .filter((u) => !HIDDEN_TEAM_MEMBER_IDS.includes(u.id))
+    .map((u) => ({ name: u.name.split(' ')[0], collected: u.collected, pending: u.pending }));
 
   return (
     <div className="space-y-5">
@@ -214,7 +220,7 @@ export default function Team() {
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-teal-100 rounded-xl shrink-0"><UsersIcon size={20} className="text-teal-600" /></div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Sales Reps</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Counsellors</p>
                 <p className="text-base sm:text-xl font-bold text-gray-900 break-words">{stats.sales}</p>
               </div>
             </div>
@@ -252,7 +258,7 @@ export default function Team() {
         </div>
         <select className="input-field w-44" value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="">All Roles</option>
-          <option value="sales">Sales Reps</option>
+          <option value="sales">Counsellors</option>
           <option value="manager">Managers</option>
           <option value="ops">Operations</option>
           <option value="admin">Admins</option>
@@ -419,7 +425,7 @@ export default function Team() {
                             disabled={savingId === u.id}
                             onChange={(e) => handleUpdate(u, { role: e.target.value })}
                           >
-                            <option value="sales">Sales Rep</option>
+                            <option value="sales">Counsellor</option>
                             <option value="manager">Manager</option>
                             <option value="ops">Operations</option>
                             <option value="admin">Admin</option>
@@ -512,7 +518,7 @@ export default function Team() {
             <div>
               <label className="text-xs text-gray-500 font-medium mb-1 block">Role</label>
               <select className="input-field" value={newMember.role} onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}>
-                <option value="sales">Sales Rep</option>
+                <option value="sales">Counsellor</option>
                 <option value="manager">Manager</option>
                 <option value="ops">Operations</option>
                 <option value="admin">Admin</option>

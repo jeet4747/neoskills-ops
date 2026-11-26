@@ -231,7 +231,7 @@ export default function Attendance() {
                         </span>
                         <div className="min-w-0">
                           <p className="text-[13px] font-semibold text-gray-900 truncate">{r.name}</p>
-                          <p className="text-[10px] text-gray-400 capitalize">{r.role === 'sales' ? 'Sales Rep' : r.role}</p>
+                          <p className="text-[10px] text-gray-400 capitalize">{r.role === 'sales' ? 'Counsellor' : r.role}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

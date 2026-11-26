@@ -29,7 +29,7 @@ const ROLE_LABELS = {
   manager: 'Manager',
   ops: 'Operations',
   hr: 'HR',
-  sales: 'Sales Rep',
+  sales: 'Counsellor',
 };
 
 function parseDay(value) {
