@@ -209,6 +209,67 @@ export default function GSTInvoices() {
     finally { setDownloading(null); }
   }
 
+  function templateData(r) {
+    if (!r) return { blank: true };
+    const date = r.invoice_date
+      ? new Date(r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' })
+      : '';
+    const terms = Array.isArray(settings.terms)
+      ? settings.terms
+      : (() => { try { return JSON.parse(settings.terms || '[]'); } catch { return []; } })();
+    const taxRate = r.gst_type === 'igst'
+      ? Number(r.igst_rate || 0)
+      : Number(r.cgst_rate || 0) + Number(r.sgst_rate || 0);
+    const items = Array.isArray(r.items) && r.items.length ? r.items : [{ description: 'Training Service', participants: 1, unit_price: r.subtotal || 0 }];
+    return {
+      dtype: 'Tax Invoice',
+      tmode: 'exclusive',
+      trate: taxRate || Number(settings.tax_rate || 18),
+      cur: 'INR',
+      col: '#1f4e79',
+      fs: 13,
+      company: [
+        settings.entity_name || 'NeoSkills',
+        r.supplier_address || settings.address || '',
+        [settings.website, settings.phone].filter(Boolean).join(' | '),
+        `GSTIN: ${r.supplier_gstin || settings.gstin || ''} | PAN: ${settings.pan || ''}`,
+      ].filter(Boolean).join('\n'),
+      party: [
+        r.student_name || '',
+        r.company || '',
+        [r.location, r.city].filter(Boolean).join(', '),
+        `GSTIN: ${r.customer_gstin || '-'}`,
+        `State Code: ${r.state_code || settings.state_code || '00'}`,
+      ].filter(Boolean).join('\n'),
+      details: [
+        `Invoice No.: ${r.invoice_number || ''}`,
+        `Date: ${date}`,
+        `Reference: ${r.reference || '-'}`,
+        `Place of Supply: ${r.state || settings.state || ''} (${r.state_code || settings.state_code || '00'})`,
+      ].join('\n'),
+      bank: [
+        `Account Name: ${r.bank_account_name || settings.bank_account_name || ''}`,
+        `Account No.: ${r.bank_account_number || settings.bank_account_number || ''}`,
+        `IFSC Code: ${r.bank_ifsc || settings.bank_ifsc || ''}`,
+        settings.bank_account_type ? `Account Type: ${settings.bank_account_type}` : '',
+      ].filter(Boolean).join('\n'),
+      terms: terms.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+      items: items.map((it) => ({
+        desc: [it.description || 'Service', it.participants ? `No. of participants: ${it.participants}` : ''].filter(Boolean).join('\n'),
+        sac: it.sac || r.sac || settings.sac || '999293',
+        qty: it.participants || 1,
+        rate: it.unit_price ?? 0,
+      })),
+    };
+  }
+
+  function handleTemplate(r) {
+    try {
+      sessionStorage.setItem('gstTemplateData', JSON.stringify(templateData(r)));
+      window.open('/gst-template.html', '_blank');
+    } catch (e) { toast.error(e.message); }
+  }
+
   const c = computeGst(form, settings);
 
   const statusBadge = (s) => ({
@@ -236,6 +297,9 @@ export default function GSTInvoices() {
         <button onClick={() => handleDownload(r)} disabled={downloading === r.id} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600" title="Download PDF">
           <Download size={15} />
         </button>
+        <button onClick={() => handleTemplate(r)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-primary-600" title="Open in document template">
+          <FileText size={15} />
+        </button>
         <button onClick={() => handleEdit(r)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-600" title="Edit">
           <Pencil size={15} />
         </button>
@@ -256,6 +320,9 @@ export default function GSTInvoices() {
           <p className="text-sm text-gray-400 mt-0.5">{total} invoice{total !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => handleTemplate(null)} className="btn-secondary flex items-center gap-2" title="Open blank document template">
+            <FileText size={16} /> Template
+          </button>
           <button onClick={() => navigate('/gst-settings')} className="btn-secondary flex items-center gap-2">
             <Settings2 size={16} /> Settings
           </button>

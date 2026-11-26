@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GST Document Template</title>
+<style>
+:root{--p:#1f4e79;--tint:#eef3f8;--ink:#1c2733;--mute:#6b7785;--line:#b9c7d6;--fs:13px}
+*{box-sizing:border-box}
+body{margin:0;background:#dfe5ec;font:var(--fs)/1.45 Calibri,"Segoe UI",Arial,sans-serif;color:var(--ink)}
+button,input,select{font:inherit}
+#bar{position:sticky;top:0;z-index:9;background:#fff;border-bottom:1px solid var(--line);padding:9px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
+#bar label{display:flex;gap:5px;align-items:center;color:var(--mute);font-size:12px}
+#bar select,#bar input[type=number]{border:1px solid var(--line);border-radius:4px;padding:5px 7px;background:#fff;color:var(--ink)}
+#bar input[type=color]{width:34px;height:30px;padding:2px;border:1px solid var(--line);border-radius:4px;background:#fff}
+#bar input[type=file]{display:none}
+.btn{border:1px solid var(--p);background:#fff;color:var(--p);border-radius:4px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--tint)}
+.btn.main{background:var(--p);color:#fff}
+.btn.main:hover{filter:brightness(1.08)}
+#doc{width:210mm;min-height:297mm;margin:16px auto;background:#fff;padding:14mm 13mm;box-shadow:0 2px 14px #0003}
+.head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+.logo{width:190px;height:64px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.logo img{max-width:100%;max-height:100%;object-fit:contain}
+.co{flex:1;text-align:right;color:var(--mute);white-space:pre-wrap;min-height:64px}
+.co b{color:var(--ink)}
+.title{background:var(--p);color:#fff;text-align:center;font-size:19px;font-weight:700;letter-spacing:.5px;padding:8px;margin:14px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.box{border:1px solid var(--line);min-height:112px}
+.box h4{margin:0;padding:6px 10px;background:var(--tint);color:var(--p);font-size:12px;letter-spacing:.4px}
+.box .in{padding:7px 10px;white-space:pre-wrap;min-height:80px}
+table.it{width:100%;border-collapse:collapse;margin-top:14px;table-layout:fixed}
+.it th{background:var(--p);color:#fff;padding:7px 8px;text-align:left;font-size:12px}
+.it td{border:1px solid var(--line);padding:7px 8px;vertical-align:top;white-space:pre-wrap;outline:none}
+.it td:focus{background:var(--tint)}
+.it .r{text-align:right}.it .c{text-align:center}.it .amount{font-weight:700}
+.it .act{width:30px;text-align:center}
+.it .act button{border:0;background:none;color:#b91c1c;cursor:pointer;font-size:15px}
+.sum{display:grid;grid-template-columns:1fr 255px;margin-top:14px;gap:14px}
+.words{background:var(--tint);padding:10px;color:var(--mute);min-height:92px}
+.words b{display:block;color:var(--ink);font-size:14px;margin:4px 0 8px;text-transform:capitalize}
+.tot>div{display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tot .g{background:var(--p);color:#fff;font-weight:700;font-size:15px;border:0}
+.foot{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+.sig{text-align:right}
+.sig .line{margin-top:66px;border-top:1px solid var(--ink);padding-top:4px;font-weight:700}
+.terms{margin-top:22px;border-top:1px solid var(--line);padding-top:8px}
+.terms h4{margin:0 0 4px;color:var(--p)}
+.terms .in{white-space:pre-wrap;outline:none}
+.note{text-align:center;color:var(--mute);margin-top:26px;font-size:11px}
+[contenteditable]:empty:before{content:"…";color:#9aa5b1}
+@media print{
+  body{background:#fff}
+  #bar{display:none!important}
+  #doc{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0}
+  .it .act{display:none}
+  [contenteditable]:empty:before{content:""}
+  @page{size:A4;margin:12mm}
+}
+</style>
+</head>
+<body>
+<div id="bar">
+  <label>Document
+    <select id="dtype">
+      <option value="Tax Invoice">Tax Invoice</option>
+      <option value="Quotation">Quotation</option>
+      <option value="Proforma Invoice">Proforma Invoice</option>
+    </select>
+  </label>
+  <label>Tax
+    <select id="tmode">
+      <option value="exclusive">Extra</option>
+      <option value="inclusive">Included</option>
+    </select>
+  </label>
+  <label>Rate % <input id="trate" type="number" min="0" max="100" step="0.01" value="18"></label>
+  <label>Currency
+    <select id="cur">
+      <option value="INR">INR</option>
+      <option value="USD">USD</option>
+      <option value="EUR">EUR</option>
+      <option value="GBP">GBP</option>
+    </select>
+  </label>
+  <label>Colour <input id="col" type="color" value="#1f4e79"></label>
+  <label>Font <input id="fs" type="number" min="10" max="18" step="1" value="13"></label>
+  <label class="btn">Logo<input id="logoFile" type="file" accept="image/*"></label>
+  <button class="btn" id="addRow" type="button">+ Row</button>
+  <button class="btn" id="saveJson" type="button">Save JSON</button>
+  <button class="btn" id="loadJson" type="button">Load JSON</button>
+  <input id="jsonFile" type="file" accept="application/json,.json">
+  <button class="btn main" id="print" type="button">Print / PDF</button>
+  <button class="btn" id="close" type="button">Close</button>
+</div>
+
+<div id="doc">
+  <div class="head">
+    <div class="logo"><img id="logoImg" src="/logo/nsl-logo-cropped.png" alt="Logo"></div>
+    <div class="co" id="company" contenteditable="true" spellcheck="false"></div>
+  </div>
+
+  <div class="title" id="doctitle">TAX INVOICE</div>
+
+  <div class="two">
+    <div class="box"><h4>PARTY</h4><div class="in" id="party" contenteditable="true" spellcheck="false"></div></div>
+    <div class="box"><h4>DOCUMENT DETAILS</h4><div class="in" id="details" contenteditable="true" spellcheck="false"></div></div>
+  </div>
+
+  <table class="it">
+    <colgroup>
+      <col style="width:38px"><col><col style="width:90px"><col style="width:52px"><col style="width:100px"><col style="width:115px"><col style="width:30px">
+    </colgroup>
+    <thead><tr>
+      <th class="c">Sr.</th><th>Description</th><th>SAC / HSN</th><th class="c">Qty</th><th class="r">Rate</th><th class="r">Amount</th><th></th>
+    </tr></thead>
+    <tbody id="items"></tbody>
+  </table>
+
+  <div class="sum">
+    <div class="words"><span>Amount in Words</span><b id="words">—</b><span>Tax payable under reverse charge: No</span></div>
+    <div class="tot" id="tot"></div>
+  </div>
+
+  <div class="foot">
+    <div class="box"><h4>BANK DETAILS</h4><div class="in" id="bank" contenteditable="true" spellcheck="false"></div></div>
+    <div class="sig">
+      <b id="forco">For NeoSkills</b>
+      <div class="line">Authorised Signatory</div>
+    </div>
+  </div>
+
+  <div class="terms"><h4>Terms &amp; Conditions</h4><div class="in" id="terms" contenteditable="true" spellcheck="false"></div></div>
+  <div class="note">This is a computer-generated document.</div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const SYMBOLS = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+const UNITS = { INR: 'Rupees', USD: 'Dollars', EUR: 'Euros', GBP: 'Pounds' };
+
+const DEFAULT = {
+  dtype: 'Tax Invoice',
+  tmode: 'exclusive',
+  trate: 18,
+  cur: 'INR',
+  col: '#1f4e79',
+  fs: 13,
+  logo: '',
+  company: 'NeoSkills\nOpp Sadanand Hotel Baner, Near Westside Mall, Near DMart, Laxman Nagar, Baner, Pune, Maharashtra 411045\nwww.neoskills.co.in | +91-9767865254 / +91-8983690231\nGSTIN: 27AAQFN8793B1ZP | PAN: AAQFN8793B',
+  party: 'Customer Name\nCompany Name\nLocation, City\nGSTIN: -\nState Code: 27',
+  details: 'Invoice No.: NS-0000\nDate: \nReference: -\nPlace of Supply: Maharashtra (27)',
+  bank: 'Account Name: NeoSkills\nAccount No.: 919020077472602\nIFSC Code: UTIB0003284\nAccount Type: Current',
+  terms: '1. Payment due within 15 days of invoice date.\n2. Taxes as applicable.\n3. All disputes subject to Pune, Maharashtra jurisdiction.\n4. This is a system-generated invoice and does not require a physical signature.',
+  items: [{ desc: 'ITIL 5 Foundation Training\nCommercial Training & Coaching Services', sac: '999293', qty: 1, rate: '50000.00' }],
+};
+
+function num(v) {
+  const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+function two(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+function fmt(v) {
+  const sym = SYMBOLS[$('cur').value] || '';
+  return (sym ? sym + ' ' : '') + two(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function below100(n) {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  if (n < 20) return ones[n] || '';
+  return [tens[Math.floor(n / 10)], ones[n % 10]].filter(Boolean).join(' ');
+}
+function below1000(n) {
+  const parts = [];
+  if (n >= 100) parts.push(below100(Math.floor(n / 100)) + ' Hundred');
+  if (n % 100) parts.push(below100(n % 100));
+  return parts.filter(Boolean).join(' ');
+}
+function indianWords(n) {
+  n = Math.floor(n);
+  if (!n) return 'Zero';
+  const scales = [['Crore', 10000000], ['Lakh', 100000], ['Thousand', 1000], ['', 1]];
+  const out = [];
+  for (const [name, value] of scales) {
+    const q = Math.floor(n / value);
+    if (q) out.push(`${below1000(q)}${name ? ' ' + name : ''}`);
+    n %= value;
+  }
+  return out.join(' ');
+}
+function words(v) {
+  const n = two(Math.abs(v));
+  const rupees = Math.floor(n);
+  const paise = Math.round((n - rupees) * 100);
+  const unit = UNITS[$('cur').value] || 'Units';
+  const suffix = paise ? ` and ${below100(paise)} Paise` : '';
+  return `${indianWords(rupees)} ${unit}${suffix} Only`;
+}
+function tint(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return '#eef3f8';
+  const mix = (c) => Math.round(parseInt(c, 16) * 0.1 + 255 * 0.9).toString(16).padStart(2, '0');
+  return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
+}
+function theme() {
+  const color = $('col').value || DEFAULT.col;
+  document.documentElement.style.setProperty('--p', color);
+  document.documentElement.style.setProperty('--tint', tint(color));
+  document.documentElement.style.setProperty('--fs', `${$('fs').value || 13}px`);
+}
+function title() {
+  $('doctitle').textContent = ($('dtype').value || '').toUpperCase();
+  document.title = $('dtype').value || 'GST Document';
+}
+function setText(id, value) { $(id).textContent = value ?? ''; }
+
+function row(item = {}) {
+  const tr = document.createElement('tr');
+  const cells = [
+    ['sr', 'c', ''], ['desc', '', item.desc || ''], ['sac', 'c', item.sac || '999293'],
+    ['qty', 'c', item.qty ?? 1], ['rate', 'r', item.rate ?? ''], ['amount', 'r amount', ''], ['act', 'act', ''],
+  ];
+  for (const [key, cls, value] of cells) {
+    const td = document.createElement('td');
+    td.className = cls;
+    td.dataset.f = key;
+    if (key === 'act') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.title = 'Remove row';
+      btn.textContent = '×';
+      btn.addEventListener('click', () => { tr.remove(); calc(); });
+      td.appendChild(btn);
+    } else {
+      td.textContent = String(value);
+      if (key !== 'sr' && key !== 'amount') td.contentEditable = 'true';
+    }
+    tr.appendChild(td);
+  }
+  return tr;
+}
+function cell(tr, key) { return tr.querySelector(`[data-f="${key}"]`); }
+function collectRows() {
+  return Array.from($('items').rows).map((tr) => ({
+    desc: cell(tr, 'desc').textContent.trim(),
+    sac: cell(tr, 'sac').textContent.trim(),
+    qty: cell(tr, 'qty').textContent.trim(),
+    rate: cell(tr, 'rate').textContent.trim(),
+  }));
+}
+function calc() {
+  const rows = Array.from($('items').rows);
+  rows.forEach((tr, i) => {
+    cell(tr, 'sr').textContent = String(i + 1);
+    cell(tr, 'amount').textContent = fmt(num(cell(tr, 'qty').textContent) * num(cell(tr, 'rate').textContent));
+  });
+  const gross = two(rows.reduce((s, tr) => s + num(cell(tr, 'qty').textContent) * num(cell(tr, 'rate').textContent), 0));
+  const rate = num($('trate').value);
+  const inclusive = $('tmode').value === 'inclusive';
+  const taxable = two(inclusive ? gross / (1 + rate / 100) : gross);
+  const tax = two(gross - taxable);
+  const total = two(inclusive ? gross : taxable + tax);
+  $('tot').innerHTML = [
+    `<div><span>Taxable Value</span><span>${fmt(taxable)}</span></div>`,
+    `<div><span>Tax @ ${rate}%${inclusive ? ' (included)' : ''}</span><span>${fmt(tax)}</span></div>`,
+    `<div class="g"><span>Total Amount</span><span>${fmt(total)}</span></div>`,
+  ].join('');
+  $('words').textContent = words(total);
+  $('forco').textContent = `For ${$('company').textContent.split('\n')[0].trim() || 'NeoSkills'}`;
+}
+function collect() {
+  return {
+    dtype: $('dtype').value,
+    tmode: $('tmode').value,
+    trate: $('trate').value,
+    cur: $('cur').value,
+    col: $('col').value,
+    fs: $('fs').value,
+    logo: $('logoImg').src.startsWith('data:') ? $('logoImg').src : '',
+    company: $('company').innerText.trim(),
+    party: $('party').innerText.trim(),
+    details: $('details').innerText.trim(),
+    bank: $('bank').innerText.trim(),
+    terms: $('terms').innerText.trim(),
+    items: collectRows(),
+  };
+}
+function apply(data) {
+  const d = data && !data.blank ? data : DEFAULT;
+  $('dtype').value = d.dtype || DEFAULT.dtype;
+  $('tmode').value = d.tmode || DEFAULT.tmode;
+  $('trate').value = d.trate ?? DEFAULT.trate;
+  $('cur').value = d.cur || DEFAULT.cur;
+  $('col').value = d.col || DEFAULT.col;
+  $('fs').value = d.fs || DEFAULT.fs;
+  $('logoImg').src = d.logo || '/logo/nsl-logo-cropped.png';
+  setText('company', d.company ?? DEFAULT.company);
+  setText('party', d.party ?? DEFAULT.party);
+  setText('details', d.details ?? DEFAULT.details);
+  setText('bank', d.bank ?? DEFAULT.bank);
+  setText('terms', d.terms ?? DEFAULT.terms);
+  $('items').innerHTML = '';
+  (d.items && d.items.length ? d.items : DEFAULT.items).forEach((item) => $('items').appendChild(row(item)));
+  theme(); title(); calc();
+}
+
+$('addRow').addEventListener('click', () => { $('items').appendChild(row()); calc(); });
+['dtype', 'tmode', 'trate', 'cur', 'col', 'fs'].forEach((id) => $(id).addEventListener('input', () => { theme(); title(); calc(); }));
+$('company').addEventListener('input', calc);
+$('items').addEventListener('input', calc);
+$('logoFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $('logoImg').src = reader.result; };
+  reader.readAsDataURL(file);
+});
+$('saveJson').addEventListener('click', () => {
+  const data = collect();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(data.dtype || 'document').replace(/[^a-z0-9]+/gi, '_')}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$('loadJson').addEventListener('click', () => $('jsonFile').click());
+$('jsonFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { apply(JSON.parse(reader.result)); } catch { alert('Invalid JSON file'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+$('print').addEventListener('click', () => window.print());
+$('close').addEventListener('click', () => window.close());
+
+let payload = null;
+try { payload = JSON.parse(sessionStorage.getItem('gstTemplateData') || 'null'); } catch { /* ignore */ }
+apply(payload);
+</script>
+</body>
+</html>
